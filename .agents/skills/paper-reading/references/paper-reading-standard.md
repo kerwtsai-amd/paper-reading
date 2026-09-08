@@ -1,21 +1,21 @@
-# Paper Reading 內容與品質標準
+# Paper Reading Content and Quality Standard
 
-本標準在實際整理、閱讀或摘要論文時必讀。它補充 `SKILL.md` 的執行契約；使用者當次明確指示仍具最高優先權。
+Read this standard whenever organizing, reading, or summarizing a paper. It supplements the execution contract in `SKILL.md`; explicit instructions in the current user request still take precedence.
 
-## 研究者角色與證據紀律
+## Researcher Role and Evidence Discipline
 
-以具備深度學習、模型系統、GPU 效能最佳化與分散式系統背景的資深研究員角度工作，並依論文領域調整專業脈絡，不預設論文一定屬於模型推論。成果需達到研究生在組會向同組研究員報告 Paper Reading 的深度，讓沒讀過原文的人理解問題、重要性、既有方法限制、方法機制、有效直覺、實驗證據、限制與延伸方向。
+Work from the perspective of a senior researcher with expertise in deep learning, model systems, GPU performance optimization, and distributed systems. Adapt the technical context to the paper's field rather than assuming every paper concerns model inference. The result should reach the depth of a graduate-level paper-reading presentation to fellow researchers, enabling someone who has not read the paper to understand the problem, its importance, limitations of prior approaches, the proposed mechanism, useful intuition, experimental evidence, limitations, and possible extensions.
 
-建立摘要前維護 evidence ledger。每個重要數字、比較、限制、公式與設計因果都要能回到原文章節、PDF 頁碼，以及適用的 Figure、Table、Equation 或 Algorithm。嚴格區分：
+Maintain an evidence ledger before writing the summary. Every important number, comparison, limitation, equation, and design-causality claim must trace back to the source section, PDF page, and any applicable Figure, Table, Equation, or Algorithm. Strictly distinguish the following reader-visible Traditional Chinese labels:
 
-- **作者主張**：作者明確陳述的解釋或結論，尚不等於已被充分證明。
-- **實驗事實**：可由論文圖表、數據或實驗設計直接支持的觀察。
-- **分析**：根據論文證據所做的評論、綜合或合理判讀。
-- **推測**：尚未由論文直接驗證的機制解釋、風險或延伸假說。
+- **`作者主張` (author claim):** An explanation or conclusion explicitly stated by the authors, which is not necessarily fully proven.
+- **`實驗事實` (experimental fact):** An observation directly supported by the paper's figures, tables, data, or experimental design.
+- **`分析` (analysis):** Commentary, synthesis, or reasonable interpretation based on evidence in the paper.
+- **`推測` (speculation):** A mechanism, risk, or extension hypothesis not directly validated by the paper.
 
-不得虛構或把分析／推測寫成作者事實。若資料缺失，直接寫「論文未提供」，並說明這對可驗證性造成的影響。
+Do not fabricate information or present analysis or speculation as an author-established fact. When information is missing, write `論文未提供` and explain how that absence affects verifiability.
 
-## 目錄與檔名標準
+## Directory and Filename Standard
 
 ```text
 <Paper Reading root>/
@@ -30,101 +30,101 @@
                 └── images/
 ```
 
-- PDF 與資料夾原則上使用核對過的正式完整標題，只做 Windows 必要的安全字元替換。若完整 PDF 路徑經實測造成必要工具失敗，可使用可追溯安全檔名；命名例外只在交付回報簡短說明，不得寫入摘要正文。
-- 專案不設定預設 Topic 或 Subtopic。每篇論文依主要技術貢獻逐篇決定兩層分類；只有使用者在當次任務明確指定分類時才沿用。文件中的具名分類範例只表示層級，不代表目前批次或專案預設，也不能觸發目錄建立。
-- 若候選資料夾已存在，先比較正式標題、PDF metadata 與內容；補齊缺漏，不建立重複副本。
-- 除使用者明確要求，不移動既有論文到新分類。分類判斷改變時，先說明證據與建議。
+- In general, use the verified complete formal title for both the PDF and folder, applying only the character substitutions required for Windows safety. If testing shows that the full PDF path breaks a required tool, use a traceable safe filename. Mention a naming exception briefly only in the delivery report; never put it in the summary body.
+- The project has no default Topic or Subtopic. Determine the two category levels for each paper from its primary technical contribution. Reuse a category only when the user explicitly specifies it in the current request. Named category examples in documentation illustrate hierarchy only; they are not defaults for the project or current batch and must not trigger directory creation.
+- When a candidate folder already exists, compare the formal title, PDF metadata, and content before filling any gaps. Do not create a duplicate copy.
+- Do not move an existing paper to a new category unless the user explicitly requests it. If the classification assessment changes, explain the evidence and recommendation first.
 
-## 讀者內容與作業紀錄的邊界
+## Boundary Between Reader Content and Operational Records
 
-`summary.html` 只呈現論文本身的書目資料、研究內容、證據與分析。搜尋、下載、檔案整理、PDF 檢查、頁碼對照、工具 workaround 與驗證結果屬於內部作業紀錄，不是論文摘要內容。
+`summary.html` presents only the paper's bibliographic metadata, research content, evidence, and analysis. Search, download, file organization, PDF validation, page-number mapping, tool workarounds, and validation results are internal operational records, not paper-summary content.
 
-- **可呈現的學術 metadata**：正式標題、作者、venue／期刊／arXiv、年份與版本、DOI／canonical URL、分類與分類理由，以及純粹的總頁數。
-- **可呈現的證據定位**：原文章節、PDF 頁碼、Figure／Table／Equation；只有 PDF 與印刷頁碼不同時，才在個別來源標記直接並列兩者。
-- **只留在內部或最後交付回報**：metadata 如何交叉核對、PDF signature／版本／位元數／雜湊、下載或解析方式、作業系統字元替換、檔名選擇理由、絕對路徑或長度、Poppler／OCR／瀏覽器／轉檔工具錯誤、裁圖與渲染步驟、QA 執行結果。
-- 若呈現總頁數，必須有且只有一個 `data-summary-field="pdf-page-count"` 元素，其完整可見值嚴格寫成 `共 N 頁`。頁碼相同時不寫「一致」、「無 offset」或「無頁碼偏移」；頁碼不同時，在個別來源標記寫成 `PDF p.N（論文標示 p.M）`，不要另寫處理說明。
-- evidence ledger、頁碼 mapping、hash 與工具診斷只存在於工作過程。不得用「分析／推測」標籤包裝產製流程；若某項例外會影響使用者取得成果，只在完成回報中簡潔告知。
+- **Academic metadata allowed in the report:** Formal title, authors, venue, journal, or arXiv record, year and version, DOI or canonical URL, classification and its rationale, and the plain total page count.
+- **Evidence locations allowed in the report:** Source section, PDF page, and Figure, Table, or Equation. Show PDF and printed page numbers together in an individual source marker only when they differ.
+- **Information restricted to internal state or the final delivery report:** How metadata was cross-checked; PDF signature, version, byte count, or hash; download or parsing method; operating-system character substitutions; filename rationale; absolute path or path length; Poppler, OCR, browser, or conversion errors; cropping and rendering steps; and QA results.
+- If total page count is shown, include exactly one `data-summary-field="pdf-page-count"` element whose entire visible value is exactly `共 N 頁`. When the page-number systems match, do not write confirmations such as `一致`, `無 offset`, or `無頁碼偏移`. When they differ, write `PDF p.N（論文標示 p.M）` in the relevant source marker without additional process explanation.
+- Keep the evidence ledger, page-number mapping, hashes, and tool diagnostics in working state only. Do not disguise production details with the `分析` or `推測` labels. If an exception affects the user's access to the result, mention it concisely in the completion report only.
 
-## `summary.html` 固定章節
+## Required `summary.html` Sections
 
-所有章節均須存在，順序如下：
+Every section below must be present in this order. Preserve each exact Traditional Chinese section title shown in code formatting:
 
-1. **論文基本資料**：正式標題、作者、會議／期刊／arXiv、年份、canonical link、分類、分類理由、中性的本地 PDF 連結，以及純粹的總頁數 `共 N 頁`；不放檔案或工具驗證資訊。
-2. **一句話總結**：用一至三句交代核心問題、方法與結果；不得放沒有來源的宣傳式數字。
-3. **Executive Summary**：快速整理研究問題、關鍵洞察、方法、主要證據、限制與 takeaways。
-4. **背景與動機**：交代理解論文所需的領域與系統背景、研究主題在整體流程中的角色、既有瓶頸與作者觀察；只有論文確實涉及 prefill 時才說明其在模型推論流程中的角色。
-5. **問題定義**：目標、輸入輸出、假設、限制、重要術語與符號；區分作者明示與摘要者形式化。
-6. **核心方法**：逐步說明架構、演算法、執行流程、元件責任、互動關係與設計直覺；整理偽程式碼時保持語義而非大段照抄。
-7. **公式與理論**：只納入理解或驗證方法所需公式；逐一解釋變數、單位／系統意義、假設與用途。
-8. **圖片與圖表導讀**：放入必要裁圖；每張圖說的來源標籤只顯示 `Figure／Table／Algorithm + 原編號`，並提供自撰導讀與閱讀重點。頁碼放在正文來源標記或重點索引，不放在圖說。
-9. **實驗設計**：硬軟體、模型、資料集、baseline、工作負載、指標、變因控制與公平性。
-10. **實驗結果**：依論文實際評估目標分開整理各項指標；對模型推論論文可包含 latency、throughput、首次 Token 延遲（Time to First Token, TTFT）、記憶體與成本。說明圖表能與不能支持的結論。
-11. **Ablation 與敏感度分析**：各設計貢獻、參數敏感度與互動；沒有時明確註記。
-12. **優點、限制與風險**：優點、系統假設、適用範圍、擴展性、泛化性、部署限制、作者限制與額外分析。
-13. **與相關工作的比較**：比較技術路線、適用場景、成本與取捨，不只列名稱。
-14. **個人分析與可延伸方向**：可借鑑設計、待驗證結論、研究／工程延伸及領域意義；標成分析或推測。
-15. **組會討論問題**：3–5 個具技術深度、可引發證據或設計討論的問題。
-16. **術語表與重點索引**：縮寫、術語、定義，以及關鍵結論對應的頁碼、章節、Figure／Table／Equation。
+1. **`論文基本資料` (Paper Metadata):** Formal title, authors, conference, journal, or arXiv record, year, canonical link, classification, classification rationale, a neutrally worded local PDF link, and the plain total page count `共 N 頁`. Do not include file or tool-validation information.
+2. **`一句話總結` (One-Sentence Summary):** State the central problem, method, and result in one to three sentences. Do not include promotional numbers without sources.
+3. **`Executive Summary`:** Quickly summarize the research problem, key insight, method, primary evidence, limitations, and takeaways.
+4. **`背景與動機` (Background and Motivation):** Explain the domain and systems context required to understand the paper, the topic's role in the broader workflow, existing bottlenecks, and the authors' observations. Explain prefill's role in model inference only when the paper actually concerns prefill.
+5. **`問題定義` (Problem Definition):** Cover objectives, inputs and outputs, assumptions, constraints, important terminology, and notation. Distinguish definitions stated by the authors from formalization introduced by the summarizer.
+6. **`核心方法` (Core Method):** Explain the architecture, algorithm, execution flow, component responsibilities, interactions, and design intuition step by step. When restructuring pseudocode, preserve its semantics without copying long passages.
+7. **`公式與理論` (Equations and Theory):** Include only equations needed to understand or validate the method. Explain each variable, unit or system meaning, assumption, and purpose.
+8. **`圖片與圖表導讀` (Figure and Table Reading Guide):** Include necessary crops. Each caption's source label must show only `Figure/Table/Algorithm + the original identifier`, followed by a self-authored reading guide and reading focus. Put page numbers in body source markers or the key-evidence index, not in captions.
+9. **`實驗設計` (Experimental Design):** Hardware, software, models, datasets, baselines, workloads, metrics, variable control, and fairness.
+10. **`實驗結果` (Experimental Results):** Organize metrics according to the paper's actual evaluation goals. For model-inference work, these may include latency, throughput, Time to First Token (TTFT), memory, and cost. Explain what the figures and tables can and cannot support.
+11. **`Ablation 與敏感度分析` (Ablation and Sensitivity Analysis):** Contribution of each design choice, parameter sensitivity, and interactions. Explicitly note when the paper does not provide these results.
+12. **`優點、限制與風險` (Strengths, Limitations, and Risks):** Strengths, system assumptions, applicable scope, scalability, generalizability, deployment constraints, author-stated limitations, and additional analysis.
+13. **`與相關工作的比較` (Comparison with Related Work):** Compare technical approaches, applicable scenarios, costs, and tradeoffs rather than merely listing names.
+14. **`個人分析與可延伸方向` (Independent Analysis and Extensions):** Reusable design ideas, conclusions still requiring validation, research or engineering extensions, and broader significance. Mark content as `分析` or `推測` as appropriate.
+15. **`組會討論問題` (Research-Group Discussion Questions):** Provide three to five technically substantive questions that prompt discussion of evidence or design.
+16. **`術語表與重點索引` (Glossary and Key-Evidence Index):** Abbreviations, terminology, definitions, and the pages, sections, Figures, Tables, or Equations supporting key conclusions.
 
-## 方法與實驗閱讀檢查
+## Method and Experiment Reading Checks
 
-### 方法
+### Method
 
-- 研究問題與目標是否精確？先採論文自身的成功指標；若屬系統最佳化，再區分 latency、throughput、TTFT、記憶體、能耗、成本或多目標取捨。
-- 方法作用於研究對象的哪個層次或元件？若屬模型推論，再進一步區分 prefill、decode、排程、記憶體、通訊、kernel、模型架構或跨層協同。
-- 執行流程中每個狀態、張量、cache、worker 與通訊步驟如何變化？
-- 設計依賴哪些 workload、硬體拓撲、模型結構、精度或序列長度假設？
-- 公式是否真的推導出設計，或只提供近似 intuition？計算與通訊成本是否完整？
+- Is the research problem and objective precise? Start from the paper's own success criteria. For systems optimization, distinguish latency, throughput, TTFT, memory, energy, cost, and multi-objective tradeoffs as applicable.
+- At which layer or component of the studied system does the method operate? For model inference, further distinguish prefill, decode, scheduling, memory, communication, kernels, model architecture, and cross-layer coordination.
+- How does every state, tensor, cache, worker, and communication step change during execution?
+- Which workload, hardware topology, model structure, precision, or sequence-length assumptions does the design depend on?
+- Do the equations genuinely derive the design, or do they provide only approximate intuition? Are compute and communication costs complete?
 
-### 實驗
+### Experiments
 
-- 記錄能影響結果的硬體、軟體、版本與關鍵設定；若屬加速器或模型系統研究，再記錄 GPU 型號／數量、CPU、記憶體、互連、driver、CUDA／ROCm、framework 與 precision。未提供者明列。
-- 記錄研究對象、資料集與工作負載；若屬模型推論，再記錄模型、參數量、context length、輸入／輸出長度分布、batch／concurrency 與請求到達模式。
-- baseline 是否同硬體、同精度、同模型品質、同 batch／concurrency、同軟體優化層級？若否，標明比較限制。
-- 區分絕對值、相對提升、平均值、percentile 與 best-case；不要把不同條件下的最大提升拼成單一代表數字。
-- 檢查 error bars、重複次數、warmup、統計方法、cost model 及量測邊界。論文未交代時不得替作者補充。
-- 圖表座標是否截斷、使用對數軸、混合單位或只呈現有利區間？
-- 作者的因果解釋是否有 ablation、profile 或 microbenchmark 支持？
+- Record hardware, software, versions, and key settings that can affect results. For accelerator or model-systems research, also record GPU model and count, CPU, memory, interconnect, driver, CUDA or ROCm version, framework, and precision. Explicitly mark anything the paper does not provide.
+- Record the studied system, datasets, and workloads. For model inference, also record models, parameter counts, context length, input and output length distributions, batch size or concurrency, and request-arrival pattern.
+- Do the baselines use the same hardware, precision, model quality, batch size or concurrency, and level of software optimization? If not, state the comparison limitation.
+- Distinguish absolute values, relative gains, means, percentiles, and best cases. Do not combine maximum gains from different conditions into one representative number.
+- Check error bars, repetition count, warmup, statistical method, cost model, and measurement boundary. Do not fill in details the paper omits.
+- Are figure axes truncated, logarithmic, mixed-unit, or restricted to favorable ranges?
+- Do ablations, profiles, or microbenchmarks support the authors' causal explanations?
 
-## 圖片與表格標準
+## Figure and Table Standard
 
-- 只截取理解架構、流程、演算法、關鍵結果與關鍵 ablation 所需內容。
-- 優先 PNG；保持文字、線條、座標軸、legend 與必要註腳清晰。裁切後逐張開啟檢查。
-- HTML 圖片路徑必須是 `assets/images/<filename>`；禁止絕對路徑、`file://`、遠端 hotlink 或 `../` 跨出論文資料夾。
-- `figcaption` 必須包含一個直接、獨立的來源標籤，例如 `Figure 4`、`Table 2` 或 `Algorithm 1`，以及自撰的「導讀」。來源標籤不得加上「原論文」、句點、PDF／印刷頁碼、章節、圖片來源說明或產製狀態；整個圖說不得出現 `裁切自原論文`、`擷取自原論文`、`取自原論文` 等贅述。定位頁碼另放於正文來源 chip、重點索引或內部 evidence ledger。
-- 保留模板的 `data-caption-kind="paper-object"`、`data-caption-field="paper-object-label"` 與 `data-caption-field="reading-guide"` markers；兩個欄位各出現一次，且圖說不得插入其他可見文字。
-- 可結構化的數據優先用 HTML `<table>` 重整；只有版面、熱圖、圖形或複雜表頭本身重要時才截圖。不得從百分比反推未披露的絕對值。
+- Crop only the content required to understand the architecture, flow, algorithm, key results, and key ablations.
+- Prefer PNG. Keep text, lines, axes, legends, and necessary footnotes legible, and inspect every crop after creating it.
+- HTML image paths must use `assets/images/<filename>`. Do not use absolute paths, `file://`, remote hotlinks, or `../` paths that escape the paper folder.
+- Each `figcaption` must contain one direct, independent source label such as `Figure 4`, `Table 2`, or `Algorithm 1`, plus a self-authored reading guide beginning with `導讀：`. Do not append `原論文`, punctuation, PDF or printed page numbers, section references, image-source notes, or production status to the source label. The full caption must not contain redundant production phrases such as `裁切自原論文`, `擷取自原論文`, or `取自原論文`. Put location pages in body source chips, the key-evidence index, or the internal evidence ledger.
+- Preserve the template markers `data-caption-kind="paper-object"`, `data-caption-field="paper-object-label"`, and `data-caption-field="reading-guide"`. Each field must appear exactly once, and the caption must not contain additional visible text.
+- Prefer restructuring data into an HTML `<table>` when it can be represented structurally. Use an image only when the layout, heatmap, graphical form, or complex header is itself important. Do not infer undisclosed absolute values from percentages.
 
-## HTML 與寫作品質
+## HTML and Writing Quality
 
-- 從 canonical template 的完整副本開始，不任意刪除 CSS、MathJax、目錄、固定 section IDs 或 evidence callout classes。
-- 使用繁體中文；第一次出現的專有名詞採「中文（English, ABBR）」形式。避免空泛描述、逐段直譯與長篇原文複製。
-- 行內公式使用 `\( ... \)`；獨立公式使用 `\[ ... \]`。程式碼與偽程式碼放入 `<pre><code>`，避免被 MathJax 處理。
-- 每個關鍵數據旁放來源 chip，格式優先為 `§4.2 · PDF p.7（論文標示 p.5）· Fig. 3`。
-- 頁面需有目錄、正確標題階層、來源索引、圖片說明、表格、程式碼樣式、清楚 focus、桌面／窄螢幕版面與列印樣式。
-- 允許固定版本 MathJax CDN；不要加入外部字型、追蹤器、框架或複雜建置依賴。
-- 產出完成後不得留下 `{{PLACEHOLDER}}`、範例數據、虛構引用或模板說明文字。
-- 產出完成後檢查讀者可見內容，移除檔名說明、檔案驗證、頁碼 offset 狀態、路徑／工具／下載／裁圖過程與其他作業日誌。
+- Start from a complete copy of the canonical template. Do not arbitrarily remove CSS, MathJax, the table of contents, fixed section IDs, or evidence-callout classes.
+- Write all reader-facing prose in Traditional Chinese (`zh-Hant`). On first use, format technical terms as `中文（English, ABBR）`. Avoid vague descriptions, paragraph-by-paragraph translation, and long verbatim excerpts.
+- Use `\( ... \)` for inline equations and `\[ ... \]` for display equations. Put code and pseudocode in `<pre><code>` so MathJax does not process them.
+- Place a source chip next to every key result. Prefer the format `§4.2 · PDF p.7（論文標示 p.5）· Fig. 3`.
+- Include a table of contents, correct heading hierarchy, source index, image descriptions, tables, code styling, clear focus states, desktop and narrow-screen layouts, and print styles.
+- A pinned-version MathJax CDN is allowed. Do not add external fonts, trackers, frameworks, or complex build dependencies.
+- Do not leave `{{PLACEHOLDER}}`, sample data, fabricated citations, or template instructions in the finished output.
+- After writing, inspect all reader-visible content and remove filename explanations, file-validation details, page-offset status, path, tool, download, or cropping procedures, and other operational logs.
 
-## 研究 loop 停止條件
+## Research-Loop Stopping Conditions
 
-以下全部成立才結束全文研究：
+End full-text research only when all of the following are true:
 
-- 正式 metadata 與分類已核對。
-- 核心問題、方法流程、重要公式、實驗設計、主結果、ablation／缺失 ablation、限制與相關工作均已有來源。
-- 每項重要數字可追溯；沒有將不同工作負載或條件混為直接比較。
-- 理解核心方法與主要結果所需圖片已擷取並檢查。
-- 16 個章節都有足夠內容，或明確記載「論文未提供」。
-- 作者主張、實驗事實、分析與推測已分流。
-- 所有尚未確認事項已列入限制或交付回報，而非用常識補齊。
+- Formal metadata and classification have been verified.
+- The central problem, method flow, important equations, experimental design, main results, ablations or missing ablations, limitations, and related work all have sources.
+- Every important number is traceable, and workloads or conditions have not been conflated as directly comparable.
+- Figures required to understand the core method and main results have been extracted and inspected.
+- All 16 sections have sufficient content or explicitly state `論文未提供`.
+- `作者主張`, `實驗事實`, `分析`, and `推測` content is clearly separated.
+- Every unresolved issue is recorded as a limitation or in the delivery report rather than filled with assumed knowledge.
 
-## 交付前人工驗收
+## Manual Acceptance Before Delivery
 
-- PDF 與 `summary.html` 可開啟。
-- 目錄與內部 anchor 正常，只有一個 `h1`，章節順序正確。
-- MathJax 能渲染，公式沒有明顯 parse error。
-- 圖片存在、非零位元、路徑正確、清晰且 caption 來源完整。
-- 關鍵數據與結論均可追溯。
-- 1440px、1024px、390px 無頁面級水平溢出；表格可個別橫向捲動。
-- A4 列印預覽不裁圖、截表或留下孤立標題。
-- 摘要涵蓋方法、實驗、限制與個人分析，且沒有遺漏最重要貢獻。
+- The PDF and `summary.html` both open successfully.
+- The table of contents and internal anchors work, there is exactly one `h1`, and sections appear in the correct order.
+- MathJax renders without obvious parse errors.
+- Images exist, are non-empty, use correct paths, remain legible, and have complete caption sources.
+- Key data and conclusions are traceable.
+- There is no page-level horizontal overflow at 1440 px, 1024 px, or 390 px; individual tables can scroll horizontally.
+- A4 print preview does not crop figures or tables or leave orphaned headings.
+- The summary covers the method, experiments, limitations, and independent analysis without omitting the most important contribution.

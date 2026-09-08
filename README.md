@@ -1,80 +1,80 @@
 # Paper Reading
 
-這個 repository 用來把論文探索、深度閱讀與繁體中文 HTML 摘要整理成可瀏覽的研究網站。每篇論文仍依專案規則放在 `<Topic>/<Subtopic>/<Formal Paper Title>/`，摘要由 `html template/summary-template.html` 產生並通過 paper-reading Skill 的驗證。
+This repository turns paper discovery, deep reading, and evidence-traceable Traditional Chinese HTML summaries into a browsable research website. Each paper follows the project structure `<Topic>/<Subtopic>/<Formal Paper Title>/`. Its summary is created from `html template/summary-template.html` and must pass validation defined by the paper-reading Skill. All generated paper summaries must be written in Traditional Chinese, even though the repository documentation and Skill instructions are written in English.
 
-## 自動化架構
+## Automation Architecture
 
-整體流程刻意分成三段，讓論文處理、網站部署與通知各自有清楚的責任邊界：
+The workflow is deliberately divided into three stages so that paper processing, website deployment, and notification each have a clear responsibility boundary:
 
-1. **本機 Codex project cron**：每天在此 project 的實際 checkout 執行，讀取 `automation/daily-reading.json`，依啟用主題搜尋候選論文、品質篩選及去重；再依 `.agents/skills/paper-reading/SKILL.md` 完整閱讀，建立分類、摘要與必要圖表，驗證後才 commit 並 push。
-2. **GitHub Actions / Pages**：push 到預設分支後，由 repository 內的 Pages workflow 建置可公開瀏覽的靜態網站並部署。這一段只處理已提交的網站來源，不負責搜尋或閱讀論文。
-3. **本機 Teams 通知**：Codex cron 在 push 後等待 GitHub Pages deployment 成功，再透過本機 `m365-teams` Skill 把本次新增摘要的 Pages 連結送到指定 chat/channel。Teams 登入資訊只留在本機，不交給 GitHub Actions。
+1. **Local Codex project cron**: Runs daily in the project's actual checkout, reads `automation/daily-reading.json`, discovers candidate papers for enabled topics, filters them for quality, and deduplicates them. It then follows `.agents/skills/paper-reading/SKILL.md` to read each selected paper in full, create its classification, write its Traditional Chinese summary, extract any necessary figures or tables, validate the result, and only then commit and push it.
+2. **GitHub Actions / Pages**: After a push to the default branch, the Pages workflow in this repository builds and deploys the publicly browsable static website. This stage processes only committed website sources; it does not discover or read papers.
+3. **Local Teams notification**: After pushing, the Codex cron waits for the corresponding GitHub Pages deployment to succeed. It then uses the local `m365-teams` Skill to send the new summary's Pages URL to the configured chat or channel. Teams credentials remain local and are never provided to GitHub Actions.
 
 ```text
-每日 Codex cron（本機）
-  └─ 搜尋 → 深讀 → 驗證 → commit/push
-                         └─ GitHub Actions → Pages deploy
-                                                   └─ 成功後由本機 m365-teams 通知
+Daily Codex cron (local)
+  └─ Discover → read deeply → validate → commit/push
+                                          └─ GitHub Actions → Pages deployment
+                                                                            └─ Local m365-teams notification after success
 ```
 
-每次排程一啟動，都會先恢復先前已 commit/push、但 Pages 或 Teams 尚未確認完成的工作，全部 reconciliation 完成後才搜尋新論文。若當天找不到符合條件且未讀過的論文，仍會完成這項復原檢查，但不建立空白 commit 或新的 publication record，也不發送新的「成功新增」通知；先前 pending commit 若確認尚未通知，則只會補送一次。
+At the beginning of every scheduled run, the automation first resumes any work that was already committed and pushed but whose Pages deployment or Teams notification was not confirmed. It starts new paper discovery only after all reconciliation work is complete. If no eligible unread paper is found that day, the recovery check still runs, but the automation does not create an empty commit or publication record and does not send a new “paper added” notification. If a previously pending commit is confirmed as not yet notified, its notification is sent exactly once.
 
-## 每日閱讀設定
+## Daily Reading Configuration
 
-設定檔是 [`automation/daily-reading.json`](automation/daily-reading.json)。目前 `topics` 為空，因此不會臆測或啟用任何研究主題；加入至少一個 `enabled: true` 的主題後，自動閱讀才會選稿。
+The configuration file is [`automation/daily-reading.json`](automation/daily-reading.json). Its `topics` array is currently empty, so the automation will neither invent nor enable a research topic. Add at least one topic with `enabled: true` before automatic paper selection can begin.
 
-完整的安全檢查、選稿、驗證、精準 stage、Pages readiness、crash recovery 與 Teams 防重複通知規則，集中在 [`automation/daily-run.md`](automation/daily-run.md)。Teams 目的地請從 [`automation/daily-reading.local.example.json`](automation/daily-reading.local.example.json) 建立本機的 `automation/daily-reading.local.json`；實際檔案已被 Git 忽略。
+The complete rules for safety checks, paper selection, validation, precise staging, Pages readiness, crash recovery, and duplicate-proof Teams notification are in [`automation/daily-run.md`](automation/daily-run.md). To configure the Teams destination, copy [`automation/daily-reading.local.example.json`](automation/daily-reading.local.example.json) to the local file `automation/daily-reading.local.json`; the actual local file is ignored by Git.
 
-每次 publication commit 會在 push 前建立 `automation/state/publications/<commit-sha>--<destination-key>.json`，並在 push、deploy、通知確認後原子更新。這個 Git-ignored record 使用完整 SHA 與目的地雜湊作為固定身份，通知中也帶有 deterministic marker；遇到逾時時，下一次排程會先查 remote、該 SHA 的 Pages deployment 及 Teams 既有訊息，而不是盲目重推、重建或重送。只有三段都確認成功才標成 completed，且 completed record 不再通知。
+Before pushing each publication commit, the workflow creates `automation/state/publications/<commit-sha>--<destination-key>.json` and updates it atomically after the push, deployment, and notification are confirmed. This Git-ignored record uses the full commit SHA and a destination hash as its stable identity. The notification also contains a deterministic marker. After a timeout, the next run checks the remote branch, the Pages deployment for that exact SHA, and existing Teams messages for that marker instead of blindly pushing, deploying, or notifying again. A record is marked complete only after all three stages are confirmed, and completed records are never notified again.
 
-每個 `topics` 項目支援：
+Each item in `topics` supports:
 
-| 欄位 | 用途 |
+| Field | Purpose |
 | --- | --- |
-| `id` | 穩定、唯一的機器識別碼；建議用小寫英數與連字號。 |
-| `name` | 顯示在執行紀錄中的主題名稱。 |
-| `enabled` | 是否納入當日搜尋。 |
-| `queries` | 一或多組搜尋詞；同主題的候選結果會合併後去重。 |
-| `excludeTerms` | 標題或 abstract 命中時排除的詞。 |
+| `id` | Stable, unique machine identifier; lowercase alphanumeric characters and hyphens are recommended. |
+| `name` | Topic name shown in execution records. |
+| `enabled` | Whether the topic participates in the daily search. |
+| `queries` | One or more search queries; candidate results for the same topic are merged and deduplicated. |
+| `excludeTerms` | Terms that exclude a result when found in its title or abstract. |
 
-可加入的主題物件格式如下（尖括號內容需自行替換）：
+Use the following shape for a topic object, replacing the angle-bracket placeholders:
 
 ```json
 {
   "id": "<topic-id>",
-  "name": "<主題名稱>",
+  "name": "<topic-name>",
   "enabled": true,
-  "queries": ["<查詢詞一>", "<查詢詞二>"],
-  "excludeTerms": ["<排除詞>"]
+  "queries": ["<search-query-one>", "<search-query-two>"],
+  "excludeTerms": ["<excluded-term>"]
 }
 ```
 
-全域選稿規則：
+Global paper-selection rules:
 
-- `selection.dailyMaxPapers`：整次執行最多完成幾篇，預設為 `1`；是所有主題合計，不是每個主題各一篇。
-- `selection.lookback.days`：候選論文回溯天數，預設為 `7`；以 `submittedOrPublished` 日期判定。
-- `quality`：要求 canonical landing page、可取得全文、完整作者與 abstract，並優先採第一方來源。`preferPeerReviewed` 是排序偏好，不會硬性排除新近 preprint。
-- `deduplication`：依 DOI、arXiv ID、正規化標題依序比對；同時掃描既有摘要並略過已處理論文。
+- `selection.dailyMaxPapers`: Maximum number of papers completed in one run. The default is `1`, shared across all topics rather than applied separately to each topic.
+- `selection.lookback.days`: Candidate-paper lookback window. The default is `7` days, evaluated against the `submittedOrPublished` date.
+- `quality`: Requires a canonical landing page, accessible full text, complete author information, and an abstract, with first-party sources preferred. `preferPeerReviewed` is a ranking preference and does not strictly exclude recent preprints.
+- `deduplication`: Compares DOI, arXiv ID, and normalized title in that order. It also scans existing summaries and skips papers that have already been processed.
 
-主題適合直接提交到版本控制，但 token、cookie、Teams chat/channel ID、私人 webhook 或其他憑證不屬於此設定檔。通知目的地與登入狀態應由本機 automation/Skill 的安全儲存提供。
+Topic definitions are safe to commit, but tokens, cookies, Teams chat or channel IDs, private webhooks, and other credentials do not belong in this configuration file. Notification destinations and authentication state must be provided through secure local storage used by the automation or Skill.
 
-## 啟用每日流程
+## Enabling the Daily Workflow
 
-在 git remote、GitHub Pages workflow 與 Pages URL 都設定完成後，再於 Codex 建立 project cron。建議排程使用 `Asia/Taipei` 每天早上執行，prompt 至少應要求：
+Create the Codex project cron only after the Git remote, GitHub Pages workflow, and Pages URL are configured. The recommended schedule is every morning in the `Asia/Taipei` time zone. Its prompt should require at least the following behavior:
 
-- 先讀取本 repository 的 `AGENTS.md`、paper-reading Skill 與 `automation/daily-reading.json`。
-- `topics` 為空或沒有啟用項目時安全結束，不自行發明主題。
-- 先搜尋、交叉核對來源、依品質與去重規則選出不超過 `dailyMaxPapers` 的論文。
-- 每篇都完成全文深讀、分類、模板摘要、圖片/表格擷取與驗證；不得只依 abstract 產生摘要。
-- 只提交本次產生且通過驗證的網站內容；同步遠端變更後再 push，遇到衝突或失敗不要強推。
-- push 後確認對應 GitHub Pages deployment 成功，才以本機 `m365-teams` 傳送可開啟的摘要 URL；deployment 失敗時不要傳送失效連結。
-- 每次都先 reconciliation 所有 Git-ignored pending publication records；結果不確定時先查 deployment 或 Teams marker，確認完成後才進入本日 discovery。
+- Read this repository's `AGENTS.md`, the paper-reading Skill, and `automation/daily-reading.json` before doing any work.
+- Exit safely when `topics` is empty or no topic is enabled; never invent a topic.
+- Discover papers, cross-check sources, apply the quality and deduplication rules, and select no more than `dailyMaxPapers` papers.
+- Read every selected paper in full, classify it, create its template-based Traditional Chinese summary, extract necessary figures or tables, and validate the result. Never generate a summary from the abstract alone.
+- Commit only the website content produced in the current run that passed validation. Synchronize remote changes before pushing, and never force-push after a conflict or failure.
+- After pushing, confirm that the GitHub Pages deployment for the exact commit succeeded before sending an accessible summary URL through the local `m365-teams` Skill. Do not send a broken link when deployment fails.
+- Reconcile all Git-ignored pending publication records at the beginning of every run. When an outcome is uncertain, check the deployment or Teams marker before beginning that day's discovery.
 
-排程本身與 Teams 目標屬於本機 Codex 設定，不由 repository 內檔案自動建立。這也避免把公司帳號資訊寫進 git history。
+The schedule and Teams destination are local Codex settings and are not created automatically by files in this repository. This boundary also prevents company account information from entering Git history.
 
-## 安全與發佈邊界
+## Security and Publishing Boundaries
 
-- **不發佈 PDF**：`.gitignore` 排除所有 `*.pdf`。論文 PDF 僅供本機閱讀；GitHub Pages artifact 也不可另行複製 PDF。摘要可連到 canonical publisher/arXiv 頁面，但不應假設本地 PDF 連結在網站上可用。
-- **不提交秘密**：不要 commit access token、cookie、webhook、Teams 對話識別碼或含秘密的 `.env` / local override；如果秘密曾經進入 commit，僅刪除目前檔案並不足夠，還必須撤銷並輪替該憑證。
-- **Public Pages 不是存取控制**：公開 GitHub Pages 上的 HTML、圖片與 metadata 都應視為任何人可讀。不要放入 AMD 機密、受 NDA 約束的內容、個資或不可公開的研究筆記；robots 設定、難猜 URL 或未列在首頁都不是權限機制。
-- **尊重授權**：摘要與必要引用應維持轉述及來源追溯；圖片/表格是否能公開仍須依原論文授權與合理使用情境判斷。
+- **Do not publish PDFs**: `.gitignore` excludes every `*.pdf`. Paper PDFs are for local reading only and must not be copied into the GitHub Pages artifact. A summary may link to the canonical publisher or arXiv page, but it must not assume that a local PDF link will work on the public website.
+- **Do not commit secrets**: Never commit access tokens, cookies, webhooks, Teams conversation identifiers, or `.env` or local override files containing secrets. If a secret has ever entered a commit, deleting it from the current tree is insufficient; revoke and rotate the credential as well.
+- **Public Pages is not access control**: Treat every HTML file, image, and metadata item on the public GitHub Pages site as readable by anyone. Do not publish AMD-confidential or NDA-covered material, personal data, or private research notes. Robots directives, hard-to-guess URLs, and omission from the index are not access controls.
+- **Respect licensing**: Keep summaries and necessary quotations paraphrased and traceable to their sources. Whether a paper's figures or tables may be published must still be evaluated under the paper's license and the applicable fair-use context.
