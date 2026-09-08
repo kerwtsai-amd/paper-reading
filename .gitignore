@@ -12,6 +12,7 @@ automation/logs/
 # Generated site/dependency output.
 _site/
 _site.__*/
+/tmp/
 dist/
 node_modules/
 __pycache__/

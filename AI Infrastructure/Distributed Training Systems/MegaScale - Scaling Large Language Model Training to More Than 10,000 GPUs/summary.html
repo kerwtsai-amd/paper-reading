@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="MegaScale 論文閱讀紀錄：梳理 10,000+ GPU LLM 訓練的 3D parallelism、通訊重疊、資料與網路、容錯、straggler 與觀測性證據鏈。">
+  <title>MegaScale: Scaling Large Language Model Training to More Than 10,000 GPUs｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 46rem;
+      --wide: 62rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">AI Infrastructure / Distributed Training Systems</p>
+      <h1>MegaScale: Scaling Large Language Model Training to More Than 10,000 GPUs</h1>
+      <div class="paper-dek" data-section-role="thesis"><p class="lead">MegaScale 的核心是把萬卡同步 LLM 訓練視為一個跨層 critical-path 與穩定性問題：以 3D parallelism 專屬的通訊重疊、資料與網路調校、拓樸感知觀測及快速容錯共同維持效率，並在 175B 模型、12,288 張 GPU 的指定條件下達到 55.2% MFU，相對論文採用的 Megatron-LM 基線為 1.34×。 <a class="source-ref" href="#source-table2-p11">§6.1 · PDF p.11（論文 p.754）· Table 2</a></p></div>
+      <p class="paper-byline">Ziheng Jiang、Haibin Lin、Yinmin Zhong、Qi Huang、Yangrui Chen、Zhi Zhang、Yanghua Peng、Xiang Li、Cong Xie、Shibiao Nong、Yulu Jia、Sun He、Hongmin Chen、Zhihao Bai、Qi Hou、Shipeng Yan、Ding Zhou、Yiyao Sheng、Zhuo Jiang、Haohan Xu、Haoran Wei、Zhang Zhang、Pengfei Nie、Leqi Zou、Sida Zhao、Liang Xiang、Zherui Liu、Zhe Li、Xiaoying Jia、Jianxi Ye、Xin Jin、Xin Liu</p>
+      <p class="paper-meta">
+        <span>21st USENIX Symposium on Networked Systems Design and Implementation（NSDI ’24），pp. 745–760</span>
+        <span>2024</span>
+        <span>AI Infrastructure / Distributed Training Systems</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-08">2026 年 9 月 8 日</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://www.usenix.org/conference/nsdi24/presentation/jiang-ziheng" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="MegaScale-NSDI-2024.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀路線：</strong>先用〈<a href="#problem">通訊泡泡、啟動風暴與長尾故障如何吞掉有效訓練時間</a>〉抓住根因，再讀〈<a href="#method">把通訊藏進計算，並把故障變成可恢復的控制迴路</a>〉走完整流程，最後用〈<a href="#evidence">175B／530B Scaling、累積消融與續訓軌跡</a>〉逐項驗證。熟悉背景的讀者可直接從問題章開始。</p>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">3D 平行、MFU、Critical Path 與故障域</a></li>
+            <li><a href="#problem">通訊泡泡、啟動風暴與長尾故障如何吞掉有效訓練時間</a></li>
+            <li><a href="#insight">12,288 張 GPU：跑得快只是起點，跑得完才是系統</a></li>
+            <li><a href="#method">把通訊藏進計算，並把故障變成可恢復的控制迴路</a></li>
+            <li><a href="#evidence">175B／530B Scaling、累積消融與續訓軌跡</a></li>
+            <li><a href="#critique">峰值 MFU 不等於有效訓練率：證據與重現邊界</a></li>
+            <li><a href="#extensions">從 MegaScale 可以延伸哪些系統設計</a></li>
+            <li><a href="#reference">平行維度、效率公式與故障證據索引</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>3D 平行、MFU、Critical Path 與故障域</h2>
+          <h3>最小前置概念</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>概念</th><th>在本文扮演的角色</th><th>稍後會用在哪裡</th></tr></thead>
+            <tbody>
+              <tr><td>同步訓練與最慢 rank</td><td>collective 或 pipeline 相依讓所有參與者等待尚未抵達的 rank。</td><td>解釋 straggler、MFU 漂移、故障連鎖與跨 rank trace。</td></tr>
+              <tr><td>資料平行（DP）</td><td>ZeRO stage 2 將 gradients/optimizer states sharding；每個 chunk 需要 all-gather parameters 與 reduce-scatter gradients。</td><td>解釋 chunk-level overlap 與最後一個 reduce-scatter 為何會暴露。</td></tr>
+              <tr><td>管線平行（PP）</td><td>layers 分 stage，micro-batches 依 interleaved 1F1B 流動；warm-up/cool-down 產生 bubble。</td><td>解釋 send/receive 解耦與 LAMB 放大 batch 的作用。</td></tr>
+              <tr><td>張量／序列平行（TP/SP）</td><td>單一 operator 分卡；SP 降 activation memory，但在 SP↔TP 邊界引入 all-gather/reduce-scatter。</td><td>解釋把 collective 融入 parallel linear 並切碎 GEMM。</td></tr>
+              <tr><td>Model FLOPs Utilization（MFU）</td><td>觀測吞吐相對於理論 peak FLOPs 的利用率；固定模型與 token 目標時可對應訓練時間。</td><td>是 scalability、ablation 與 straggler 的共同指標。</td></tr>
+              <tr><td>故障 vs. straggler</td><td>故障使 job error/hang；straggler 仍運作但拖慢同步 critical path。</td><td>前者走自動診斷與 restart，後者需細粒度 observability。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>論文採用 3D parallelism，傾向把高頻寬需求的 TP 留在單機，DP/PP 跨節點，並優先安排 DP groups 以減少跨 mini-pod 通訊。 <a class="source-ref" href="#source-background-p4">§2 · PDF pp.3–4（論文 pp.746–747）· Figures 1–2</a></p>
+<p class="bridge">有了這些背景，下一個問題是：通訊泡泡、啟動風暴與長尾故障如何吞掉有效訓練時間。</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>通訊泡泡、啟動風暴與長尾故障如何吞掉有效訓練時間</h2>
+          <h3>症狀 → 根因 → 要求</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>可見症狀</th><th>根本機制／既有缺口</th><th>由此導出的設計要求</th></tr></thead>
+            <tbody>
+              <tr><td>GPU 增加，MFU 下降。</td><td>固定 global batch 下，每卡計算減少，communication/computation ratio 上升；collectives 落在 critical path。</td><td>依 DP、PP、TP/SP 各自相依關係做 semantic-aware overlap，而非只做通用 backward overlap。</td></tr>
+              <tr><td>每 step 開頭 GPU 等資料。</td><td>每張 GPU 各自從 disk 讀相同 TP input，競爭 read bandwidth；preprocessing 被串在 critical path。</td><td>提前處理下一 step，且每機只讀一次、以 shared memory 與 GPU copy fan-out。</td></tr>
+              <tr><td>啟動／重啟在大規模變慢。</td><td>單執行緒 blocking TCPStore 與每 group global barrier，使初始化近似 \(O(n^2)\)。</td><td>非阻塞 metadata store，消除不必要的 global barriers，將複雜度降至 \(O(n)\)。</td></tr>
+              <tr><td>all-to-all congestion、PFC 與 HoL blocking。</td><td>ECMP hash collision、跨多 hop traffic、預設 DCQCN 在規模下引發過多 PFC；link flap 又可能過早 timeout。</td><td>拓樸/placement 協同、multi-rail、RTT+ECN congestion control 與合理 retransmit timeout。</td></tr>
+              <tr><td>故障頻繁且錯誤訊息淹沒根因。</td><td>單卡 hang 可造成相依 ranks 連鎖 NCCL timeout；表層狀態只看到全域 blockage。</td><td>持續蒐集 heartbeat/log/RDMA signal，快速 self-check、隔離節點、補資源、由近端 checkpoint 恢復。</td></tr>
+              <tr><td>同設定各 run MFU 不一致，且隨時間下降。</td><td>約 0.5% 慢機與 critical-path code jitter 被同步放大；單卡 GEMM benchmark 看不出跨 rank 等待。</td><td>低開銷 CUDA event、system-wide heatmap/timeline 與 3D dependency view。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> MegaScale 的成功標準同時包含 <strong>training efficiency</strong> 與長時間維持效率的 <strong>training stability</strong>；在萬卡尺度，兩者不能分開最佳化。 <a class="source-ref" href="#source-intro-p3">§1 · PDF pp.2–3（論文 pp.745–746）</a></p>
+<div class="table-scroll">
+          <table>
+            <thead><tr><th>工作脈絡</th><th>主要處理層</th><th>MegaScale 如何承接</th><th>關鍵差異</th></tr></thead>
+            <tbody>
+              <tr><td>Megatron-LM</td><td>模型平行、3D parallel training 與 operator stack。</td><td>作為直接 baseline 與實作起點，保留 TP/PP/DP 基礎。</td><td>加入模型/optimizer co-design、三類 overlap、data/control plane、network 與 production reliability 全棧；比較僅對特定舊 commit。</td></tr>
+              <tr><td>ZeRO / FSDP</td><td>透過 sharding 降低 parameters、gradients、optimizer states 的單卡記憶體。</td><td>採 ZeRO stage 2 類 DP，將 parameter all-gather 與 gradient reduce-scatter 依 model chunks 排程。</td><td>貢獻重點不是再發明 sharding，而是依計算相依把 collectives 預取、排序與重疊。</td></tr>
+              <tr><td>GPipe / PipeDream 類 pipeline systems</td><td>layers 分 stages，以 micro-batches 降 pipeline bubble。</td><td>採 interleaved 1F1B，再拆分 send/receive 並以較大 batch 改善 bubble。</td><td>MegaScale 避免用 stale weights 改變同步訓練語義；代價是 bubble 仍須靠 schedule 與 workload co-design 處理。</td></tr>
+              <tr><td>通用 communication schedulers</td><td>依優先序或依賴把 collective 與 backpropagation 重疊。</td><td>同樣把通訊移離 critical path。</td><td>依 DP、PP、TP/SP 的不同 semantics 各自改執行圖，而不是把所有 collective 當成同類工作。</td></tr>
+              <tr><td>Pingmesh、EverFlow、LossRadar、NetBouncer、Hostping</td><td>資料中心網路的 path probing、loss/blackhole/host diagnosis。</td><td>heartbeat、RDMA metrics 與連線測試借鏡 production network diagnosis。</td><td>MegaScale 再把網路訊號對齊 GPU rank 與 TP/PP/DP dependency，面向單一超大同步 job 的因果追蹤。</td></tr>
+              <tr><td>Checkpoint/restart 與 proactive migration</td><td>故障後恢復，或在明確故障前搬移工作。</td><td>以 host-memory staging、背景 HDFS write、分區讀取+broadcast 降低 checkpoint/restore critical path。</td><td>本文以 reactive recovery 為主；對慢機則用 observability 找出並替換，未評估預測式 migration 或 replica training。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-related-p14">§7 · PDF pp.14–15（論文 pp.757–758）</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> MegaScale 的新穎性不在每個零件皆首創：3D parallelism、ZeRO、FlashAttention-2、LAMB、Clos 與 checkpoint 都有前身。影響力來自把模型演算法、runtime、network control plane 與運維 telemetry 對齊到同一個萬卡 critical path，並以真實長跑證明整合能運作。這是 system integration/co-design 型貢獻。</p>
+<p class="bridge">問題的限制已經清楚；接著要抓住作者最關鍵的轉念。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>12,288 張 GPU：跑得快只是起點，跑得完才是系統</h2>
+          <h3>問題與根因</h3>
+        <p>單一 LLM job 佔用上萬張 GPU、持續數週。同步執行使一個暴露在 critical path 的 collective、一個資料載入停頓、一張慢卡或一次 link flap，都能讓所有 ranks 等待；規模同時提高通訊比例、故障發生率與人工定位難度。 <a class="source-ref" href="#source-intro-p3">§1 · PDF pp.2–3（論文 pp.745–746）</a></p>
+        <h3>兩個統攝原則</h3>
+        <div class="takeaway-list">
+          <div class="takeaway-item"><p class="takeaway-label">效率</p><p><strong>Algorithm–system co-design：</strong>模型 block、optimizer、DP/PP/TP/SP、operators、data pipeline、collective initialization 與 network 一起最佳化。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">穩定</p><p><strong>In-depth observability：</strong>heartbeat、logs、RDMA counters、毫秒級監測、跨 rank CUDA events 與 3D dependency view 共同定位深層故障與 straggler。</p></div>
+        </div>
+        <h3>最強證據與邊界</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 175B strong-scaling 實驗在 12,288 張 NVIDIA Ampere GPU、TP=8、PP=8、batch=6,144、sequence length=2,048 下，MegaScale 為 6.34 s/iteration、1.984M tokens/s、55.2% MFU；Megatron-LM 為 8.57 s、1.467M tokens/s、41.2% MFU。 <a class="source-ref" href="#source-table2-p11">§6.1 · PDF pp.10–11（論文 pp.753–754）· Tables 1–2</a></p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 一個未揭露細節的 production model 在超過 10,000 張 GPU 上訓練數週、處理 multi-trillion tokens；Figure 11 以不同顏色標示超過 100 次 restart，loss 仍持續下降，且作者報告超過 90% 軟硬體 faults 可自動辨識與修復。 <a class="source-ref" href="#source-fig11-p12">§6.2 · PDF p.12（論文 p.755）· Figure 11</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 1.34× 是 55.2/41.2 的相對比值；絕對差是 <strong>14.0 個 MFU 百分點</strong>。結果證明的是這套整合 stack 在作者 Ampere cluster 與該工作負載的效能，不等同於每一個元件都有獨立 10K-GPU 因果證據。</p>
+<p class="bridge">直覺成立後，再沿著一次完整執行看它如何落成系統。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>把通訊藏進計算，並把故障變成可恢復的控制迴路</h2>
+          <h3>一個 training job 從啟動到故障恢復</h3>
+        <ol>
+          <li><strong>配置 3D topology：</strong>將 GPU ranks 組成 TP、PP、DP groups；TP 優先留在 node 內，資料密集 ranks 儘量安排在同 ToR。</li>
+          <li><strong>快速建立 collectives：</strong>以非阻塞 Redis 取代 blocking TCPStore，依序建立 groups 以去除每組 global barrier；完成後進入迭代。</li>
+          <li><strong>準備下一批資料：</strong>本 step 仍在 gradient synchronization 時，CPU 非同步預處理下一 step。每台機器只設一個 loader 讀 disk/shared memory，再由各 GPU worker 複製相同 TP input。</li>
+          <li><strong>執行一個 step：</strong>parallel transformer block 讓 attention 與 MLP 可並行；sliding-window attention、FlashAttention-2、fused LayerNorm/GeLU 減少 operator 成本；interleaved 1F1B 推進 micro-batches。</li>
+          <li><strong>把通訊搬離 critical path：</strong>DP 以 model chunk 為粒度預取 all-gather、backward 後立即 reduce-scatter；PP 解耦 send/receive；TP/SP 把 all-gather、reduce-scatter 融入較大的 FFN linears，再把 GEMM 切片與 communication pipelining。</li>
+          <li><strong>跨機傳輸：</strong>三層 Clos-like、multi-rail 200G NIC、placement 與路由共同減少 ECMP collision；自訂 congestion control 合併 RTT 與 ECN，並調 retransmit 以容忍短暫 link flap。</li>
+          <li><strong>持續觀測：</strong>executor daemon 上報 heartbeat、process status、stdout/stderr 與 RDMA counters；CUDA events 再提供 rank-level compute/communication spans，形成 heatmap、timeline 與 3D dependency view。</li>
+          <li><strong>故障閉環：</strong>driver 偵測異常或 heartbeat timeout → 全域暫停 → 輕量 self-check → block IP/evict Pod → Kubernetes 補健康 node → 從最近 checkpoint 繼續。</li>
+        </ol>
+        <h3>效率路徑：每種 parallelism 都有不同可藏區間</h3>
+        <h4>Data parallelism</h4>
+        <p>ZeRO-style DP 的 all-gather 必須在 chunk forward 前完成，reduce-scatter 則在 chunk backward 後可開始。MegaScale 將首個 all-gather 提前到 iteration 開頭，與 data loading 重疊；其餘 collectives 依下游 computation 的需求順序排 priority。第一個 all-gather 與最後一個 reduce-scatter 最難完全隱藏，設計不是宣稱通訊歸零。 <a class="source-ref" href="#source-overlap-p5">§3.2 · PDF p.5（論文 p.748）</a></p>
+        <h4>Pipeline parallelism</h4>
+        <p>在 warm-up，forward 只依賴前一個 receive；若 send/receive 綁成一個同步操作，較慢的一側會阻塞另一側。MegaScale 將它們拆開，用獨立 stream 非同步發送；steady phase 的相鄰 send/receive 也可和 forward/backward 穿插。 <a class="source-ref" href="#source-overlap-p6">§3.2 · PDF p.6（論文 p.749）· Figure 4</a></p>
+        <figure data-figure-role="method">
+          <a href="assets/images/fig-04-p06-pp-overlap.png"><img src="assets/images/fig-04-p06-pp-overlap.png" alt="Pipeline parallel warm-up 與 steady phase 將 send/receive 拆分到獨立 streams"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>上半部 S/R 綁定使較慢一側形成相依；下半部拆成獨立 send、receive streams 後，訊息可與相鄰 FWD/BWD 疊合。比較 warm-up 與 steady phase 的箭頭，才能看出可移動的是哪些操作，而非假設全部通訊都可隱藏。</span></figcaption>
+        </figure>
+        <h4>Tensor / sequence parallelism</h4>
+        <p>SP 與 TP 的轉換要求 all-gather/reduce-scatter，原本在 critical path。系統把兩個 collective 融入 FFN path 的 column/row parallel linears，因 FFN GEMM 較大、較能遮住傳輸；再把 GEMM 切成 chunks，以 compute stream 與 communication stream 做 producer–consumer pipeline。 <a class="source-ref" href="#source-overlap-p5">§3.2 · PDF pp.5–6（論文 pp.748–749）· Figure 3</a></p>
+        <figure data-figure-role="method">
+          <a href="assets/images/fig-03-p05-tp-sp-overlap.png"><img src="assets/images/fig-03-p05-tp-sp-overlap.png" alt="Parallel transformer block 中 sequence/tensor parallel collective 融入 linear 並與 GEMM 重疊"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 3</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>由左至右看三步：原本 SP/TP 邊界的 all-gather、reduce-scatter 在 critical path；先融合進 FFN parallel linears；再把 GEMM 切片，使粉紅 compute 與綠色 communication 在兩個 CUDA streams 交錯。重點不是少傳 bytes，而是縮短暴露在 critical path 的時間。</span></figcaption>
+        </figure>
+        <h3>資料、啟動與網路不是旁枝</h3>
+        <p>資料預處理提前、per-node tree loading、collective initialization 與 network tuning 都在消除 GPU 閒置來源。初始化的 staged result 尤其清楚：2,048 GPU 的 Megatron-LM 約 1,047 s；換 Redis 後 361 s；再消除 global barriers 後低於 5 s，10K+ GPU 低於 30 s。 <a class="source-ref" href="#source-init-p7">§3.4–3.5 · PDF pp.6–7（論文 pp.749–750）</a></p>
+        <h3>穩定路徑：正常運行也要能被診斷</h3>
+        <p>常見顯式 error 由 heartbeat、log 與 self-check 自動處理；driver 暫停全域 job、隔離異常 IP／Pod，再交給 Kubernetes 補入健康節點，將單點故障收斂成可重複的恢復流程。 <a class="source-ref" href="#source-fault-p8">§4 · PDF pp.7–8（論文 pp.750–751）· Figure 5</a></p>
+        <figure data-figure-role="method">
+          <a href="assets/images/fig-05-p07-robust-workflow.png"><img src="assets/images/fig-05-p07-robust-workflow.png" alt="MegaScale driver、executors、checker、Kubernetes 與 heartbeat 構成的容錯工作流"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 5</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>沿 heartbeat 反向追：executors 將狀態送回 log analyzer；異常觸發 checker 停訓並收集結果；driver 產生 blocked IPs/evicted Pods 交給 Kubernetes 補資源。它呈現的是偵測—診斷—隔離—補位，checkpoint restore 則在圖外接續。</span></figcaption>
+        </figure>
+        <p>概率性慢機或全域 timeout 則由 CUDA-event heatmap 找尾端 ranks，再沿 TP／PP／DP logical topology 追相依，避免把所有等待中的 ranks 都誤判成根因。 <a class="source-ref" href="#source-ops-p13">§5 · PDF pp.9–10（論文 pp.752–753）· Figure 7</a></p>
+        <figure data-figure-role="method">
+          <a href="assets/images/fig-07-p09-straggler-heatmap.png"><img src="assets/images/fig-07-p09-straggler-heatmap.png" alt="跨 hosts 與 TP、PP、DP 邏輯相依的 CUDA event performance heatmap"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 7</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>顏色把每個 rank 的 event time 放在同一尺度，host 10 的 ranks 40–41 與 host 8 的 rank 32 形成尾端；選取 rank 20 後，虛線同時顯示 TP、PP、DP peers。圖的價值是把「全域都在等」還原成哪個邏輯相依先變慢。</span></figcaption>
+        </figure>
+        <p>最後，checkpoint 採兩階段：GPU state 先經 pinned host memory 快速脫離 critical path，再背景寫 HDFS；restore 時每個共享 partition 只由一個 worker 讀 HDFS，再 broadcast 給相同狀態的 workers。 <a class="source-ref" href="#source-fault-p8">§4 · PDF pp.8–9（論文 pp.751–752）</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 這套方法可視為兩個控制迴路：毫秒到 step 級的效率迴路把 communication/data stalls 藏到 compute 後面；分鐘級的可靠性迴路把 anomaly 轉成定位、隔離與 restart。前者提高峰值 MFU，後者保護數週工作的有效訓練時間。</p>
+<h3>MFU 如何把吞吐轉成硬體利用率</h3>
+        <div class="formula-block">
+          \[
+            \mathrm{MFU}=\frac{\text{observed model FLOPs per second}}
+            {G\times\text{單張 GPU 理論峰值 FLOPs/s}}.
+          \]
+          <p class="formula-block__meaning">\(G\) 是 GPU 數。固定模型、precision 與 FLOP counting 時，較高 MFU 表示更多峰值算力被有效訓練工作使用；跨論文比較則會受峰值規格與 FLOP 定義影響。</p>
+        </div>
+        <p>對固定 token 目標，另有 \(T_{train}=N_{tokens}/\text{throughput}\)。Table 2 的 12,288-GPU MegaScale throughput 為 1.984M tokens/s，訓練 300B tokens 對應約 1.75 天；同表 Megatron-LM 為 1.467M tokens/s、約 2.37 天。 <a class="source-ref" href="#source-table2-p11">§6.1 · PDF p.11（論文 p.754）· Table 2</a></p>
+        <h3>3D parallelism 本質上是 rank topology</h3>
+        <div class="formula-block">
+          \[
+            G=D\times P\times T,
+          \]
+          <p class="formula-block__meaning">\(D,P,T\) 分別是 data、pipeline、tensor parallel degree。175B 設定 \(T=8,P=8\)；若一 rank 對應一 GPU，12,288 GPU 對應 \(D=192\)。這是依 Table 1 與 3D 分解得到的分析值，論文未直接列出 192。</p>
+        </div>
+        <p>增大 \(G\) 且固定 global batch 時，每 GPU 的 compute 下降，但跨 ranks 的 synchronization 不會同比消失，因此 MFU 通常隨 strong scaling 下滑；這也是 overlap 在大規模更重要、卻更難完全遮蔽的原因。</p>
+        <h3>模型 block 的等式也會改變執行圖</h3>
+        <div class="formula-block">
+          \[
+          y=x+\mathrm{MLP}(\mathrm{LN}(x+\mathrm{Attention}(\mathrm{LN}(x))))
+          \]
+          <p class="formula-block__meaning">上式是論文列出的 serialized formulation。</p>
+          \[
+          y=x+\mathrm{MLP}(\mathrm{LN}(x))+\mathrm{Attention}(\mathrm{LN}(x)).
+          \]
+          <p class="formula-block__meaning">Parallel transformer block 讓 MLP 與 attention 可並行，但它改變了模型計算圖，不只是 schedule；作者以 13B convergence microbenchmark 檢查影響。</p>
+        </div>
+        <h3>Initialization 的複雜度如何改變</h3>
+        <p>若每個 communication group 建立後都觸發 global barrier，group 數與參與 processes 同時隨規模成長，作者將 naive 行為概括為 \(O(n^2)\)。重新安排 group initialization、去除不必要 barrier 後降為 \(O(n)\)。這是 control-plane cost，不是單一步驟 collective 的 data-plane 複雜度。 <a class="source-ref" href="#source-init-p7">§3.5 · PDF pp.6–7（論文 pp.749–750）</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 論文未給一個能加總 compute、DP/PP/TP traffic、network contention 與 straggler tail 的完整解析模型；公式主要用來定義 metric 與解釋方向，元件收益仍依實驗與 production cases 建立。</p>
+<p class="bridge">方法看似合理，真正的問題是：實驗有沒有把這條因果鏈撐起來？</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>175B／530B Scaling、累積消融與續訓軌跡</h2>
+          <h3>Claim–test pairs：每個主張由哪個測試回答？</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>主張</th><th>測試與控制條件</th><th>判準</th><th>主要 caveat</th></tr></thead>
+            <tbody>
+              <tr><td><strong>C1：MegaScale 能改善 175B strong scaling</strong></td><td>固定 global batch 6,144 與 300B-token 目標，GPU 由 3,072 擴至 12,288；sequence 2,048、TP=8、PP=8。以同 batch 的 Megatron-LM 作基線。</td><td>iteration time、tokens/s、300B tokens 預估天數、MFU 與 PFLOPS。</td><td>沒有 repetitions、error bars 或顯著性；baseline 是 2023-01-11 commit。 <a class="source-ref" href="#source-table2-p11">§6.1 · PDF pp.10–11（論文 pp.753–754）· Tables 1–2</a></td></tr>
+              <tr><td><strong>C2：530B 可弱縮放至 11,200 GPUs</strong></td><td>2,240、4,480、11,200 GPUs；batch 隨 GPU 數增加，並相應調 learning rate；TP=8、PP=35。</td><td>若每卡工作量大致維持，MFU 應跨規模保持；比較 MegaScale 與 Megatron-LM。</td><td>不是 fixed-batch strong scaling；batch 與 learning rate 一起改變。 <a class="source-ref" href="#source-fig9-p11">§6.1 · PDF p.11（論文 p.754）· Figure 9</a></td></tr>
+              <tr><td><strong>C3：co-design 元件共同貢獻效率</strong></td><td>175B、256 GPUs，從 Megatron-LM 開始依序加入 parallel transformer block、sliding-window attention、TP/PP/DP overlap、operators、miscellaneous、LAMB。</td><td>觀察累積 MFU 是否由 47.7% 上升。</td><td>不是單因子消融；順序 interaction 未拆解，最後一列把 batch 放大 3×。 <a class="source-ref" href="#source-table3-p12">§6.3 · PDF p.12（論文 p.755）· Table 3</a></td></tr>
+              <tr><td><strong>C4：演算法改動不破壞 convergence</strong></td><td>資源受限下改用 13B 模型：PTB+SWA 對 baseline 訓練超過 100B tokens；LAMB 4× batch 對 Adam 1× batch 至約 250B tokens。</td><td>training-loss curves 應相近、最後達到相同 loss。</td><td>是 13B proxy，不是 175B/530B；只呈 training loss，沒有 downstream quality 或統計區間。 <a class="source-ref" href="#source-fig10-p12">§6.1 · PDF p.12（論文 p.755）· Figure 10</a></td></tr>
+              <tr><td><strong>C5：系統能長期承受萬卡故障</strong></td><td>一個未具名、數千億參數 production model，在超過 10,000 GPUs 上跑數週、跨 multi-trillion tokens；以 normalized loss/token-rate 與 restart 色段呈現。</td><td>restart 後 loss 是否續降；自動處理率、診斷時間與 effective training time rate。</td><td>模型、精確卡數、資料、故障總數/分布與原始時間軸未公開。 <a class="source-ref" href="#source-fig11-p12">§6.2 · PDF p.12（論文 p.755）· Figure 11</a></td></tr>
+              <tr><td><strong>C6：observability 能定位慢機與 jitter</strong></td><td>以 rank-level CUDA events、heatmap/timeline、3D dependencies 檢查不同 production incidents，再移除慢 hosts 或問題程式碼。</td><td>修正前後 MFU 與跨 iteration timing 是否回復。</td><td>案例式 before/after，未報 control group、樣本數或監測開銷。 <a class="source-ref" href="#source-ops-p13">§6.4 · PDF p.13（論文 p.756）· Figure 12</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>硬體、模型與軟體條件</h3>
+        <ul>
+          <li><strong>Cluster：</strong>截至 2023 年 9 月，作者的最大 production cluster 超過 10,000 張 NVIDIA Ampere GPUs；每台 server 以八張 200 Gb/s NIC 連到八個不同 switches，fabric 為三層、1:1 non-oversubscribed Clos-like topology。論文沒有揭露 Ampere 的確切 SKU、GPU memory 或 server CPU。 <a class="source-ref" href="#source-network-p7">§3.6、§6 · PDF pp.7、10（論文 pp.750、753）</a></li>
+          <li><strong>175B：</strong>96 layers、hidden size 12,288、128 heads、TP=8、PP=8、interleaved stages=6；3,072–12,288-GPU 主結果的 global batch 固定為 6,144。</li>
+          <li><strong>530B：</strong>105 layers、hidden size 20,480、160 heads、TP=8、PP=35、interleaved stages=3；弱縮放時 batch 隨卡數增加。</li>
+          <li><strong>共同模型條件：</strong>sequence length 2,048、vocabulary 64K。基線是 Megatron-LM commit <code>285068c8</code>（2023-01-11），各比較使用相同 batch size。 <a class="source-ref" href="#source-exp-p10">§6 · PDF p.10（論文 p.753）· Table 1</a></li>
+          <li><strong>未揭露：</strong>CUDA、PyTorch、NCCL 與 precision 的確切版本/設定；MFU 所用 Ampere peak 值與完整 FLOP-count convention；每個數字的 run 次數。</li>
+        </ul>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 論文把 scalability、component attribution、convergence 與 production stability 分成不同測試，方向正確；但各自控制強度不同。Table 2 最適合回答固定工作量的端到端效率，Figure 9 回答 capacity scaling，Table 3 只能回答「這個加入順序的 stack 最終可達多少」，Figure 11 則是 operational evidence，而不是受控可靠度實驗。</p>
+        <h3>175B fixed-batch strong scaling</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>Table 2 的 3,072–12,288-GPU 區段；batch 固定 6,144，訓練時間以 300B tokens 推算。</caption>
+            <thead><tr><th>GPUs</th><th>系統</th><th>iteration</th><th>吞吐（K tok/s）</th><th>300B tokens</th><th>MFU</th><th>PFLOPS</th></tr></thead>
+            <tbody>
+              <tr><td rowspan="2">3,072</td><td>Megatron-LM</td><td>29.02 s</td><td>433.6</td><td>8.01 days</td><td>48.7%</td><td>466.8</td></tr>
+              <tr><td>MegaScale</td><td><strong>23.66 s</strong></td><td><strong>531.9</strong></td><td><strong>6.53 days</strong></td><td><strong>59.1%</strong>（1.21×）</td><td><strong>566.5</strong></td></tr>
+              <tr><td rowspan="2">6,144</td><td>Megatron-LM</td><td>14.78 s</td><td>851.6</td><td>4.08 days</td><td>47.8%</td><td>916.3</td></tr>
+              <tr><td>MegaScale</td><td><strong>12.21 s</strong></td><td><strong>1,030.9</strong></td><td><strong>3.37 days</strong></td><td><strong>57.3%</strong>（1.19×）</td><td><strong>1,098.4</strong></td></tr>
+              <tr><td rowspan="2">8,192</td><td>Megatron-LM</td><td>12.24 s</td><td>1,027.9</td><td>3.38 days</td><td>43.3%</td><td>1,106.7</td></tr>
+              <tr><td>MegaScale</td><td><strong>9.56 s</strong></td><td><strong>1,315.6</strong></td><td><strong>2.64 days</strong></td><td><strong>54.9%</strong>（1.26×）</td><td><strong>1,400.6</strong></td></tr>
+              <tr><td rowspan="2">12,288</td><td>Megatron-LM</td><td>8.57 s</td><td>1,466.8</td><td>2.37 days</td><td>41.2%</td><td>1,579.5</td></tr>
+              <tr><td>MegaScale</td><td><strong>6.34 s</strong></td><td><strong>1,984.0</strong></td><td><strong>1.75 days</strong></td><td><strong>55.2%</strong>（1.34×）</td><td><strong>2,166.3</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-table2-p11">§6.1 · PDF p.11（論文 p.754）· Table 2</a></p>
+<p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 主結論的完整條件是：175B、12,288 Ampere GPUs、TP=8、PP=8、batch=6,144、sequence=2,048。MegaScale 的 55.2% MFU 相對基線 41.2% 為 <strong>1.34×</strong>，絕對差是 <strong>+14.0 percentage points</strong>；吞吐比為 1.9840M/1.4668M≈1.35×，300B-token 時間由 2.37 降至 1.75 天。 <a class="source-ref" href="#source-table2-p11">§6.1 · PDF p.11（論文 p.754）· Table 2</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> MegaScale 從 3,072 擴到 12,288 GPUs 時，吞吐增加約 3.73×（理想為 4×），MFU 由 59.1% 降至 55.2%；Megatron-LM 同段吞吐只增約 3.38×，MFU 由 48.7% 降至 41.2%。因此證據不只顯示單點較快，也顯示 stack 把規模擴大造成的利用率下滑控制得較小；但這是依表中數字計算，非作者另報的 scaling-efficiency metric。</p>
+        <h3>530B weak scaling</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>GPUs</th><th>Megatron-LM MFU</th><th>MegaScale MFU</th><th>絕對差</th></tr></thead>
+            <tbody>
+              <tr><td>2,240</td><td>49.2%</td><td><strong>54.3%</strong></td><td>+5.1 points</td></tr>
+              <tr><td>4,480</td><td>48.8%</td><td><strong>54.1%</strong></td><td>+5.3 points</td></tr>
+              <tr><td>11,200</td><td>48.2%</td><td><strong>54.3%</strong></td><td>+6.1 points</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>每卡負載大致保持時，MegaScale 的 MFU 幾乎持平於 54.1–54.3%，而基線略降；這支持 530B capacity 可延伸至 11,200 GPUs。它不能替代固定 global batch 的強縮放證據。 <a class="source-ref" href="#source-fig9-p11">§6.1 · PDF p.11（論文 p.754）· Figure 9</a></p>
+        <h3>Control plane 與 production stability</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 2,048 GPUs 的 Megatron-LM communication-group initialization 約 1,047 s；換成非阻塞 Redis 後約 361 s；進一步去除 group 間 global barriers 後低於 5 s。作者另報在超過 10,000 GPUs 時低於 30 s。 <a class="source-ref" href="#source-init-p7">§3.5 · PDF pp.6–7（論文 pp.749–750）</a></p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> production run 經歷超過 100 次 restart；作者報告超過 90% faults 可自動偵測與修復，平均 detection+diagnosis 低於 10 分鐘，通常可在 15 分鐘內追平 crash 前進度，effective training time rate 超過 90%。 <a class="source-ref" href="#source-fig11-p12">§6.2 · PDF p.12（論文 p.755）· Figure 11</a></p>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-11-p12-production-restarts.png"><img src="assets/images/fig-11-p12-production-restarts.png" alt="超過一萬張 GPU 的 production LLM 訓練 normalized loss curve 與多次 restart 色段"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 11</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>橫軸是 normalized consumed-token rate、縱軸是未揭露尺度的 loss；不同色段表示 restart。曲線跨越許多色段仍連續下降，支持「能恢復並續訓」，但圖本身不能告訴每次故障類型、停機時間或最終模型品質。</span></figcaption>
+        </figure>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 初始化數字直接測到 control-plane 改造；production 數字則證明「真實 job 能持續推進」。後者沒有 recovery-time 分布、未自動修復的 10% 類型或 monitoring/checkpoint overhead，因此較適合視為 field evidence，而非可重現的 reliability benchmark。</p>
+<h3>175B、256-GPU 累積式 ablation</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>依 Table 3 的加入順序；「邊際差」只表示相鄰兩列差值，不是獨立元件效果。</caption>
+            <thead><tr><th>累積設定</th><th>MFU</th><th>相對 baseline</th><th>相鄰列邊際差</th></tr></thead>
+            <tbody>
+              <tr><td>1. Megatron-LM baseline</td><td>47.7%</td><td>—</td><td>—</td></tr>
+              <tr><td>2. + Parallel Transformer Block</td><td>52.3%</td><td>+4.6 points</td><td>+4.6</td></tr>
+              <tr><td>3. + Sliding Window Attention</td><td>53.3%</td><td>+5.6 points</td><td>+1.0</td></tr>
+              <tr><td>4. + TP overlap</td><td>55.5%</td><td>+7.8 points</td><td>+2.2</td></tr>
+              <tr><td>5. + PP overlap</td><td>58.0%</td><td>+10.3 points</td><td>+2.5</td></tr>
+              <tr><td>6. + DP overlap</td><td>59.5%</td><td>+11.8 points</td><td>+1.5</td></tr>
+              <tr><td>7. + Efficient operators</td><td>61.2%</td><td>+13.5 points</td><td>+1.7</td></tr>
+              <tr><td>8. + Miscellaneous</td><td>62.3%</td><td>+14.6 points</td><td>+1.1</td></tr>
+              <tr><td>9. + LAMB，batch size ×3</td><td><strong>65.3%</strong></td><td><strong>+17.6 points</strong></td><td>+3.0</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-table3-p12">§6.3 · PDF p.12（論文 p.755）· Table 3</a></p>
+        <h3>該表能說什麼、不能說什麼</h3>
+        <ul>
+          <li><strong>能說：</strong>按照作者選定的組合與加入順序，MFU 由 47.7% 累積到 65.3%；三種 parallelism 的 overlap 加入後，各自的相鄰列都有正向差值。</li>
+          <li><strong>不能說：</strong>相鄰差值不是 Shapley value 或單變因效果；後加入的元件可能依賴前面的模型圖、chunking 與 scheduling，順序改變時貢獻可能不同。</li>
+          <li><strong>batch caveat：</strong>Table 3 caption 稱 batch size 256，但 LAMB 列明示 <em>BS ×3</em>，即該列改為 768；最後 3.0 points 混合 optimizer 與更大 batch 對 pipeline bubble 的影響，不能和前列視為完全同條件。</li>
+          <li><strong>網路 caveat：</strong>作者說 networking optimizations 同時套用 MegaScale 與 baseline，因此此表沒有估計 topology/congestion-control 的增益。</li>
+          <li><strong>缺少的消融：</strong>data pipeline、Redis/group initialization、checkpoint、監測 overhead、slow-node detector 與 congestion control 都沒有獨立 quantitative ablation；部分被收在未拆解的 miscellaneous，部分只以案例或操作數字呈現。</li>
+        </ul>
+        <h3>Convergence sensitivity</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 13B microbenchmark 中，parallel transformer block + sliding-window attention 與 baseline 在超過 100B tokens 的 training-loss curve 接近；LAMB 以 4× batch、Adam 以 1× batch，兩者約在 250B tokens 達到相同 loss。 <a class="source-ref" href="#source-fig10-p12">§6.1 · PDF p.12（論文 p.755）· Figure 10</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 這排除了「13B 上立即發散或明顯劣化」的風險，卻沒有驗證 175B/530B、下游能力或 final checkpoint 等價。尤其 SWA 的 window size、LAMB 的超參數與多次 seed variation 未充分揭露，不能把 13B 曲線當成所有規模的品質保證。</p>
+<p class="bridge">數據回答了部分問題；剩下的是適用邊界與仍未被證明的部分。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>峰值 MFU 不等於有效訓練率：證據與重現邊界</h2>
+          <h3>優點</h3>
+        <ul>
+          <li><strong>規模與真實性兼具：</strong>受控評估涵蓋 175B/530B、最高 12,288/11,200 GPUs，另有跑數週、multi-trillion-token 的 production record。</li>
+          <li><strong>真正的 full-stack 因果鏈：</strong>模型圖、optimizer、DP/PP/TP scheduling、operators、data、collective setup、fabric、failure recovery 與 observability 都對應到「GPU 為何閒置」或「job 為何停滯」。</li>
+          <li><strong>效率與穩定性同一尺度思考：</strong>峰值 MFU 若因慢機逐步下降或頻繁故障而不可維持，便不算成功；論文把 steady-state throughput 與 weeks-long effective time 都納入。</li>
+          <li><strong>可診斷性不是事後工具：</strong>跨 ranks 的 CUDA event、logical dependency 與 network signal 被設計成控制迴路的一部分，能把同步放大的症狀追到源頭。</li>
+        </ul>
+        <h3>證據與可重現性限制</h3>
+        <ul>
+          <li><strong>專有環境：</strong>production 模型、資料、cluster 細節與故障分布未公開；論文只表示計畫把部分設計開源到 veScale，無法由本文重建完整系統。</li>
+          <li><strong>基線時點：</strong>Megatron-LM 基於 2023-01-11 commit；未和同時期其他 production stacks 或後來版本比較，1.34× 不應視為對「所有既有框架」的普遍差距。</li>
+          <li><strong>實驗統計不足：</strong>exact Ampere SKU、precision/software versions、run count、error bars 與 MFU peak/FLOP convention 未完整揭露，難以估計 variance 或精確復現。</li>
+          <li><strong>歸因受限：</strong>Table 3 是累積式且末列改 batch；network、data pipeline、checkpoint、monitoring 與 recovery 元件缺少獨立 ablation。</li>
+          <li><strong>品質驗證縮小：</strong>convergence 只在 13B proxy 看 training loss；沒有 175B/530B 或 production model 的 downstream/final-quality 指標。</li>
+          <li><strong>可靠度只報摘要值：</strong>沒有 failure taxonomy、MTBF、recovery-time quantiles、checkpoint interval/size，Figure 11 又使用 normalized axes，無法推導長尾停機成本。</li>
+        </ul>
+        <h3>部署風險</h3>
+        <ul>
+          <li><strong>拓樸綁定：</strong>multi-rail、same-ToR placement 與自訂 RTT+ECN congestion control 依賴特定 Broadcom/RDMA fabric；其他拓樸未驗證可攜性。</li>
+          <li><strong>Overlap 可能互相競爭：</strong>高 priority communication、GEMM slicing 與多 streams 會爭 SM、memory bandwidth、NIC/PCIe；模型 shape 或硬體改變時需重新調校。</li>
+          <li><strong>大 batch 改變 optimization：</strong>LAMB 降低 PP bubble 也改變統計效率與超參數需求；吞吐收益不可自動等同於更快達到同等模型品質。</li>
+          <li><strong>平均值掩蓋尾端：</strong>平均診斷低於 10 分鐘並不約束 P99；未自動修復的少數事件可能主導 weeks-long run 的人工成本。</li>
+        </ul>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 最可靠的可移植結論是「逐層找出同步 critical path，讓 observability 使用相同的 rank dependency graph」；最不應直接外推的則是 55.2% MFU 與 1.34×，因為它們依賴作者的模型、Ampere peak 定義、network、baseline commit 與調校。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>從 MegaScale 可以延伸哪些系統設計</h2>
+          <h3>三張圖必須對齊：execution、fabric、telemetry</h3>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> <strong>Execution graph</strong> 說明哪些 DP/PP/TP collective 阻塞下一個 kernel；<strong>physical topology</strong> 說明 bytes 經過哪些 NIC/ToR/links；<strong>telemetry graph</strong> 則必須把異常重新映回同一組 ranks。只有三者有共同識別碼與時間軸，才能從「某 collective 變慢」追到「哪台 host、哪條 link、哪個 process」；MegaScale 的 3D dependency view 是這個原則的具體版本。</p>
+        <h3>峰值 MFU 與有效訓練時間是相乘關係</h3>
+        <div class="formula-block">
+          \[
+          \text{effective progress}\;\propto\;\text{peak throughput}
+          \times\text{healthy-time ratio}
+          \times\text{useful-work ratio}.
+          \]
+          <p class="formula-block__meaning">這不是論文定義的新 metric，而是閱讀本文的分析框架：overlap 提升 peak throughput；自動恢復提高 healthy-time ratio；快速 checkpoint 減少 crash 後重做，使 useful-work ratio 上升。</p>
+        </div>
+        <p>例如只追 55.2% MFU 而忽略 restart，可能在數週尺度輸掉；反過來，只提升 availability 而讓慢機長期拖住同步步驟，也會使名義上的「健康時間」產出很少。本文最值得 cluster designer 保留的是這個乘法觀點。</p>
+        <h3>架構層面的推論</h3>
+        <ul>
+          <li><strong>Control plane 也在 critical path：</strong>啟動從 1,047 s 降到低於 5 s 看似只影響一次，但百次 restart 會把 initialization 反覆乘上去；因此 group creation、resource replacement 與 checkpoint restore 應列入訓練吞吐預算。</li>
+          <li><strong>0.5% 尾端可以定義整體：</strong>同步 workload 的容量規劃不能只看平均 GPU benchmark，還要以 slowest-rank distribution、跨時間漂移與隔離成本決定可用 pool。</li>
+          <li><strong>資料讀取應按共享語義合併：</strong>同一 TP group 需要相同 input，不代表每個 rank 都應重複觸發 storage IO；per-node single read + fan-out 是把 algorithmic redundancy 消成 system locality 的例子。</li>
+          <li><strong>網路調校需 workload-aware：</strong>collective traffic 的同步 burst、ECMP collision 與 link flap timeout 和一般 web flow 不同；placement、routing、congestion control 與 NCCL timeout 應共同驗證。</li>
+        </ul>
+        <h3>值得補做的研究與評估</h3>
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> <strong>自動 topology-aware planner：</strong>若把 operator DAG、group sizes、rack/rail bandwidth 與 failure domains放進同一 optimizer，可同時選 TP/PP/DP、rank placement、chunk size 和 collective priority；這可能比逐層人工調校更容易移植到新一代 GPU/fabric，但需要能準確預測 contention 的 cost model。</p>
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> <strong>以尾端為中心的 reliability benchmark：</strong>應公開匿名化 failure traces，報 MTBF、偵測/診斷/recovery 的 P50/P95/P99、lost tokens、checkpoint bytes 與監測 overhead，再做 fault injection。這能區分「多數故障很快」和「少數事件支配總停機」兩種完全不同的系統。</p>
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> <strong>從 reactive 走向 guarded proactive：</strong>若 CUDA-event drift、RDMA retry 與 signal quality 能預示即將發生的 straggler/link failure，可在安全邊界內提前替換 node；但誤判會引發不必要 restart，必須以預期 lost-work 而非 classifier accuracy 決策。</p>
+<ol>
+          <li>55.2% MFU 是整個 full stack 的結果。若只能新增三組 counter 或 traces，如何把剩餘 44.8% 拆成 compute inefficiency、exposed communication、data stalls、bubbles 與 straggler waiting？</li>
+          <li>Table 3 是固定順序的累積消融，最後又改 batch。要估計 PTB、SWA、三種 overlap 與 LAMB 的真正獨立/交互作用，最小但有說服力的 factorial experiment 應如何設計？</li>
+          <li>13B 的 training-loss curve 足以為 175B/530B 的 PTB、SWA 與大 batch 降低多少風險？若只負擔得起少量大模型 runs，應優先量 downstream quality、gradient noise、loss spikes 還是 optimizer states？</li>
+          <li>超過 100 次 restart 且 effective training time rate &gt;90% 看似成功；還需要哪些 failure taxonomy、quantile 與 lost-work 數據，才能判斷換一個 cluster/network 後仍成立？</li>
+          <li>當下一代 GPU 把 compute 拉高得比 fabric bandwidth 更快時，TP/SP overlap、rank placement、checkpoint 與 congestion control 的優先順序會怎麼改？哪些 MegaScale 設計是硬體無關原則，哪些是 Ampere-era 解法？</li>
+        </ol>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>平行維度、效率公式與故障證據索引</h2>
+          <div class="table-scroll">
+          <table>
+            <tbody>
+              <tr><th scope="row">正式標題</th><td>MegaScale: Scaling Large Language Model Training to More Than 10,000 GPUs</td></tr>
+              <tr><th scope="row">作者</th><td>Ziheng Jiang、Haibin Lin、Yinmin Zhong、Qi Huang 等 32 位作者</td></tr>
+              <tr><th scope="row">機構</th><td>ByteDance；Peking University</td></tr>
+              <tr><th scope="row">發表</th><td>NSDI ’24，Santa Clara，2024 年 4 月，pp. 745–760；USENIX Association</td></tr>
+              <tr><th scope="row">ISBN</th><td>978-1-939133-39-7</td></tr>
+              <tr><th scope="row">頁數</th><td data-summary-field="pdf-page-count">共 17 頁</td></tr>
+              <tr><th scope="row">官方資源</th><td><a href="https://www.usenix.org/conference/nsdi24/presentation/jiang-ziheng" target="_blank" rel="noopener noreferrer">USENIX 論文頁</a> · <a href="https://www.usenix.org/system/files/nsdi24-jiang-ziheng.pdf" target="_blank" rel="noopener noreferrer">Open-access PDF</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 分類為 <strong>AI Infrastructure / Distributed Training Systems</strong>：主貢獻不是單一模型演算法或網路協定，而是 10K+ GPU LLM 預訓練的跨層 production system，聯合處理 parallelism、communication、data path、network、fault tolerance 與 observability。</p>
+<h3>術語表</h3>
+        <dl class="term-list">
+          <dt>MFU</dt><dd>Model FLOPs Utilization；模型實際 FLOPs/s 相對所有 GPU 理論 peak 的比率。定義、precision 與 peak 選擇會影響跨系統比較。</dd>
+          <dt>3D parallelism</dt><dd>同時使用 data、pipeline、tensor parallelism；GPU 總數可寫成 \(G=D\times P\times T\)。</dd>
+          <dt>Data parallelism（DP）</dt><dd>不同 replicas 處理不同 data；本文以 ZeRO stage 2 類 sharding 搭配 parameter all-gather 與 gradient reduce-scatter。</dd>
+          <dt>Pipeline parallelism（PP）</dt><dd>把 layers 切成 stages，micro-batches 穿越 stages；空閒區段稱 pipeline bubble。</dd>
+          <dt>Tensor / sequence parallelism（TP/SP）</dt><dd>TP 切 operator tensors，SP 切 sequence 維度的 activation；兩種 layout 轉換會觸發 collectives。</dd>
+          <dt>All-gather / reduce-scatter</dt><dd>前者把各 rank 分片收集成完整資料，後者把 reduction 結果切片分發；在 ZeRO 與 SP/TP transition 中是主要通訊。</dd>
+          <dt>Communication overlap</dt><dd>將 collective 與沒有直接資料相依的 compute 同時執行，以縮短暴露於 critical path 的傳輸時間；不代表 bytes 消失。</dd>
+          <dt>Interleaved 1F1B</dt><dd>pipeline schedule 交錯 one-forward/one-backward micro-batches，以減少 bubble 並控制 activation memory。</dd>
+          <dt>Clos / multi-rail</dt><dd>多層交換網路與多條獨立 NIC→switch 路徑；本文使用 1:1 non-oversubscribed Clos-like fabric 與八 rail。</dd>
+          <dt>DCQCN / PFC / HoL</dt><dd>RDMA congestion control、priority flow control 與 head-of-line blocking；過度暫停可使無關 traffic 也被阻塞。</dd>
+          <dt>Straggler</dt><dd>仍在工作但比 peers 慢的 rank/host；同步相依使其 latency 傳播成整個 job 的等待。</dd>
+          <dt>Two-stage checkpoint</dt><dd>先把 GPU state 快速搬到 pinned host memory 讓訓練續跑，再在背景寫入 HDFS；restore 也以分區單讀+broadcast 降 storage 壓力。</dd>
+          <dt>Effective training time rate</dt><dd>作者用來描述 production run 中有效訓練時間占比的操作指標；本文報 &gt;90%，但沒有給完整公式與分布。</dd>
+        </dl>
+        <h3>重點索引與證據定位</h3>
+        <ol class="source-index">
+          <li id="source-intro-p3"><span><strong>萬卡訓練的效率/穩定性目標與兩項原則：</strong>§1，PDF pp.2–3（論文 pp.745–746）。</span></li>
+          <li id="source-background-p4"><span><strong>DP、PP、TP/SP 背景與 placement：</strong>§2，PDF pp.3–4（論文 pp.746–747），Figures 1–2。</span></li>
+          <li id="source-overlap-p5"><span><strong>DP 與 TP/SP communication overlap：</strong>§3.2，PDF pp.5–6（論文 pp.748–749），Figure 3。</span></li>
+          <li id="source-overlap-p6"><span><strong>PP send/receive 解耦：</strong>§3.2，PDF p.6（論文 p.749），Figure 4。</span></li>
+          <li id="source-init-p7"><span><strong>資料流程與 group initialization 數字：</strong>§3.4–3.5，PDF pp.6–7（論文 pp.749–750）。</span></li>
+          <li id="source-network-p7"><span><strong>Clos-like multi-rail、RTT+ECN 與 link-flap tuning：</strong>§3.6，PDF p.7（論文 p.750）。</span></li>
+          <li id="source-fault-p7"><span><strong>自動偵測—診斷—隔離—補資源工作流：</strong>§4.1，PDF pp.7–8（論文 pp.750–751），Figure 5。</span></li>
+          <li id="source-fault-p8"><span><strong>self-check、two-stage checkpoint 與 restore：</strong>§4.2–4.3，PDF pp.8–9（論文 pp.751–752）。</span></li>
+          <li id="source-observe-p9"><span><strong>CUDA-event heatmap、timeline 與 3D dependencies：</strong>§5，PDF pp.9–10（論文 pp.752–753），Figures 6–8。</span></li>
+          <li id="source-exp-p10"><span><strong>cluster、baseline commit 與 175B/530B 模型設定：</strong>§6，PDF p.10（論文 p.753），Table 1。</span></li>
+          <li id="source-table2-p11"><span><strong>175B strong-scaling 主結果：</strong>§6.1，PDF p.11（論文 p.754），Table 2。</span></li>
+          <li id="source-fig9-p11"><span><strong>530B weak scaling：</strong>§6.1，PDF p.11（論文 p.754），Figure 9。</span></li>
+          <li id="source-table3-p12"><span><strong>175B、256-GPU 累積式 ablation：</strong>§6.3，PDF p.12（論文 p.755），Table 3。</span></li>
+          <li id="source-fig10-p12"><span><strong>13B convergence microbenchmarks：</strong>§6.1，PDF p.12（論文 p.755），Figure 10。</span></li>
+          <li id="source-fig11-p12"><span><strong>production loss、restarts 與 recovery 摘要：</strong>§6.2，PDF p.12（論文 p.755），Figure 11。</span></li>
+          <li id="source-ops-p13"><span><strong>slow hosts、code jitter 與 link-flap production cases：</strong>§6.4，PDF pp.12–13（論文 pp.755–756），Figure 12。</span></li>
+          <li id="source-related-p14"><span><strong>distributed training、network diagnosis 與 fault-tolerance 脈絡：</strong>§7，PDF pp.14–15（論文 pp.757–758）。</span></li>
+        </ol>
+        <p class="muted">閱讀主結果時，請把 175B fixed-batch strong scaling、530B weak scaling、256-GPU 累積 ablation、13B convergence proxy 與未揭露 production run 分開；它們回答不同問題，證據強度也不同。</p>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>MegaScale: Scaling Large Language Model Training to More Than 10,000 GPUs · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>

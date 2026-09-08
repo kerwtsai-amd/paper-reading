@@ -1,6 +1,6 @@
 ---
 name: paper-reading
-description: Organize, download, deeply read, and summarize academic papers in this Paper Reading workspace as reader-first, evidence-traceable Traditional Chinese HTML. Use for paper discovery, classification, PDF intake or reading, figure/table extraction, technical analysis, or summary.html work when Confluence delivery is not requested; use paper-reading-confluence for Confluence pages.
+description: Organize, download, deeply read, and summarize academic papers in this Paper Reading workspace as reader-first, evidence-traceable Traditional Chinese HTML articles. Use for paper discovery, classification, PDF intake or reading, figure/table extraction, technical analysis, or summary.html work when Confluence delivery is not requested; use paper-reading-confluence for Confluence pages.
 metadata:
   short-description: Reader-first, evidence-traceable Traditional Chinese HTML paper summaries
 ---
@@ -11,11 +11,11 @@ Organize each paper into a portable, verifiable research folder suitable for a r
 
 If the user requests creating, updating, or migrating a Confluence paper page, use the `paper-reading-confluence` skill in this project instead. The HTML template and `summary.html` contract below do not apply to that delivery mode.
 
-## Fixed Project Contract
+## Project Contract
 
 1. Treat the nearest ancestor directory containing both `AGENTS.md` and `html template/summary-template.html` as the Paper Reading root; in this project, it is the working directory. Do not create categories or paper files outside that root.
 2. Before doing any substantive paper work, read [references/paper-reading-standard.md](references/paper-reading-standard.md). Before drafting, also read and apply the shared [reader-first exposition guide](references/reader-first-exposition.md).
-3. Before generating HTML, read `html template/summary-template.html` from the root and create the paper's `summary.html` from a complete copy. Preserve the template version marker, CSS, MathJax, fixed section IDs, evidence labels, and responsive structure.
+3. Before generating HTML, read `html template/summary-template.html` from the root and create the paper's `summary.html` from a complete copy. Preserve template version `2.1.0`, the `reader-first-article-v2` style marker, embedded CSS, MathJax, semantic section roles, evidence labels, responsive structure, and the canonical font resources. The semantic roles are fixed; their reader-facing chapter titles are paper-specific.
 4. The project has no default Topic or Subtopic. Every paper must use exactly two category levels, with the formal paper title as the third-level folder. The only valid target structure is:
 
    ```text
@@ -53,8 +53,8 @@ Use evidence coverage, not a fixed number of passes, as the stopping condition. 
 2. **Method pass:** Closely read the background, problem definition, system architecture, algorithms, pseudocode, and equations. Trace every component, data flow, assumption, and complexity claim.
 3. **Evidence pass:** Closely read the evaluation setup, baselines, workloads, hardware, software, metrics, main results, ablations, and sensitivity analyses. Verify captions, axes, units, and comparison conditions.
 4. **Critical pass:** Separate author claims, facts directly supported by experiments, your own analysis, and speculation. Look for missing baselines, unfair comparisons, external-validity issues, deployment constraints, and untested assumptions.
-5. **Completeness pass:** Recheck every important number, equation, figure, table, and summary conclusion. Continue targeted reading whenever a key statement lacks a source, any of the 16 sections is uncovered, or a core figure is missing. If the paper genuinely omits the information, write `論文未提供`.
-6. **Exposition pass:** Define the target reader's minimum prerequisites and arrange the report as one causal thread: system context → observable problem → root mechanism → limits of existing approaches → derived requirements → end-to-end method → claim-aligned evidence → boundaries. Remove any prerequisite that is not used later.
+5. **Completeness pass:** Recheck every important number, equation, figure, table, and summary conclusion. Continue targeted reading whenever a key statement lacks a source, a semantic role lacks meaningful content, or a core method/result figure is missing. If the paper genuinely omits the information, write `論文未提供`.
+6. **Exposition pass:** Define the target reader's minimum prerequisites and arrange the report by learning order, not paper order: system context → observable problem → root mechanism → limits of existing approaches → derived requirements → concrete intuition or miniature example → end-to-end method → claim-aligned evidence → boundaries. Remove any prerequisite that is not used later.
 
 Do not substitute the abstract for full-text reading, and do not invent information absent from the paper merely because it seems plausible from background knowledge.
 
@@ -62,17 +62,23 @@ Do not substitute the abstract for full-text reading, and do not invent informat
 
 - Extract only the architecture diagrams, flowcharts, algorithm diagrams, result plots, or key tables required to explain the method and validate the conclusions. Prefer high-resolution PNG files under `assets/images/`.
 - Use traceable filenames such as `fig-03-p07-overview.png` or `table-02-p10-results.png`. Crops must be clear and retain complete legends, axes, and required annotations while excluding full-page context and irrelevant margins.
+- Put each figure or table at the first paragraph where the reader needs it. A method figure belongs beside the method mechanism; a result plot belongs inside the corresponding claim-test discussion. Do not build a detached figure gallery or a top-level "圖片與圖表導讀" chapter.
 - HTML may reference images only through forward-slash relative paths under `assets/images/...`. Give every image descriptive `alt` text and a self-authored reading guide. The source label in `figcaption` must contain only the original paper object identifier, such as `Figure 4`, `Table 2`, or `Algorithm 1`. Do not append `原論文`, punctuation, PDF or printed page numbers, `裁切自原論文`, `擷取自原論文`, or any other source or production note. Put figure and table page numbers in body evidence markers, the key-evidence index, or the internal evidence ledger, not in the caption.
 - Preserve the template's caption markers: `data-caption-kind="paper-object"`, `data-caption-field="paper-object-label"`, and `data-caption-field="reading-guide"`. Follow the source label immediately with a non-empty, self-authored reading guide beginning with `導讀：`; do not insert a third visible text segment.
 
 ### 5. Write the Summary from the Canonical Template
 
 - Copy the root's `html template/summary-template.html` to the target `summary.html`, then replace every `{{...}}` placeholder. HTML-escape titles, authors, and URLs.
+- Preserve the template's typography exactly. Its only linked stylesheet is `https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&family=Open+Sans:wght@400;500;600;700;800&display=swap` (write `&` as `&amp;` in HTML), accompanied by preconnects to `https://fonts.googleapis.com` and `https://fonts.gstatic.com`, with `crossorigin` on the latter. Keep `--sans`, `--serif`, and `--mono` set to `"Open Sans", "Noto Sans TC", sans-serif`; this intentionally makes Latin text resolve to Open Sans and CJK text resolve to Noto Sans TC across the entire article. Do not add another font, stylesheet, or preconnect.
 - Write all reader-facing prose in `summary.html` in Traditional Chinese (`zh-Hant`). On first use, retain the English full name and abbreviation for technical terms. The instruction language being English does not change the required output language. Reorganize the content as a research report rather than translating paragraph by paragraph or copying long passages.
-- Apply the reader-first guide across the fixed sections. In particular, make Section 04 a minimal prerequisite bridge, Section 05 a problem-to-requirements chain, Section 06 an end-to-end walkthrough followed by component mechanics, and Sections 09–10 claim-test pairs. Keep external prerequisites visibly distinct from claims made by the paper.
-- Preserve all 16 fixed sections. When information is missing, write `論文未提供`; do not omit the section or fabricate content.
+- Do not reproduce the paper's section order mechanically. Choose the easiest teaching order. When a bottom-up order is clearer, begin with a concrete example, packet/request/tensor walkthrough, or small calculation and only then introduce formal notation and the full architecture. State where an analogy stops being exact.
+- Use the template's semantic roles exactly once and in this order: `prerequisites`, `problem`, `insight`, `method`, `evidence`, `critique`, `extensions`, `reference`. Reader-facing `<h2>` titles must be specific questions or claims about the current paper; generic titles such as "背景與動機", "核心方法", "實驗結果", and "圖片與圖表導讀" are not acceptable as the repeated chapter scheme.
+- Put compact bibliographic context and the central thesis in the header. Do not create separate visible chapters for metadata, one-sentence summary, or Executive Summary, and do not repeat the same lede three times.
+- In `prerequisites`, teach only the minimum concepts used later. In `problem`, connect symptom → mechanism → nearest-baseline gap → derived requirements. In `insight`, give the smallest concrete mental model that makes the method feel inevitable. In `method`, walk end to end before component details and keep equations/figures in place. In `evidence`, write claim-test units that combine setup, controls, metric, observation, supported conclusion, and caveat. Use `critique` and `extensions` for boundaries, independent analysis, reusable ideas, and discussion. Put metadata, glossary, and the key-evidence index in `reference`.
+- Begin each chapter by naming the understanding obstacle it resolves, and end with a natural bridge to the next question whenever useful. Ordinary paragraphs should usually contain 2–5 sentences. Use lists for genuine parallel items, not as a substitute for explanation.
+- When information is missing, write `論文未提供`; do not omit the semantic role or fabricate content.
 - Use `\( ... \)` and `\[ ... \]` for important equations, and explain each variable, unit or system meaning, relationship to the method, and source in the paper.
-- Apply the template's four textual evidence labels to important statements: `作者主張`, `實驗事實`, `分析`, and `推測`. Do not communicate this distinction by color alone.
+- Apply the template's four textual evidence labels to important statements: `作者主張`, `實驗事實`, `分析`, and `推測`. Prefer the compact inline `.evidence-kind` marker. Reserve large `.statement` callouts for genuine turning points; normally use no more than six in a full article and never create a wall of colored cards.
 - Place a source marker next to every important number. Include at least the source section and PDF page, plus the Figure, Table, or Equation when applicable. If the PDF and printed page numbers differ, show both.
 
 #### Reader-Visible Content Boundary (Required)
@@ -91,7 +97,9 @@ Do not substitute the abstract for full-text reading, and do not invent informat
   pwsh -NoProfile -File ".agents/skills/paper-reading/scripts/validate-summary.ps1" -PaperDirectory "<paper-folder>"
   ```
 
-- Then perform visual QA in a browser at desktop and narrow-screen widths. Check table-of-contents navigation, long titles, horizontal scrolling for tables, images, MathJax, keyboard focus, and A4 print preview.
+- Then perform visual QA in a browser at desktop and narrow-screen widths. Check that Latin text renders in Open Sans and Traditional Chinese text in Noto Sans TC, then check table-of-contents navigation, long titles, horizontal scrolling for tables, images, MathJax, keyboard focus, and A4 print preview.
+- Confirm that the first two screenfuls answer the problem, central insight, and strongest evidence; every prerequisite is reused; every major component answers a named requirement; and every principal result is a claim-test unit with a caveat.
+- Confirm the article reads primarily as continuous prose. It must not contain a permanent sidebar TOC, a detached figure gallery, a card grid, or more than six large statement callouts without a paper-specific reason. Figures should appear within one or two paragraphs of the first discussion that needs them.
 - Find and remove any reader-visible text that exposes intake work, filename handling, path workarounds, tool usage, or QA procedures. The page-count field must match `共 N 頁`.
 - Fix validation failures and rerun the checks until every actionable issue passes. If an external resource is unavailable or the paper itself omits information, retain an explicit marker and report it at delivery.
 

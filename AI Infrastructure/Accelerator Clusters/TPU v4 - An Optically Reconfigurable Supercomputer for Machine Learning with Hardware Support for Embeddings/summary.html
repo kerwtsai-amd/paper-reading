@@ -1,0 +1,1072 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="TPU v4 超級電腦的 OCS、3D torus、SparseCore、可用性與效能／能源證據導讀。">
+  <title>TPU v4: An Optically Reconfigurable Supercomputer for Machine Learning with Hardware Support for Embeddings｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 46rem;
+      --wide: 62rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">AI Infrastructure / Accelerator Clusters</p>
+      <h1>TPU v4: An Optically Reconfigurable Supercomputer for Machine Learning with Hardware Support for Embeddings</h1>
+      <div class="paper-dek" data-section-role="thesis">
+        <p class="lead">TPU v4 以 64-chip 電氣積木、48 台光學電路交換器（OCS）與可配置的 3D torus，把 4,096 顆加速器的可用性、排程與通訊問題轉成「可重接的拓樸」；再以每晶片的 SparseCore 承接 embedding 的低算術強度與 all-to-all 瓶頸，形成一套面向快速變動 ML 工作負載的生產級系統。<a class="source-ref" href="#source-p01-abstract">摘要與 §1 · PDF p.1</a><a class="source-ref" href="#source-p02-fig1">§2.1–2.2 · PDF p.2 · Figure 1</a><a class="source-ref" href="#source-p05-embedding">§3.1–3.5 · PDF p.5</a></p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span>在 4×4×8 與 4×8×8 slices 的穩態 all-to-all microbenchmark 中，twisted torus 相對 regular torus 分別達 1.63× 與 1.31× throughput；這證明特定非立方拓樸可提升該通訊測試，並不是所有 workload 的 end-to-end 加速，也不能把聯合系統收益全歸因於 OCS 單一元件。<a class="source-ref" href="#source-p04-fig6">§2.8 · PDF p.4 · Figure 6</a></p>
+      </div>
+      <p class="paper-byline">Norman P. Jouppi, George Kurian, Sheng Li, Peter Ma, Rahul Nagarajan, Lifeng Nai, Nishant Patil, Suvinay Subramanian, Andy Swing, Brian Towles, Cliff Young, Xiang Zhou, Zongwei Zhou, David Patterson</p>
+      <p class="paper-meta">
+        <span>ISCA ’23 Industry Track · DOI 10.1145/3579371.3589350</span>
+        <span>2023</span>
+        <span>AI Infrastructure / Accelerator Clusters</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-08">2026-09-08</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://doi.org/10.1145/3579371.3589350" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="2304.01433.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀路線：</strong>先用〈<a href="#problem">固定互連為何在 4K 規模同時輸給故障、切片與模型形狀</a>〉抓住根因，再讀〈<a href="#method">從 64-chip Block 到 SparseCore：TPU v4 怎麼重配整台機器</a>〉走完整流程，最後用〈<a href="#evidence">可用性、吞吐與能效：設計收益如何被量出來</a>〉逐項驗證。熟悉背景的讀者可直接從問題章開始。</p>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">先看 3D Torus、OCS 與稀疏 Embedding 的三種資料路徑</a></li>
+            <li><a href="#problem">固定互連為何在 4K 規模同時輸給故障、切片與模型形狀</a></li>
+            <li><a href="#insight">可重接的 4,096-chip TPU：拓撲、故障與 Embedding 的共同設計</a></li>
+            <li><a href="#method">從 64-chip Block 到 SparseCore：TPU v4 怎麼重配整台機器</a></li>
+            <li><a href="#evidence">可用性、吞吐與能效：設計收益如何被量出來</a></li>
+            <li><a href="#critique">哪些提升屬於 OCS，哪些混入模型、CMEM 與系統世代</a></li>
+            <li><a href="#extensions">哪些設計原則值得帶到下一代加速器叢集</a></li>
+            <li><a href="#reference">拓撲、SparseCore 與關鍵證據索引</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>先看 3D Torus、OCS 與稀疏 Embedding 的三種資料路徑</h2>
+          <h3>最小先備知識</h3>
+        <dl class="term-list">
+          <dt>Slice</dt><dd>分配給單一工作的 TPU 子集合。TPU v4 的合法大 slice 由 4×4×4 block 組成，幾何可寫成 4i×4j×4k；形狀會改變 hop、bisection 與 parallelism 映射。</dd>
+          <dt>3D torus</dt><dd>每個節點沿 x、y、z 三軸連到鄰居，邊界再 wrap around。相較 2D torus，當節點數為 N 時，其 bisection scaling 由約 N<sup>1/2</sup> 提升至 N<sup>2/3</sup>。</dd>
+          <dt>OCS</dt><dd>Optical Circuit Switch；本文使用 Palomar 的 3D MEMS mirrors，在毫秒級建立 1:1 光路。它不是 packet switch，不做流量統計多工；價值是改變「誰與誰直連」。</dd>
+          <dt>Goodput</dt><dd>在給定 slice size 下，真正能被排成完整工作的晶片比例。它同時受故障與為大型工作保留 spare capacity 影響，不等同單晶片 uptime。</dd>
+          <dt>Embedding</dt><dd>用離散 ID 查表取得向量。單次操作的 FLOPs 少、存取稀疏且不規則；分散 table 後常需要 variable-length all-to-all，故瓶頸會落在 HBM、injection／bisection bandwidth 與負載平衡。</dd>
+          <dt>SparseCore</dt><dd>TPU v4 內專門處理 embedding 的資料流引擎；每個 SC 以 16 個 compute tile 對 16 個 HBM channel，並用 cross-channel primitives 完成 DMA、sort、sparse reduce、fork、concat。</dd>
+        </dl>
+
+        <h3>為什麼 TPU v3 的做法不能直接放大</h3>
+        <p>TPU v3 的最大系統為 1,024 chips，部分跨機架 wraparound link 已因距離必須使用光纖；若沿用固定佈線擴大四倍，會同時增加昂貴 optical links、惡化 2D torus 的 bisection，並讓單一元件故障更容易破壞可排程的完整 slice。TPU v4 因此不是只做更快晶片，而是把「physical deployment unit」與「logical job topology」分離。 <a class="source-ref" href="#source-p01-abstract">§1 · PDF p.1</a></p>
+        <p>工作負載也在變：2022 年十月的 TPU v4 training mix 中，Transformer 占 57%，其中 LLM 31%、BERT 26%；MLP／DLRM 仍占 24%。系統若只針對矩陣乘最佳化，會把 embedding 的 gather/scatter 與全域交換推回 CPU／網路，形成 Amdahl bottleneck。 <a class="source-ref" href="#source-p02-fig1">Table 1 · PDF p.2</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 本文的設計主軸是<strong>可重組性與專用化的平衡</strong>：OCS 讓同一批硬體可為不同 job 形成不同網路；SparseCore 則把一類長期且高占比的稀疏操作固定成專用資料路徑。前者吸收 workload 變動，後者處理 dense core 無法有效承擔的結構性瓶頸。</p>
+<p class="bridge">有了這些背景，下一個問題是：固定互連為何在 4K 規模同時輸給故障、切片與模型形狀。</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>固定互連為何在 4K 規模同時輸給故障、切片與模型形狀</h2>
+          <p class="lead">作者面對的不是單一「把晶片做快」問題，而是三個尺度上的聯合最佳化：晶片內稀疏／密集資料路徑、slice 內通訊拓樸，以及整座 4K-chip supercomputer 的部署與可用性。</p>
+
+        <h3>問題 A：固定網路在 4K 規模放大故障與碎片</h3>
+        <p>系統有 4,096 TPU chips 與 1,024 CPU hosts（每 host 4 TPU）。同步訓練要求整個 slice 在 checkpoint 之間持續可用；固定連線下，即使總空閒晶片數足夠，也可能因位置不連續而找不到合法 topology。TPU v3 的 256-chip job 必須找 256 顆連續 idle chips；TPU v4 希望能從任意位置挑四個 64-chip block。 <a class="source-ref" href="#source-p03-fig4">§2.3–2.5 · PDF pp.3–4</a></p>
+        <figure data-figure-role="result" id="figure-4">
+          <a href="assets/images/f04.png"><img src="assets/images/f04.png" alt="不同 CPU host availability 與 slice size 下有無 OCS 的 goodput 曲線" loading="lazy"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>同一顏色比較實線（有 OCS）與虛線（無 OCS）；host availability 越低、slice 越大，固定佈線越容易失去可排程的完整集合。大 slice 的實線也下滑，提醒讀者 spare capacity 仍是硬限制。</span></figcaption>
+        </figure>
+
+        <h3>問題 B：同一節點數，不同形狀與 parallelism 需要不同網路</h3>
+        <p>data parallel 常由 all-reduce 的 injection bandwidth 支配；model／embedding sharding 可能由 all-to-all 的 bisection 支配；pipeline parallel 則在意相鄰 stage latency。故 512 chips 不只有「數量」：4×4×32 的 cigar 與 8×8×8 的 cube 對不同 traffic pattern 會有不同代價。每個 job 需要在 topology、pipeline/data/model parallel dimensions 與 tensor sharding 間一起選擇。 <a class="source-ref" href="#source-p07-table3">§2.7, §4 · PDF pp.4, 7 · Table 3</a></p>
+
+        <h3>問題 C：embedding 不是縮小版 GEMM</h3>
+        <p>單一 embedding table 可從數十 MiB 到數十 GiB，多表合計可達數 TiB；每步只觸及少量 row，且 ID 頻率分布造成負載不均。若 table model-parallel sharding，lookup 要 variable-length all-to-all；若 data-parallel replication，更新則要 all-reduce。設計目標因此是<strong>容量、隨機存取、跨 channel primitives 與網路帶寬</strong>，而非峰值 FLOPS。 <a class="source-ref" href="#source-p05-embedding">§3.2–3.5 · PDF p.5</a></p>
+
+        <div class="formula-block">
+          <strong>可操作化的系統目標</strong>
+          <p>在給定晶片、機架、功率與工作負載下，同時提高：</p>
+          <p>\[\text{useful training throughput} = f(\text{available slice},\ \text{topology},\ \text{parallelism},\ \text{HBM/ICI balance})\]</p>
+          <p class="formula-block__meaning">本文沒有給出一個可直接求解的總體目標函數；上式是閱讀用的系統分解。論文分別以 goodput、all-to-all throughput、seq/s、production speedup 與 perf/W 觀測各子問題。</p>
+        </div>
+
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 成功條件不是每項指標都最大，而是移除下一個 Amdahl bottleneck。OCS 若只增加可用 slice、但模型仍被 embedding 拖住，整體吞吐不會充分提升；SparseCore 若很快、但 2D 網路的 all-to-all bisection 不足，也會在大規模反向被通訊主導。這解釋了論文為何把網路與 embedding accelerator 放在同一篇系統敘事中。</p>
+
+        <h3>替代路線各自解了什麼，又留下什麼</h3>
+        <p>三個問題確立後，最有用的比較不是替互連排總名次，而是看每條路線把哪些限制留給 scheduler、packet fabric 或專用硬體。</p>
+        <h4>固定 torus：TPU v3</h4>
+        <p>TPU v3 最大 1,024 chips，使用 2D fixed topology；TPU v4 改成 3D torus 並可用 OCS 選擇 block／wraparound。核心差異不是只有多一維，而是把跨 rack edges 從 physical invariant 變成 scheduler 可配置資源。 <a class="source-ref" href="#source-p07-table4">§2, §5 · PDF pp.2–7 · Table 4</a></p>
+
+        <h4>階層式 GPU 網路：NVLink／NVSwitch + InfiniBand</h4>
+        <p>論文描述 NVIDIA 系統在 4–256 GPUs 內用 NVLink／NVSwitch，較大規模再接 InfiniBand；TPU v4 則以每晶片六條 ICI links 維持 3D torus，OCS 只建立 1:1 circuits。作者估計若用 200 Gbit/s InfiniBand 取代 400 Gbit/s ICI 與 OCS，需 568 switches 而非 48 OCS，模擬 all-reduce 慢 1.8–2.4×、all-to-all 慢 1.2–2.4×。 <a class="source-ref" href="#source-p10-ib">§7.2–7.3 · PDF p.10</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 這不是 OCS 與 InfiniBand 的公平實機 benchmark：link generation、topology、protocol 與 switch radix 都不同，且 simulator 忽略 CPU protocol overhead。可用來理解作者為何選 integrated ICI+OCS，不能泛化成「所有 IB cluster 都慢 2×」。</p>
+
+        <h4>Clos／Dragonfly 與先前 OCS 研究</h4>
+        <p>Clos、Dragonfly 提供 packet-switched any-to-any connectivity 與多租戶統計共享；TPU v4 以應用規整、長時間運行的 synchronous jobs 換取 circuit-switched topology tailoring 與 slice isolation。相關 OCS 工作曾提出 datacenter／HPC prototypes；作者把本系統定位為第一個商用 supercomputer production deployment，以及第一個利用 reconfigurable interconnect 提升 performance 的部署。 <a class="source-ref" href="#source-p12-summary">§8–9 · PDF p.12</a></p>
+
+        <h4>同期 DSA：A100 與 Graphcore MK2 IPU</h4>
+        <p>TPU v4、A100、IPU 都是 7nm 左右同期架構，但處理器風格與 memory hierarchy 差異大。本文以 MLPerf 做外部交叉檢查；它比 peak FLOPS 更接近應用結果，卻仍讓 vendor 自選系統規模。最適合的解讀是「TPU v4 的系統 balance 在這些 submissions 中具競爭力」，不是單晶片架構排名。 <a class="source-ref" href="#source-p09-fig15">§6–7.1 · PDF p.9 · Figs. 14–16</a></p>
+<p class="bridge">問題的限制已經清楚；接著要抓住作者最關鍵的轉念。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>可重接的 4,096-chip TPU：拓撲、故障與 Embedding 的共同設計</h2>
+          <p class="lead">這篇論文最值得學的不是單一峰值，而是它如何把「晶片數放大四倍」拆成幾個彼此耦合、但可驗證的系統問題。</p>
+
+        <h3>先看因果鏈</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>症狀 → 根因 → 設計需求 → 端到端機制 → 可觀察證據 → 邊界</caption>
+            <thead><tr><th>症狀</th><th>根因</th><th>需求</th><th>機制與證據</th><th>邊界</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>4096-chip 系統中，單一 CPU host 或 64-chip block 故障會讓大型同步工作難以湊齊 slice。</td>
+                <td>固定佈線把「哪一顆可用」與「能否形成合法拓樸」綁死；大型工作還需要大量備援容量。</td>
+                <td>在不重新拉線下繞過故障，並允許 scheduler 從任意 block 組 slice。</td>
+                <td>OCS 像可程式化配線板，從 64 個 4×4×4 block 中接出 torus；Figure 4 的 goodput 曲線顯示，在 99.0%–99.5% host availability 下多數 slice 有明顯改善。 <a class="source-ref" href="#source-p03-fig4">§2.3 · PDF p.3 · Fig. 4</a></td>
+                <td>Figure 4 是簡化模型且假設請求大小相同；2K/3K slice 仍受「必須保留 spare」限制。</td>
+              </tr>
+              <tr>
+                <td>非立方 slice 的規則 torus，最差 cut 可能壓縮 all-to-all／collective 帶寬。</td>
+                <td>長寬不均使流量集中在較窄的 bisection。</td>
+                <td>不增加 switch 或重新佈線即可改變最差路徑。</td>
+                <td>OCS 改寫 optical edges 形成 twisted torus；4×4×8 與 4×8×8 的穩態 4 KiB-DMA all-to-all 分別由 40.0→65.4、39.6→51.7 GB/s/TPU。 <a class="source-ref" href="#source-p04-fig6">§2.8 · PDF p.4 · Fig. 6</a></td>
+                <td>是通訊 microbenchmark，不等於每個訓練工作的端到端加速。</td>
+              </tr>
+              <tr>
+                <td>推薦模型的 embedding lookup／update 吞吐不佳。</td>
+                <td>數十 MiB 到數十 GiB 的 table、細粒度 gather/scatter、稀疏且不均衡的存取，受容量、HBM、ICI 與 bisection 限制，而非矩陣乘 FLOPS。</td>
+                <td>把稀疏資料流從 CPU 與 dense TensorCore 解耦，且可與 dense compute／通訊重疊。</td>
+                <td>每顆 TPU 配 4 個 SparseCore；內部 DLRM0 在 128 TPU 上為 CPU 的 30.1×、TPU v3 的 3.1×；把 embedding 移回 CPU／外部 variable server 後只剩 4.3×／5.9× CPU。 <a class="source-ref" href="#source-p06-fig9">§3.6 · PDF p.6 · Fig. 9</a></td>
+                <td>比較的 socket 數不同，模型是未公開的內部 workload；不能外推到所有推薦模型。</td>
+              </tr>
+              <tr>
+                <td>峰值 FLOPS 不能代表生產工作負載、能效或大規模 time-to-train。</td>
+                <td>memory、interconnect、pipeline balance、功率封頂與軟體共同決定實際利用率。</td>
+                <td>同時驗證 production workload、MLPerf、功率與 scale-out。</td>
+                <td>八個生產工作負載相同 slice size 的每晶片幾何平均效能為 TPU v3 的 2.1×，package-level perf/W 為 2.7×；MLPerf 的 BERT／ResNet 大系統比較則各為 A100 的 1.15×／1.67×。 <a class="source-ref" href="#source-p08-fig13">§5 · PDF p.8 · Fig. 13</a> <a class="source-ref" href="#source-p09-fig15">§6 · PDF p.9 · Fig. 15</a></td>
+                <td>跨世代比較同時改變製程與多個子系統；MLPerf 允許廠商選系統大小，且曲線含插值。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>論文真正回答的三件事</h3>
+        <div class="takeaway-list">
+          <div class="takeaway-item"><p class="takeaway-label">Scale</p><p><strong>如何把 1K 擴成 4K？</strong> 用固定的 4×4×4 電氣積木控制機架內複雜度，再把跨積木連線交給 OCS，將部署、故障繞路、排程、隔離與 topology tailoring 放進同一個機制。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">Balance</p><p><strong>如何避免 dense-only 加速器失衡？</strong> SparseCore 只占約 5% die area／power，卻提供專用的 fetch、sort、reduce、fork、concat 與 16 個 HBM-tied compute tiles。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">Evidence</p><p><strong>證據是否涵蓋全棧？</strong> 有 topology microbenchmark、production scaling、內部 DLRM、MLPerf 與功率量測；但 availability、InfiniBand 替代方案、碳排則是模型或估算。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">Judgment</p><p><strong>最穩健結論</strong>不是「OCS 讓所有模型更快」，而是 OCS 把固定佈線造成的運維與拓樸限制變成軟體可選項；收益大小取決於 slice 形狀、通訊型態與 scheduler。</p></div>
+        </div>
+
+        <h3>代表性 claim–test pairs</h3>
+<p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> OCS 可讓超級電腦在較低元件可用率下仍維持有用的 slice goodput，並可依工作負載重組 topology。 <a class="source-ref" href="#source-p03-fig4">§2.3–2.5 · PDF pp.3–4 · Figure 4</a></p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 論文以 availability model 比較有／無 OCS，並以兩個 slice 的實機 all-to-all microbenchmark 測 regular 與 twisted torus；後者得到 1.63× 與 1.31×。這兩個測試分別支撐「可形成更多可用 slice」與「特定非立方 topology 可增加通訊吞吐」，但沒有直接測到所有 end-to-end training job。 <a class="source-ref" href="#source-p03-fig4">§2.3 · PDF p.3 · Fig. 4</a> <a class="source-ref" href="#source-p04-fig6">§2.8 · PDF p.4 · Fig. 6</a></p>
+<p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> SparseCore 是商用 ML 系統中首個 embedding 加速支援，能避免把稀疏操作留給 CPU 所造成的 Amdahl 瓶頸。 <a class="source-ref" href="#source-p05-embedding">§3.1–3.5 · PDF p.5</a></p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> DLRM0 的五條 bar 同時比較 CPU、TPU v3、完整 TPU v4，以及兩個停用 SparseCore 的替代 placement；停用後相對完整配置慢約 5–7×。這是本文最接近組件移除實驗的證據。 <a class="source-ref" href="#source-p06-fig9">§3.6 · PDF p.6 · Fig. 9</a></p>
+<p class="bridge">直覺成立後，再沿著一次完整執行看它如何落成系統。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>從 64-chip Block 到 SparseCore：TPU v4 怎麼重配整台機器</h2>
+          <h3>機制一：64-chip 電氣積木 + OCS 光學配線層</h3>
+        <ol>
+          <li><strong>固定的機架內單元：</strong>每個 rack 內是一個 4×4×4 block，共 64 TPU chips 與 16 CPU hosts。block 內以 passive electrical cables 形成 3D mesh。</li>
+          <li><strong>把六個面暴露成光纖：</strong>每一面 16 links，共 96 optical links。相對兩面同一維度／index 的 in–out pair 接到同一 OCS，因此每個 block 接 48 台 OCS。</li>
+          <li><strong>全機 48 台 OCS：</strong>每台 Palomar 是 136×136，128 ports 服務 64 個 block，另 8 ports 作測試／維修 spare；circulator 讓同一 fiber 雙向傳光，減半 ports 與 cables。</li>
+          <li><strong>建立 logical 3D torus：</strong>scheduler 選定 block 後，OCS 在毫秒級設定 1:1 circuits，補上 wraparound links；不同 slice 間沒有共享 packet fabric，作者稱可提供 air-gapped network isolation。</li>
+          <li><strong>每 job 靜態選 topology：</strong>合法幾何為 4i×4j×4k。非立方且符合 n×n×2n 或 n×2n×2n 時，可把 optical edges rewiring 成 twisted torus；job 執行中通常不動態切換。</li>
+        </ol>
+        <figure data-figure-role="method" id="figure-1">
+          <a href="assets/images/f01.png"><img src="assets/images/f01.png" alt="TPU v4 的 4×4×4 block 六個面如何連到三組 OCS 的示意圖" loading="lazy"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 1</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>上半部先找每一軸正、負兩面同 index 的成對端點；下半部看 X／Y／Z OCS 如何成為 block 之外的可重接邊。這張圖回答「可重組性放在哪一層」，不是在晶片內 packet routing。</span></figcaption>
+        </figure>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 這是第一個在商用 supercomputer 內使用 OCS、並以可重組互連提升應用效能的生產部署；整個 optical fabric 低於資本成本 5%、低於系統功率 3%。 <a class="source-ref" href="#source-p05-cost">§2.10, §8 · PDF pp.5, 12</a></p>
+
+        <h3>OCS 同一機制帶來的四個下游效果</h3>
+        <div class="takeaway-list">
+          <div class="takeaway-item"><p class="takeaway-label">Availability</p><p>失效 block 不必位於原先固定 torus 的正確座標；scheduler 可選健康 block，再由 OCS 接回所需 topology。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">Scheduling</p><p>大 slice 不再要求一段物理連續 idle chips，降低資源碎片；例如 192 chips 可組成 4×4×12。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">Deployment</p><p>TPU v3 要等 1,024 chips 與所有 cables 完成才可用；TPU v4 可按 64-chip block 漸進上線。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">Performance</p><p>可在 cube、cigar、regular／twisted torus 間選擇，讓 network dimensions 對齊 data、model、pipeline parallelism。</p></div>
+        </div>
+        <figure data-figure-role="method" id="figure-5">
+          <a href="assets/images/f05.png"><img src="assets/images/f05.png" alt="規則 torus 與 twisted torus 的連線對照圖" loading="lazy"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 5</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>紅色虛線代表固定 electrical links，藍色實線是 OCS 可改的 optical links。twist 不增加端口，只改遠端配對與 routing table，目標是改善長方形 torus 的最差 bisection。</span></figcaption>
+        </figure>
+
+        <h3>機制二：SparseCore 的 embedding 資料流</h3>
+        <p>每顆 TPU v4 有 4 個 SparseCore（TPU v3 為 2 個）；SparseCore 合計約占 die area 與 power 各 5%。論文把它描述為 dataflow architecture，關鍵不是一個大型 ALU，而是讓資料從 HBM 直接流過專門 primitive：</p>
+        <ol>
+          <li><strong>Fetch：</strong>每個 SC 有 16 個 compute tiles，各綁一個 HBM channel；FetchUnit 把 activation／parameter 拉入該 tile 的 2.5 MiB Sparse Vector Memory slice。</li>
+          <li><strong>局部可程式運算：</strong>8-wide SIMD scVPU 執行 embedding 相關算術；FlushUnit 在 backward 將更新後 parameter 寫回 HBM。</li>
+          <li><strong>跨 channel 重排：</strong>DMA、Sort、Sparse Reduce、Fork、Concat 五個 Cross-Channel Units 對所有 16 banks 操作，承接 dedup、聚合、分派與可變長度資料。</li>
+          <li><strong>與 dense path 重疊：</strong>SparseCore、TensorCore dense compute 與 ICI communication 可平行，避免 CPU 成為 central memory server；完整 4K 系統形成 128 TiB global-addressable HBM 空間。</li>
+        </ol>
+        <figure data-figure-role="method" id="figure-7">
+          <a href="assets/images/f07.png"><img src="assets/images/f07.png" alt="SparseCore 中 sequencer、dispatch、cross-channel units 與 16 個 compute tiles 的方塊圖" loading="lazy"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 7</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>先沿黑色 data path 看 HBM-tied tile 的 Fetch→scVPU→Flush，再看金色 units 如何跨 16 banks 做排序、稀疏歸約與重排。SparseCore 是一串 memory-centric primitives，而非另一個小型 TensorCore。</span></figcaption>
+        </figure>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> SparseCore 的價值可由「placement」理解：若 embedding 留在 CPU，四顆 TPU 共用一個 host 的 DRAM path；若另建 variable servers，又把瓶頸推到 datacenter network 與 tail latency。把 SC 放回每顆加速器附近，等於讓容量、HBM channel 與 ICI 隨 TPU 數水平擴充。</p>
+
+        <h3>機制三：模型、平行化與 topology 共同搜尋</h3>
+        <p>PA-NAS 可調整 DLRM dense layer 與 embedding layer 的負載比例，使原本約 25% idle 的 SparseCore 更接近與 TensorCore 平衡，端到端改善超過 10%。另一組搜尋同時改 topology、pipeline/data/model parallelism 與 1D/2D tensor partitioning：LLM 由 17.9 提升到 41.3 seq/s，GPT-3 pre-training 由 21.0 到 25.0 seq/s。 <a class="source-ref" href="#source-p07-fig10">§4 · PDF p.7 · Fig. 10</a> <a class="source-ref" href="#source-p07-table3">§4 · PDF p.7 · Table 3</a></p>
+<p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> Table 3 的每一列不只更換 topology，也同時更改多種 parallelism／partition parameters。因此 2.3× 與 1.2× 是<strong>聯合配置搜尋</strong>的結果，不能歸因為 OCS 單一組件的增益。 <a class="source-ref" href="#source-p07-table3">§4 · PDF p.7 · Table 3</a></p>
+<h3>為何每個 block 對應 48 台 OCS</h3>
+        <div class="formula-block">
+          <p>\[6\ \text{faces}\times16\ \text{links/face}=96\ \text{optical links}\]</p>
+          <p>\[96\div2=48\ \text{opposite-face in/out pairs}\]</p>
+          <p>\[64\ \text{blocks}\times64\ \text{chips/block}=4096\ \text{chips}\]</p>
+          <p class="formula-block__meaning">相對兩面的同 index links 進入同一 OCS；circulator 使每條 fiber 雙向使用。48 台 OCS 各自決定一組跨 block 的一對一連線。 <a class="source-ref" href="#source-p02-fig1">§2.2 · PDF p.2 · Fig. 1</a></p>
+        </div>
+
+        <h3>3D torus 為何比 2D torus 更適合 scale-out</h3>
+        <div class="formula-block">
+          <p>對 N 個節點、各維度大致均衡的 torus：</p>
+          <p>\[B_{2D}\propto N^{1/2},\qquad B_{3D}\propto N^{2/3}\]</p>
+          <p>\[\frac{B_{3D}}{B_{2D}}\propto N^{1/6}\]</p>
+          <p class="formula-block__meaning">N 增大時，3D topology 可跨越 cut 的 links 成長更快。論文在 embedding model 上報告同 chip count 的 TPU v4／v3 bisection ratio 為 2–4×，相應 embedding performance 為 1.1–2.0×；到 1,024 chips 後 SparseCore overhead 開始主導，故頻寬提升不再等比例轉成效能。 <a class="source-ref" href="#source-p06-fig8">§3.6 · PDF p.6 · Fig. 8</a></p>
+        </div>
+
+        <h3>Twisted torus 的吞吐比值</h3>
+        <div class="formula-block">
+          <p>\[\text{speedup}_{4\times4\times8}=65.4/40.0\approx1.63\]</p>
+          <p>\[\text{speedup}_{4\times8\times8}=51.7/39.6\approx1.31\]</p>
+          <p class="formula-block__meaning">分子與分母是 steady-state all-to-all GB/s/TPU，單筆 DMA 為 4 KiB。圖中紅色空框是距理想峰值的差額，不是額外實測 throughput。 <a class="source-ref" href="#source-p04-fig6">§2.8 · PDF p.4 · Fig. 6</a></p>
+        </div>
+
+        <h3>能源與營運碳排的估算鏈</h3>
+        <div class="formula-block">
+          <p>作者採用保守的 machine-level perf/W 優勢 2×，並以 average on-prem PUE 1.57 對 Google TPU v4 site PUE 1.10：</p>
+          <p>\[\text{energy ratio}\approx 2\times\frac{1.57}{1.10}=2.85\]</p>
+          <p>再乘平均 grid carbon intensity 0.475 與 Oklahoma hourly-matched renewables 0.074 kgCO\(_2\)e/kWh：</p>
+          <p>\[\text{operational CO}_2\text{e ratio}\approx2.85\times\frac{0.475}{0.074}=18.3\approx20\]</p>
+          <p class="formula-block__meaning">因此作者摘要成 TPU v4 Google Cloud 約用 1/6–1/2 能源、約 5% operational CO₂e。這是情境估算，不含 embodied carbon；結果高度依賴比較機器、PUE、地點與電力會計假設。 <a class="source-ref" href="#source-p10-carbon">§7.6 · PDF pp.10–11</a></p>
+        </div>
+
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 上述式子揭示兩個不同層次：torus scaling 是拓樸結構關係，測得的 1.63×／1.31× 是特定 microbenchmark；碳排 20× 則是多個假設相乘的情境結果。三者不能用同一種「實驗事實」強度來引用。</p>
+<p class="bridge">方法看似合理，真正的問題是：實驗有沒有把這條因果鏈撐起來？</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>可用性、吞吐與能效：設計收益如何被量出來</h2>
+          <p class="lead">本文把不同證據型態並置；讀者必須先確認每個結果是量測、benchmark 重跑、simulation，還是情境估算。</p>
+        <div class="table-scroll">
+          <table>
+            <caption>主張—測試矩陣</caption>
+            <thead><tr><th>待驗證主張</th><th>測試／資料</th><th>指標與對照</th><th>可回答</th><th>不能回答</th></tr></thead>
+            <tbody>
+              <tr><td>OCS 改善故障下可排程容量</td><td>Figure 4 availability model；host availability 99.0%、99.5%、99.9%，slice 64–2000</td><td>goodput；有 OCS vs 固定連線</td><td>在模型假設下，繞路如何改變可形成 slice 的比例</td><td>真實多尺寸 job arrival、repair time、checkpoint loss 與 scheduler policy</td></tr>
+              <tr><td>twisted torus 增加非立方 slice 通訊吞吐</td><td>4×4×8、4×8×8 實機 steady-state all-to-all</td><td>GB/s/TPU；regular vs twisted，4 KiB DMA</td><td>特定 geometry 的 topology effect</td><td>任意 message size、collective、模型與 end-to-end step time</td></tr>
+              <tr><td>SparseCore 避免 CPU embedding bottleneck</td><td>internal DLRM0；CPU、TPU v3、TPU v4、兩種 TPU v4 無 SC placement</td><td>相對 CPU performance</td><td>完整 SC 路徑對該 workload 的必要性</td><td>等 socket／成本比較，以及外部可重現性</td></tr>
+              <tr><td>模型與 topology joint tuning 有效</td><td>PA-NAS DLRM0；512-chip LLM/GPT-3 配置搜尋</td><td>normalized step time、seq/s</td><td>聯合 co-design 的 attainable improvement</td><td>單獨 topology、模型結構或 parallelism 的因果占比</td></tr>
+              <tr><td>TPU v4 比 v3 更快且更省電</td><td>八個 production workloads，相同 slice size；CMEM on/off</td><td>per-chip speedup、package-level perf/W</td><td>整代系統在內部 workload 的總體提升</td><td>製程、compute、HBM、ICI、SC 各自獨立貢獻</td></tr>
+              <tr><td>對同期外部 DSA 有競爭力</td><td>MLPerf Training 2.0 published results；A100 在 Azure 重跑功率，TPU v4 在 Google DC 量測</td><td>time-to-train relative performance；DSA+HBM watts</td><td>提交設定下的公開 benchmark 結果與 64-chip 芯片功率級別</td><td>相同成本、軟體堆疊、資料中心與網路功率的公平 TCO 比較</td></tr>
+              <tr><td>通用 InfiniBand 難以直接取代 ICI+OCS</td><td>元件數／鏈路規格加 event-driven simulator</td><td>all-reduce、all-to-all slowdown</td><td>作者模型中的 network-level 代價</td><td>真實部署的 CPU overhead、成本折扣與 end-to-end production time</td></tr>
+              <tr><td>雲端 TPU v4 降低能源與碳排</td><td>perf/W、PUE 與 carbon intensity 假設相乘</td><td>energy ratio、operational CO₂e ratio</td><td>指定情境的估算量級</td><td>embodied carbon、其他地區／時段、全生命周期</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>比較基準的關鍵條件</h3>
+        <ul>
+          <li>TPU v4 vs v3 production comparison盡量使用相同 slice size，但兩代硬體是整體改版；Table 4 顯示 7nm vs 16nm、275 vs 123 peak TFLOPS、6×50 vs 4×70 GB/s links、4 vs 2 SparseCores。 <a class="source-ref" href="#source-p07-table4">§5 · PDF p.7 · Table 4</a></li>
+          <li>Figure 11 的八個工作負載只有一半能量到 3K chips；BERT0 最多 2K、DLRM0/1 最多 1K，作者歸因尚未完成的 infrastructure fixes。 <a class="source-ref" href="#source-p08-fig12">§5 · PDF pp.7–8 · Fig. 11</a></li>
+          <li>MLPerf 讓廠商自行選系統大小；Figure 15 的大點是實際結果，點間線段是依 chip count 的 interpolation。比較「相近 chip count」仍不代表相同價格或功率。</li>
+          <li>Table 6 只量 DSA+HBM，switches 未納入；A100 與 TPU v4 量測位於不同雲端／資料中心。 <a class="source-ref" href="#source-p09-table6">§6 · PDF p.9 · Table 6</a></li>
+        </ul>
+        <h3>OCS、availability 與 topology</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> Figure 4 模型中，沒有 OCS 時要到 99.9% CPU host availability 才能對多數 slice 維持合理 goodput；有 OCS 時，99.0% 與 99.5% 的曲線在多數 slice size 仍明顯高於固定連線。大型 slice 即使有 OCS 仍因 spare capacity 而下降。 <a class="source-ref" href="#source-p03-fig4">§2.3 · PDF p.3 · Fig. 4</a></p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> twisted torus 對 4×4×8 slice 的 all-to-all throughput 為 65.4 vs 40.0 GB/s/TPU（1.63×）；對 4×8×8 為 51.7 vs 39.6（1.31×）。生產一天的 topology sample 中，29% slices 小於 64 chips；全體有 33% geometry 可 twist，實際 28% twisted，換算約 40% 的 ≥64-chip topology 使用 twist。 <a class="source-ref" href="#source-p04-fig6">§2.8–2.9 · PDF pp.4–5 · Fig. 6, Table 2</a></p>
+        <figure data-figure-role="result" id="figure-6">
+          <a href="assets/images/f06.png"><img src="assets/images/f06.png" alt="regular 與 twisted torus 的實測 all-to-all throughput 長條圖" loading="lazy"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 6</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>讀藍色實心值作實測 throughput，紅色空框只是距 ideal peak 的差額。兩組 slice 都因 twist 變快，但 4×4×8 的 1.63× 高於 4×8×8 的 1.31×，表示收益依幾何而變。</span></figcaption>
+        </figure>
+
+        <h3>SparseCore 與 embedding</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 內部 DLRM0：TPU v3（128 chips）為 CPU baseline 的 9.8×；完整 TPU v4（128 chips）為 30.1×，亦即 TPU v3 的 3.1×。TPU v4 停用 SparseCore、把 embedding 放 CPU host memory 或 64 台 external variable servers 時，分別只有 4.3× 與 5.9× CPU。 <a class="source-ref" href="#source-p06-fig9">§3.6 · PDF p.6 · Fig. 9</a></p>
+        <figure data-figure-role="result" id="figure-9">
+          <a href="assets/images/f09.png"><img src="assets/images/f09.png" alt="內部 DLRM0 在 CPU、TPU v3、完整 TPU v4 與無 SparseCore 配置的相對效能" loading="lazy"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 9</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>完整 TPU v4 的 30.1 是核心結果；真正的 counterfactual 是下兩條把 embedding 放回 CPU／variable server 的 4.3 與 5.9。比較時同時查看括號中的 socket count，避免把 bar 長度誤讀成等硬體規模。</span></figcaption>
+        </figure>
+        <p>在 embedding scaling experiment 中，TPU v4 相對 TPU v3 的 bisection bandwidth 為 2.0–4.0×，embedding performance 為 1.1–2.0×；到 1,024 chips 時，作者指出 SC overhead 開始主導。這提供一個重要反例：移除 network bottleneck 後，新的 compute／control overhead 會接手。 <a class="source-ref" href="#source-p06-fig8">§3.6 · PDF p.6 · Fig. 8</a></p>
+
+        <h3>TPU v4 vs TPU v3 生產工作負載</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 相同 slice size 的八個 production workloads 多數快 1.5–2.0×；DLRM0 約 3.0–3.5×、DLRM1 在 512 chips 為 2.8×、RNN1 為 3.3×。Figure 13 的 per-chip 幾何平均為 2.1×，package-level perf/W 幾何平均為 2.7×。 <a class="source-ref" href="#source-p08-fig12">§5 · PDF p.8 · Fig. 12</a> <a class="source-ref" href="#source-p08-fig13">§5 · PDF p.8 · Fig. 13</a></p>
+        <p>關閉 CMEM 後，整體幾何平均 performance 從 2.1× 降到 1.7×；RNN1 的 speedup 從 3.3× 降到 1.6×。作者估計 perf/W 改善約 40% 來自製程，其餘來自設計；這是作者的歸因，不是完整 factorial ablation。 <a class="source-ref" href="#source-p08-fig13">§5 · PDF p.8 · Fig. 13</a></p>
+        <figure data-figure-role="result" id="figure-13">
+          <a href="assets/images/f13.png"><img src="assets/images/f13.png" alt="TPU v4 相對 TPU v3 的 production application per-chip performance 與 performance per watt" loading="lazy"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 13</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>上圖是 per-chip performance，下圖是 package-level perf/W；藍／黃比較 CMEM 開／關。看幾何平均 2.1× 與 2.7×之外，也要注意 RNN1 對 CMEM 特別敏感、DLRM 對新增 SparseCore 特別敏感。</span></figcaption>
+        </figure>
+
+        <h3>MLPerf、功率與能源</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 在論文選取的相近大規模 MLPerf 點，TPU v4 的 BERT performance 是 A100 的 1.15×、ResNet 是 1.67×；對 256-chip Graphcore MK2 IPU 約為 4.3×、4.5×。64-chip DSA+HBM 平均功率：BERT A100 380 W vs TPU v4 197 W（1.93×），ResNet 273 vs 206 W（1.33×）。 <a class="source-ref" href="#source-p09-fig15">§6 · PDF p.9 · Fig. 15</a> <a class="source-ref" href="#source-p09-table6">§6 · PDF p.9 · Table 6</a></p>
+        <figure data-figure-role="result" id="figure-15">
+          <a href="assets/images/f15.png"><img src="assets/images/f15.png" alt="TPU v4、A100 與 Graphcore IPU 的 BERT 和 ResNet MLPerf scale-out 曲線" loading="lazy"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 15</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>大點是 published result，連線包含 interpolation；上下分別為 BERT、ResNet。先對齊 chip count 再比縱軸，並留意三家最大提交規模不同。</span></figcaption>
+        </figure>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 綜合保守的 2× machine perf/W、PUE 與 hourly matched renewable carbon intensity，TPU v4 Google Cloud 對假想的 contemporaneous on-prem DSA 可少用約 2–6× 能源，operational CO₂e 約只剩 5%。 <a class="source-ref" href="#source-p10-carbon">§7.6 · PDF pp.10–11</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 最可信、可直接搬用的結論依序是：同圖內 regular/twisted 實測、同模型內完整／無 SC placement、同工作負載的 v4/v3 production measurement；MLPerf 跨廠商其次；availability、InfiniBand 與 carbon 結論則需要保留模型假設。</p>
+<p class="lead">本文沒有一個完整 factorial ablation；可用的敏感度來自五組局部 counterfactual。把它們依「控制程度」排序，能避免把跨世代總增益誤當單一組件效果。</p>
+
+        <h3>較強：只改 optical topology</h3>
+        <p>Figure 6 在相同 slice geometry 與 communication pattern 下比較 regular／twisted torus，是 OCS performance claim 最乾淨的對照。收益由 1.31× 到 1.63×，本身也顯示<strong>對 geometry 敏感</strong>。但 message size 固定為 4 KiB individual DMA，且僅量 all-to-all。 <a class="source-ref" href="#source-p04-fig6">§2.8 · PDF p.4 · Fig. 6</a></p>
+
+        <h3>較強：改 embedding placement／停用 SparseCore</h3>
+        <p>Figure 9 保持 TPU v4 dense compute 路徑，將 embedding 移到 CPU host memory 或 variable servers；相對完整 30.1× CPU 的配置，兩者只有 4.3×／5.9×。這直接暴露 CPU memory／datacenter network bottleneck。不過 variable-server 配置使用 192 TPU、其他 TPU 配置 128，並非等資源。 <a class="source-ref" href="#source-p06-fig9">§3.6 · PDF p.6 · Fig. 9</a></p>
+
+        <h3>中等：CMEM on/off</h3>
+        <p>Figure 13 將 TPU v4 的 128 MiB CMEM 關閉；幾何平均 performance 由 2.1× TPU v3 降至 1.7×，RNN1 從 3.3× 降到 1.6×。它支持 CMEM 對 small weights／batch 的作用，但 baseline 仍是另一代 TPU v3，無法拆出所有 memory hierarchy interaction。 <a class="source-ref" href="#source-p08-fig13">§5 · PDF p.8 · Fig. 13</a></p>
+
+        <h3>模型敏感度：availability 與 slice size</h3>
+        <p>Figure 4 同時掃 CPU host availability（99.0%–99.9%）與 slice size。結論不是「OCS 消除故障」，而是它降低 topology fragmentation；當 request 接近系統一半以上，spare capacity 仍使 goodput 上限下降。 <a class="source-ref" href="#source-p03-fig4">§2.3 · PDF p.3 · Fig. 4</a></p>
+
+        <h3>混雜：共同改模型／topology／parallelism</h3>
+        <p>PA-NAS 讓 DLRM0 超過 10% 更快，但同時改 embedding size 與 FLOPs；Table 3 的 2.3×／1.2× 同時改 topology 及多個 parallel dimensions。這些結果證明 design space 值得搜尋，不提供單因素 attribution。 <a class="source-ref" href="#source-p07-fig10">§4 · PDF p.7 · Fig. 10</a> <a class="source-ref" href="#source-p07-table3">§4 · PDF p.7 · Table 3</a></p>
+        <figure data-figure-role="result" id="table-3">
+          <a href="assets/images/t03.png"><img src="assets/images/t03.png" alt="LLM 與 GPT-3 預訓練共同調整 topology 和 parallelism 的 Table 3" loading="lazy"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Table 3</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>逐列同時比 topology、pipeline/data/model parallelism 與 1D/2D partitioning。數字證明 joint configuration 有空間，卻不能隔離 OCS topology 的單獨因果效果。</span></figcaption>
+        </figure>
+
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 若要補強論文，最重要的缺失測試是：在相同 512-chip job、相同 parallelism 與相同模型下，只切換 regular／twisted／不同 OCS geometry，量 step time、link utilization 與 tail；再用真實多尺寸 job trace 比較固定網路與 OCS 的 completed-work goodput。這能把 microbenchmark 與 production outcome 接起來。</p>
+<p class="bridge">數據回答了部分問題；剩下的是適用邊界與仍未被證明的部分。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>哪些提升屬於 OCS，哪些混入模型、CMEM 與系統世代</h2>
+          <h3>優點</h3>
+        <ul>
+          <li><strong>生產尺度與長期證據：</strong>不是小型 prototype；作者描述多座 4,096-chip supercomputer、實際 topology usage、內部 workload scaling 與公開 MLPerf。</li>
+          <li><strong>一個機制解多個系統問題：</strong>OCS 同時影響部署、failure bypass、fragmentation、security isolation 與 topology tailoring，設計經濟性比「只為速度加一層網路」更合理。</li>
+          <li><strong>跨層敘事完整：</strong>從 rack wiring、scheduler slice、parallel dimensions 到 embedding accelerator 與 PA-NAS，清楚呈現系統 balance。</li>
+          <li><strong>有直接 counterfactual：</strong>regular/twisted 與完整/無 SparseCore placement，讓兩項核心機制至少各有一組接近因果的量測。</li>
+        </ul>
+
+        <h3>限制與風險</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>證據與部署邊界</caption>
+            <thead><tr><th>限制</th><th>影響</th><th>閱讀時如何收斂主張</th></tr></thead>
+            <tbody>
+              <tr><td>內部 workload、系統與 simulator 不公開；多個 workload 匿名</td><td>外部團隊難重現 DLRM0、production mix、availability 與 IB 結果</td><td>把數字視為 production case study，不當成平台無關定律</td></tr>
+              <tr><td>Figure 4 是等 request-size 假設的 availability model</td><td>忽略實際 queue、repair、checkpoint、priority 與多尺寸 packing</td><td>只支撐 failure bypass 的方向與上限，不宣稱實際 datacenter utilization</td></tr>
+              <tr><td>Table 3 多參數共變；跨代 v3/v4 亦同時改製程、compute、memory、network、SC</td><td>無法量化 OCS、SC、CMEM 或 7nm 的獨立貢獻</td><td>只把 2.3×、2.1×、2.7×稱為 joint／generation-level result</td></tr>
+              <tr><td>沒有 error bars、重複次數、variance 或 tail distribution</td><td>無法判讀小差異的統計穩健性與 production jitter</td><td>聚焦倍數較大的結果，對 1.1× 級別保守</td></tr>
+              <tr><td>MLPerf 系統大小、軟體與 power measurement site 不一致；switch power 排除</td><td>不能直接推論 TCO、rack power 或等預算勝負</td><td>保留為 vendor-selected benchmark evidence</td></tr>
+              <tr><td>碳排只算 operational CO₂e，採特定 PUE／地區／hourly-matching 假設</td><td>對 embodied carbon、其他 grid mix 與會計方法不成立</td><td>引用公式與假設，不單獨引用「20×」</td></tr>
+              <tr><td>OCS 是 circuit switch；每 job topology 在本文部署中是靜態</td><td>不適合細粒度 packet multiplexing，重組也受排程與 churn 成本約束</td><td>把它視為 job/slice provisioning layer，不是一般 datacenter network 替代品</td></tr>
+              <tr><td>TPU v4 每晶片 HBM 32 GiB，A100 為 80 GiB</td><td>超大模型可能需要更多 TPU 與 partitioning；作者稱可用規模與 overlap 緩解，但仍承認容量限制</td><td>比較 time-to-train 時同步檢查 memory footprint 與 chip count</td></tr>
+              <tr><td>主要 production 與 MLPerf 證據是訓練</td><td>低 batch、latency-critical、KV-cache-heavy inference 的 traffic／SLO 不同</td><td>可借用 topology／availability 設計原則，但不能直接搬用 training speedup</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>另外，作者未比較 H100，理由是 TPU v4 與 A100 都在 2020 部署、同為 7nm，而 H100 在研究／截稿期間尚不可用；這使比較時間對齊合理，但也限制今日硬體排名解讀。 <a class="source-ref" href="#source-p11-limit">§7.4, §7.10 · PDF pp.10–11</a></p>
+
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> 若把 OCS 應用到高 churn inference serving，毫秒級重組本身未必是瓶頸，較大的風險可能是模型載入、KV cache placement 與 session affinity；因此需要把 optical topology epoch 與 serving scheduler 的 placement epoch 對齊。本文沒有測這個情境。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>哪些設計原則值得帶到下一代加速器叢集</h2>
+          <h3>對 AI Infra／inference cluster design 的可移植原則</h3>
+        <ol>
+          <li><strong>分離 physical building block 與 logical allocation：</strong>把可靠、便於製造／佈線的固定 rack 單元，透過可配置 edge 組成 job-specific topology。對推論叢集，相同原則可套到 model replica、expert group 或 disaggregated memory pool。</li>
+          <li><strong>讓 scheduler 知道網路形狀，而不只知道 free device count：</strong>TPU v4 的 slice geometry 與 parallelism mapping 共同決定效能。inference scheduler 也應把 tensor/pipeline/expert parallel traffic、prefill/decode phase 與 topology 一起考慮。</li>
+          <li><strong>availability 是「能否形成服務單元」而非單機 uptime：</strong>OCS 的價值在於從健康 block 重建合法 slice。對 serving，對應指標應是可形成多少滿足模型、memory 與 SLO 的 replica，而非單純 GPU availability。</li>
+          <li><strong>低算術強度路徑要隨規模一起 scale：</strong>SparseCore 顯示 memory-centric primitive、HBM channel 與 interconnect 必須水平擴充。今天的類比可能是 embedding、MoE dispatch、KV-cache movement 或 retrieval，但是否值得專用硬體要由 workload share 證明。</li>
+          <li><strong>不要以 peak FLOPS 做容量規劃：</strong>應以 operational intensity、memory bandwidth、collective pattern、功率封頂與軟體成熟度構成 workload roofline。</li>
+        </ol>
+
+        <h3>我會如何把本文轉成設計審查清單</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>從論文機制映射到現代 inference 系統問題</caption>
+            <thead><tr><th>檢查項</th><th>TPU v4 啟示</th><th>應補的 inference 證據</th></tr></thead>
+            <tbody>
+              <tr><td>Failure domain</td><td>64-chip block 是可繞過、可漸進部署單元</td><td>host／switch failure 下 replica recovery time、SLO miss、cache warm-up cost</td></tr>
+              <tr><td>Topology-aware placement</td><td>cube/cigar/twisted 需對齊 parallel dimensions</td><td>prefill/decode、TP/PP/EP 分別的 link utilization 與 tokens/s</td></tr>
+              <tr><td>Reconfiguration cadence</td><td>OCS 毫秒切換，但 per-job 靜態</td><td>arrival churn、model load time、session stickiness 下的 amortization</td></tr>
+              <tr><td>Memory-centric engine</td><td>SparseCore 將 gather/sort/reduce/concat 下沉到 HBM 附近</td><td>embedding／MoE／KV movement 的 bytes/token、tail latency、die-area/power ROI</td></tr>
+              <tr><td>Evidence hierarchy</td><td>microbenchmark、production、public benchmark、simulation、estimate 並列</td><td>每個 claim 的 direct counterfactual 與完整 system boundary</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 本文最重要的架構洞見是：<strong>reconfigurability 的 ROI 來自多個運維與效能用途的疊加</strong>。只用 all-to-all 1.63× 很難獨立合理化 OCS；加上 failure bypass、fragmentation、incremental deployment 與 isolation，成本／功率低於 5%／3% 的設計才形成完整商業論證。</p>
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> 下一步可研究「兩時間尺度」控制：慢速 OCS epoch 決定 rack/block connectivity，快速 packet routing 與 serving scheduler 在該 topology 內處理 token-level burst。這可能兼得可重組 bisection 與低延遲 multiplexing，但本文沒有提供硬體或量測證據。</p>
+<ol>
+          <li>若 Figure 4 改用真實 job-size distribution、repair time 與 checkpoint cost，OCS goodput 優勢會放大還是縮小？</li>
+          <li>4×4×8 的 twisted torus 為何比 4×8×8 得到更高倍數？是 bisection、path length、routing 還是 injection limit 的差異？需要哪些 counter？</li>
+          <li>Table 3 應如何設計最小 ablation，才能分離 topology、parallelism 與 tensor partition 的貢獻？</li>
+          <li>SparseCore 在 1,024 chips 開始由自身 overhead 主導；若 table size、feature valency 或 skew 改變，轉折點會如何移動？</li>
+          <li>對 latency-sensitive inference，毫秒級 OCS reconfiguration、模型載入與 KV cache migration 三者誰主導？合理的 topology epoch 應多長？</li>
+        </ol>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>拓撲、SparseCore 與關鍵證據索引</h2>
+          <div class="table-scroll">
+          <table>
+            <caption>正式書目資料</caption>
+            <tbody>
+              <tr><th scope="row">正式標題</th><td>TPU v4: An Optically Reconfigurable Supercomputer for Machine Learning with Hardware Support for Embeddings</td></tr>
+              <tr><th scope="row">作者</th><td>Norman P. Jouppi 等 14 位作者</td></tr>
+              <tr><th scope="row">發表</th><td>50th Annual International Symposium on Computer Architecture（ISCA ’23），Industry Track</td></tr>
+              <tr><th scope="row">DOI</th><td><a href="https://doi.org/10.1145/3579371.3589350" target="_blank" rel="noopener noreferrer">10.1145/3579371.3589350</a></td></tr>
+              <tr><th scope="row">年份</th><td>2023</td></tr>
+              <tr><th scope="row">PDF 篇幅</th><td data-summary-field="pdf-page-count">共 14 頁</td></tr>
+              <tr><th scope="row">閱讀分類</th><td>AI Infrastructure / Accelerator Clusters</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted">分類理由：論文的首要貢獻是把可光學重組的互連做成 4,096-chip 生產級加速器超級電腦；SparseCore 是此叢集為推薦模型所做的重要軟硬體協同設計，而非單獨的處理器微架構論文。</p>
+<h3>術語表</h3>
+        <dl class="term-list">
+          <dt>OCS</dt><dd>Optical Circuit Switch；以光學鏡面建立端口間固定 circuit，本文在毫秒級重組。</dd>
+          <dt>Palomar</dt><dd>Google 使用的 136×136 3D-MEMS OCS；128 ports 服務系統、8 ports 作測試／維修 spare。</dd>
+          <dt>ICI</dt><dd>Inter-Core Interconnect；TPU 間直連網路。TPU v4 每晶片六條 50 GB/s links。</dd>
+          <dt>Slice</dt><dd>分配給單一工作的一組 TPU；TPU v4 大 slice 由 64-chip blocks 組成。</dd>
+          <dt>Goodput</dt><dd>能被組成指定 slice 並實際服務工作的晶片利用比例；不是 raw availability。</dd>
+          <dt>Bisection bandwidth</dt><dd>把網路切成兩半時可跨 cut 傳輸的總頻寬；embedding all-to-all 與大型 collective 常受其限制。</dd>
+          <dt>Regular／twisted torus</dt><dd>規則 torus 按座標直接 wrap；twisted torus 重排部分 wraparound edges 以改善非立方 geometry 的最差 cut。</dd>
+          <dt>TensorCore（TC）</dt><dd>TPU 內面向 dense matrix multiplication 與 vector operation 的主要運算核心。</dd>
+          <dt>SparseCore（SC）</dt><dd>面向 embedding gather/scatter、排序與稀疏歸約的 memory-centric engine。</dd>
+          <dt>CMEM／VMEM／Spmem</dt><dd>TPU v4 的 128 MiB common memory、32 MiB vector memory 與每晶片合計 10 MiB SparseCore memory。</dd>
+          <dt>DLRM</dt><dd>Deep Learning Recommendation Model；混合大型 embedding tables 與 dense neural network。</dd>
+          <dt>PA-NAS</dt><dd>Platform-Aware Neural Architecture Search；同時考量模型品質與 TPU/SparseCore 執行平衡。</dd>
+          <dt>PUE</dt><dd>Power Usage Effectiveness；資料中心總用電除以 IT equipment 用電。</dd>
+        </dl>
+
+        <h3>重點數字索引</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>數字、證據型態與閱讀位置</caption>
+            <thead><tr><th>數字</th><th>意義</th><th>證據型態</th><th>位置</th></tr></thead>
+            <tbody>
+              <tr><td>4,096 chips；64×64-chip blocks；48 OCS</td><td>TPU v4 supercomputer 組成</td><td>系統描述</td><td>§2.2, Fig. 1, PDF p.2</td></tr>
+              <tr><td>1.63×／1.31×</td><td>twisted vs regular all-to-all</td><td>實機 microbenchmark</td><td>§2.8, Fig. 6, PDF p.4</td></tr>
+              <tr><td>&lt;5% capex；&lt;3% power</td><td>optical fabric 系統占比</td><td>作者報告</td><td>§2.10, PDF p.5</td></tr>
+              <tr><td>30.1× CPU；3.1× TPU v3</td><td>完整 TPU v4 跑 internal DLRM0</td><td>內部實測</td><td>§3.6, Fig. 9, PDF p.6</td></tr>
+              <tr><td>17.9→41.3；21.0→25.0 seq/s</td><td>LLM／GPT-3 joint configuration search</td><td>多參數共變實測</td><td>§4, Table 3, PDF p.7</td></tr>
+              <tr><td>2.1× performance；2.7× perf/W</td><td>TPU v4 vs v3 八個 production workloads 幾何平均</td><td>跨世代實測</td><td>§5, Fig. 13, PDF p.8</td></tr>
+              <tr><td>1.15× BERT；1.67× ResNet</td><td>TPU v4 vs A100 的選定大規模 MLPerf 點</td><td>公開 benchmark + interpolation</td><td>§6, Fig. 15, PDF p.9</td></tr>
+              <tr><td>2–6× less energy；約 5% CO₂e</td><td>指定雲端／on-prem 情境</td><td>多假設估算</td><td>§7.6, PDF pp.10–11</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>論文來源索引</h3>
+        <ol class="source-index">
+          <li id="source-p01-abstract"><span><strong>摘要與 §1</strong>：主要貢獻、4K 規模動機與 production workload framing（PDF p.1）。</span></li>
+          <li id="source-p02-fig1"><span><strong>§2.1–2.2, Table 1, Figure 1</strong>：Palomar OCS、工作負載比例、64-chip block 與 48 OCS 連線（PDF p.2）。</span></li>
+          <li id="source-p03-fig4"><span><strong>§2.3–2.5, Figure 4</strong>：availability goodput model、漸進部署與 scheduler 選 block（PDF pp.3–4）。</span></li>
+          <li id="source-p04-fig5"><span><strong>§2.6–2.8, Figure 5</strong>：3D torus、slice isolation、parallelism mapping 與 twisted topology（PDF p.4）。</span></li>
+          <li id="source-p04-fig6"><span><strong>§2.8, Figure 6</strong>：regular／twisted all-to-all microbenchmark（PDF p.4）。</span></li>
+          <li id="source-p05-cost"><span><strong>§2.9–2.10</strong>：topology 使用分布、optical fabric 成本與功率占比（PDF p.5）。</span></li>
+          <li id="source-p05-embedding"><span><strong>§3.1–3.5</strong>：embedding table 規模、sharding、CPU bottleneck 與 SparseCore 動機（PDF p.5）。</span></li>
+          <li id="source-p06-fig7"><span><strong>§3.5, Figure 7</strong>：SparseCore sequencer、tiles、Spmem、scVPU 與 cross-channel units（PDF p.6）。</span></li>
+          <li id="source-p06-fig8"><span><strong>§3.6, Figure 8</strong>：2D／3D bisection scaling 與 embedding sensitivity（PDF p.6）。</span></li>
+          <li id="source-p06-fig9"><span><strong>§3.6, Figure 9</strong>：CPU、TPU v3、完整 TPU v4 與無 SparseCore placements 的 DLRM0 對照（PDF p.6）。</span></li>
+          <li id="source-p07-fig10"><span><strong>§4, Figure 10</strong>：PA-NAS 平衡 SparseCore／TensorCore 的 DLRM0 結果（PDF p.7）。</span></li>
+          <li id="source-p07-table3"><span><strong>§4, Table 3</strong>：LLM／GPT-3 topology 與 parallelism joint search（PDF p.7）。</span></li>
+          <li id="source-p07-table4"><span><strong>§5, Table 4</strong>：TPU v4 與 v3 架構／功率規格（PDF p.7）。</span></li>
+          <li id="source-p08-fig12"><span><strong>§5, Figures 11–12</strong>：八個 production workloads 的 scaling 與同 slice speedup（PDF pp.7–8）。</span></li>
+          <li id="source-p08-fig13"><span><strong>§5, Figure 13</strong>：per-chip performance、package perf/W 與 CMEM on/off（PDF p.8）。</span></li>
+          <li id="source-p09-fig15"><span><strong>§6, Figures 14–16</strong>：MLPerf comparison、interpolation 與 roofline（PDF p.9）。</span></li>
+          <li id="source-p09-table6"><span><strong>§6, Table 6</strong>：64-chip BERT／ResNet 的 DSA+HBM 平均功率（PDF p.9）。</span></li>
+          <li id="source-p10-ib"><span><strong>§7.2–7.3</strong>：NVLink／InfiniBand 對照、switch count 與 event-driven simulation（PDF p.10）。</span></li>
+          <li id="source-p10-carbon"><span><strong>§7.6</strong>：perf/W、PUE、carbon intensity 與 operational CO₂e 估算（PDF pp.10–11）。</span></li>
+          <li id="source-p11-limit"><span><strong>§7.4, §7.7–7.10</strong>：H100 時間邊界、workload churn、MLPerf DLRM representativeness 與 HBM 容量限制（PDF pp.10–11）。</span></li>
+          <li id="source-p12-summary"><span><strong>§8–9</strong>：OCS related work、production-first claim 與論文總結（PDF p.12）。</span></li>
+        </ol>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>TPU v4: An Optically Reconfigurable Supercomputer for Machine Learning with Hardware Support for Embeddings · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>

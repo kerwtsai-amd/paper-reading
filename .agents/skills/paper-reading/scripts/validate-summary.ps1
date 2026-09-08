@@ -43,6 +43,21 @@ catch {
 }
 
 $projectRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))))
+$canonicalTemplatePath = Join-Path $projectRoot 'html template/summary-template.html'
+$canonicalTemplate = if (Test-Path -LiteralPath $canonicalTemplatePath -PathType Leaf) {
+    Get-Content -Raw -LiteralPath $canonicalTemplatePath -Encoding UTF8
+}
+else {
+    ''
+}
+$canonicalVersionMatch = [regex]::Match($canonicalTemplate, 'data-template-version\s*=\s*["'']([^"'']+)["'']', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$canonicalStyleMatch = [regex]::Match($canonicalTemplate, '<meta\b[^>]*\bname\s*=\s*["'']paper-summary-template["''][^>]*\bcontent\s*=\s*["'']([^"'']+)["'']', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$requiredFontStylesheet = 'https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&family=Open+Sans:wght@400;500;600;700;800&display=swap'
+$requiredFontPreconnects = @(
+    'https://fonts.googleapis.com',
+    'https://fonts.gstatic.com'
+)
+$requiredFontStack = '"Open Sans", "Noto Sans TC", sans-serif'
 $relativePaperDirectory = [System.IO.Path]::GetRelativePath($projectRoot, $resolvedPaperDirectory)
 $relativeSegments = @($relativePaperDirectory -split '[\\/]' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 
@@ -78,9 +93,12 @@ if (-not $PublicCheck) {
     $expectedPdfPath = Join-Path -Path $resolvedPaperDirectory -ChildPath $expectedPdfName
     $canonicalNameHasPathRisk = $expectedPdfPath.Length -ge 260 -or $expectedPdfName.Length -gt 255
     $matchingPdf = @($pdfFiles | Where-Object { $_.Name.Equals($expectedPdfName, [System.StringComparison]::OrdinalIgnoreCase) })
+    if ($canonicalNameHasPathRisk) {
+        Add-ValidationWarning "Canonical PDF path is $($expectedPdfPath.Length) characters and may exceed tool limits. Keep this note in the completion report, not summary.html."
+    }
     if ($pdfFiles.Count -eq 1 -and $matchingPdf.Count -eq 0) {
         if ($canonicalNameHasPathRisk) {
-            Add-ValidationWarning "A traceable safe PDF filename is being used because the canonical path is $($expectedPdfPath.Length) characters. Keep this explanation in the completion report, not summary.html. Found: $($pdfFiles[0].Name)"
+            Add-ValidationWarning "A traceable safe PDF filename is being used. Found: $($pdfFiles[0].Name)"
         }
         else {
             Add-ValidationError "PDF must be named after the paper folder when no objective path-length exception exists. Expected: $expectedPdfName"
@@ -129,11 +147,25 @@ if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
     if ($html -notmatch 'data-template-id\s*=\s*["'']paper-reading-summary["'']') {
         Add-ValidationError 'Missing required data-template-id="paper-reading-summary" marker.'
     }
-    if ($html -notmatch 'data-template-version\s*=\s*["''][^"'']+["'']') {
+    $summaryVersionMatch = [regex]::Match($html, 'data-template-version\s*=\s*["'']([^"'']+)["'']', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if (-not $summaryVersionMatch.Success) {
         Add-ValidationError 'Missing data-template-version marker.'
     }
-    if ($html -notmatch 'paper-summary-template') {
+    elseif ($canonicalVersionMatch.Success -and $summaryVersionMatch.Groups[1].Value -ne $canonicalVersionMatch.Groups[1].Value) {
+        Add-ValidationError "Summary template version $($summaryVersionMatch.Groups[1].Value) does not match canonical version $($canonicalVersionMatch.Groups[1].Value)."
+    }
+    $summaryStyleMatch = [regex]::Match($html, '<meta\b[^>]*\bname\s*=\s*["'']paper-summary-template["''][^>]*\bcontent\s*=\s*["'']([^"'']+)["'']', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if (-not $summaryStyleMatch.Success) {
         Add-ValidationError 'Missing paper-summary-template meta marker.'
+    }
+    elseif ($canonicalStyleMatch.Success -and $summaryStyleMatch.Groups[1].Value -ne $canonicalStyleMatch.Groups[1].Value) {
+        Add-ValidationError "Summary style marker $($summaryStyleMatch.Groups[1].Value) does not match canonical style $($canonicalStyleMatch.Groups[1].Value)."
+    }
+    if ($html -notmatch '(?i)<html\b[^>]*\blang\s*=\s*["'']zh-Hant["'']') {
+        Add-ValidationError 'The root html element must declare lang="zh-Hant".'
+    }
+    if ($html -notmatch '(?i)<meta\b[^>]*\bname\s*=\s*["'']viewport["'']') {
+        Add-ValidationError 'Missing responsive viewport meta tag.'
     }
     if ($html -notmatch 'mathjax@3\.2\.2/es5/tex-chtml\.js') {
         Add-ValidationError 'MathJax 3.2.2 loader is missing or changed.'
@@ -142,62 +174,113 @@ if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
         Add-ValidationError 'MathJax inline/display delimiter configuration is missing.'
     }
 
+    foreach ($fontVariableName in @('sans', 'serif', 'mono')) {
+        $fontVariableMatches = [regex]::Matches(
+            $html,
+            '(?im)--{0}\s*:\s*([^;}}]+)\s*;' -f [regex]::Escape($fontVariableName)
+        )
+        if ($fontVariableMatches.Count -ne 1) {
+            Add-ValidationError "Typography variable --$fontVariableName must occur exactly once; found $($fontVariableMatches.Count)."
+            continue
+        }
+
+        $declaredFontStack = [regex]::Replace($fontVariableMatches[0].Groups[1].Value.Trim(), '\s+', ' ')
+        if ($declaredFontStack -cne $requiredFontStack) {
+            Add-ValidationError "Typography variable --$fontVariableName must be $requiredFontStack; found: $declaredFontStack"
+        }
+    }
+
+    if ($html -notmatch '(?is)\bbody\s*\{[^}]*\bfont-family\s*:\s*var\(--sans\)\s*;') {
+        Add-ValidationError 'The body font-family must resolve through var(--sans).'
+    }
+
+    $fontFamilyMatches = [regex]::Matches($html, '(?im)\bfont-family\s*:\s*([^;}{]+)\s*;')
+    $allowedFontFamilyValues = @('var(--sans)', 'var(--serif)', 'var(--mono)', $requiredFontStack)
+    foreach ($fontFamilyMatch in $fontFamilyMatches) {
+        $fontFamilyValue = [regex]::Replace($fontFamilyMatch.Groups[1].Value.Trim(), '\s+', ' ')
+        if ($fontFamilyValue -cnotin $allowedFontFamilyValues) {
+            Add-ValidationError "Unexpected font-family declaration '$fontFamilyValue'. All text must resolve to Open Sans + Noto Sans TC through the canonical variables."
+        }
+    }
+    if ($html -match '(?i)@import\b') {
+        Add-ValidationError 'CSS @import is forbidden; the canonical Google Fonts link is the only permitted linked stylesheet.'
+    }
+    if ($html -match '(?i)@font-face\b') {
+        Add-ValidationError 'Inline @font-face declarations are forbidden; use only the canonical Google Fonts families.'
+    }
+
     $remainingPlaceholders = [regex]::Matches($html, '\{\{[A-Z0-9_]+\}\}') | ForEach-Object { $_.Value } | Sort-Object -Unique
     if ($remainingPlaceholders.Count -gt 0) {
         Add-ValidationError "Unresolved template placeholders: $($remainingPlaceholders -join ', ')"
     }
 
-    $requiredSectionIds = @(
-        'paper-info',
-        'one-sentence-summary',
-        'executive-summary',
-        'background-motivation',
-        'problem-definition',
-        'core-method',
-        'formulas-theory',
-        'figures-guide',
-        'experimental-setup',
-        'experimental-results',
-        'ablation-sensitivity',
-        'strengths-limitations-risks',
-        'related-work',
-        'personal-analysis',
-        'discussion-questions',
-        'glossary-index'
+    $requiredSectionRoles = @(
+        'prerequisites',
+        'problem',
+        'insight',
+        'method',
+        'evidence',
+        'critique',
+        'extensions',
+        'reference'
     )
+    $rolePositions = [System.Collections.Generic.List[int]]::new()
 
-    foreach ($sectionId in $requiredSectionIds) {
-        $escapedSectionId = [regex]::Escape($sectionId)
-        $sectionPattern = '<section\b[^>]*\bid\s*=\s*["'']{0}["''][^>]*>(.*?)</section>' -f $escapedSectionId
-        $sectionMatch = [regex]::Match(
+    foreach ($sectionRole in $requiredSectionRoles) {
+        $escapedRole = [regex]::Escape($sectionRole)
+        $sectionMatches = [regex]::Matches(
             $html,
-            $sectionPattern,
+            '<section\b(?=[^>]*\bdata-section-role\s*=\s*["'']{0}["''])[^>]*>(.*?)</section>' -f $escapedRole,
             [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Singleline
         )
 
-        if (-not $sectionMatch.Success) {
-            Add-ValidationError "Missing required section id: $sectionId"
+        if ($sectionMatches.Count -ne 1) {
+            Add-ValidationError "Semantic role '$sectionRole' must occur exactly once; found $($sectionMatches.Count)."
             continue
         }
 
-        $sectionText = Get-VisibleHtmlText -Fragment $sectionMatch.Groups[1].Value
-        if ([string]::IsNullOrWhiteSpace($sectionText)) {
-            Add-ValidationError "Section is empty: $sectionId"
+        $sectionMatch = $sectionMatches[0]
+        $rolePositions.Add($sectionMatch.Index)
+        $sectionTagMatch = [regex]::Match($sectionMatch.Value, '^<section\b[^>]*>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        $sectionIdMatch = [regex]::Match($sectionTagMatch.Value, '\bid\s*=\s*["'']([^"'']+)["'']', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if (-not $sectionIdMatch.Success) {
+            Add-ValidationError "Semantic role '$sectionRole' is missing an id for TOC navigation."
+        }
+        else {
+            $sectionId = $sectionIdMatch.Groups[1].Value
+            $tocPattern = 'href\s*=\s*["'']#{0}["'']' -f [regex]::Escape($sectionId)
+            if ($html -notmatch $tocPattern) {
+                Add-ValidationError "Table of contents does not link to semantic role '$sectionRole' (#$sectionId)."
+            }
         }
 
-        $tocPattern = 'href\s*=\s*["'']#{0}["'']' -f $escapedSectionId
-        if ($html -notmatch $tocPattern) {
-            Add-ValidationError "Table of contents does not link to: $sectionId"
+        if ($sectionMatch.Groups[1].Value -notmatch '(?is)<h2\b[^>]*>\s*\S') {
+            Add-ValidationError "Semantic role '$sectionRole' must have a non-empty h2."
+        }
+        $sectionBody = [regex]::Replace($sectionMatch.Groups[1].Value, '(?is)<(?:h2|span)\b[^>]*>.*?</(?:h2|span)>', ' ')
+        $sectionText = Get-VisibleHtmlText -Fragment $sectionBody
+        if ([string]::IsNullOrWhiteSpace($sectionText)) {
+            Add-ValidationError "Semantic role '$sectionRole' has no reader-facing body content."
+        }
+        elseif ($sectionText.Length -lt 80) {
+            Add-ValidationWarning "Semantic role '$sectionRole' is unusually short ($($sectionText.Length) characters)."
         }
     }
 
-    $paperInfoMatch = [regex]::Match(
+    for ($index = 1; $index -lt $rolePositions.Count; $index++) {
+        if ($rolePositions[$index] -le $rolePositions[$index - 1]) {
+            Add-ValidationError 'Semantic roles do not appear in the required reader-first order.'
+            break
+        }
+    }
+
+    $referenceMatch = [regex]::Match(
         $html,
-        '<section\b[^>]*\bid\s*=\s*["'']paper-info["''][^>]*>(.*?)</section>',
+        '<section\b(?=[^>]*\bdata-section-role\s*=\s*["'']reference["''])[^>]*>(.*?)</section>',
         [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Singleline
     )
-    if ($paperInfoMatch.Success) {
-        $paperInfoHtml = $paperInfoMatch.Groups[1].Value
+    if ($referenceMatch.Success) {
+        $paperInfoHtml = $referenceMatch.Groups[1].Value
         $paperInfoText = Get-VisibleHtmlText -Fragment $paperInfoHtml
         $pageCountFields = [regex]::Matches(
             $paperInfoHtml,
@@ -206,7 +289,7 @@ if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
         )
 
         if ($pageCountFields.Count -ne 1) {
-            Add-ValidationError "Paper-info must contain exactly one data-summary-field='pdf-page-count'; found $($pageCountFields.Count)."
+            Add-ValidationError "Reference role must contain exactly one data-summary-field='pdf-page-count'; found $($pageCountFields.Count)."
         }
         else {
             $pageCountValue = Get-VisibleHtmlText -Fragment $pageCountFields[0].Groups[1].Value
@@ -216,7 +299,7 @@ if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
         }
 
         $paperInfoOperationalPatterns = @(
-            '(?:檔名|路徑|工具|處理|下載|頁碼對照)(?:說明|備註|紀錄|資訊|驗證)?[：:]',
+            '(?:檔名|檔案|絕對路徑|下載流程|處理工具|頁碼對照)(?:說明|備註|紀錄|資訊|驗證)?[：:]',
             '檔案驗證',
             'PDF\s+(?:metadata|signature)',
             '%PDF-\d',
@@ -232,9 +315,18 @@ if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
 
         foreach ($paperInfoOperationalPattern in $paperInfoOperationalPatterns) {
             if ($paperInfoText -match $paperInfoOperationalPattern) {
-                Add-ValidationError "Paper-info contains operational/QA prose that must stay out of summary.html (matched: $paperInfoOperationalPattern)"
+                Add-ValidationError "Reference metadata contains operational/QA prose that must stay out of summary.html (matched: $paperInfoOperationalPattern)"
             }
         }
+    }
+
+    $updateDateMatches = [regex]::Matches(
+        $html,
+        '<time\b(?=[^>]*\bdata-summary-field\s*=\s*["'']last-updated["''])[^>]*\bdatetime\s*=\s*["''](\d{4}-\d{2}-\d{2})["''][^>]*>',
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+    if ($updateDateMatches.Count -ne 1) {
+        Add-ValidationError "Summary must contain exactly one marked update date; found $($updateDateMatches.Count)."
     }
 
     $visibleSummaryText = Get-VisibleHtmlText -Fragment $html
@@ -264,6 +356,54 @@ if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
         Add-ValidationError "Duplicate HTML ids: $($duplicateIds -join ', ')"
     }
 
+    $knownIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($idMatch in $idMatches) {
+        [void]$knownIds.Add($idMatch.Groups[1].Value)
+    }
+    $internalLinkMatches = [regex]::Matches($html, '<a\b[^>]*\bhref\s*=\s*["'']#([^"'']+)["''][^>]*>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    foreach ($internalLinkMatch in $internalLinkMatches) {
+        $targetId = [System.Net.WebUtility]::HtmlDecode($internalLinkMatch.Groups[1].Value)
+        if (-not $knownIds.Contains($targetId)) {
+            Add-ValidationError "Internal link target does not exist: #$targetId"
+        }
+    }
+
+    $statementCount = [regex]::Matches($html, '<(?:aside|div)\b[^>]*\bclass\s*=\s*["''][^"'']*\bstatement\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase).Count
+    if ($statementCount -gt 10) {
+        Add-ValidationError "Reader-first v2 forbids a callout wall; found $statementCount large statement callouts (maximum 10)."
+    }
+    elseif ($statementCount -gt 6) {
+        Add-ValidationWarning "The article has $statementCount large statement callouts; normally keep six or fewer."
+    }
+    if ($html -match '(?i)<[^>]+\bclass\s*=\s*["''][^"'']*\bkey-card\b') {
+        Add-ValidationError 'Reader-first v2 forbids dashboard key-card markup; use continuous prose or a flat takeaway list.'
+    }
+    if ($html -match '(?i)<section\b[^>]*\bid\s*=\s*["'']figures-guide["'']') {
+        Add-ValidationError 'Reader-first v2 forbids a detached figure gallery; place figures at first explanatory use.'
+    }
+
+    $evidenceBlocks = [regex]::Matches(
+        $html,
+        '<(?<tag>aside|p|div)\b(?=[^>]*\bdata-kind\s*=\s*["''](?<kind>author-claim|experimental-fact|analysis|speculation)["''])[^>]*>(.*?)</\k<tag>>',
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Singleline
+    )
+    $expectedEvidenceLabels = @{
+        'author-claim' = '作者主張'
+        'experimental-fact' = '實驗事實'
+        'analysis' = '分析'
+        'speculation' = '推測'
+    }
+    foreach ($evidenceBlock in $evidenceBlocks) {
+        $kind = $evidenceBlock.Groups['kind'].Value.ToLowerInvariant()
+        $visibleEvidence = Get-VisibleHtmlText -Fragment $evidenceBlock.Groups[1].Value
+        if ($visibleEvidence -notmatch ('(^|\s)' + [regex]::Escape($expectedEvidenceLabels[$kind]) + '(\s|$)')) {
+            Add-ValidationError "Evidence block '$kind' is missing its visible Traditional Chinese label."
+        }
+        if ($kind -in @('author-claim', 'experimental-fact') -and $evidenceBlock.Value -notmatch '(?i)\bclass\s*=\s*["''][^"'']*\bsource-ref\b') {
+            Add-ValidationError "Evidence block '$kind' must contain a source-ref."
+        }
+    }
+
     if ($html -match '(?i)\b(?:src|href)\s*=\s*["'']file://') {
         Add-ValidationError 'file:// URLs are not portable and are forbidden.'
     }
@@ -273,8 +413,59 @@ if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
     if ($html -match '(?i)\b(?:src|href)\s*=\s*["''][^"'']*(?:\.\.[\\/])') {
         Add-ValidationError 'Parent-directory references (../) are forbidden in summary resources.'
     }
-    if ($html -match '(?i)<link\b[^>]*rel\s*=\s*["'']stylesheet["'']') {
-        Add-ValidationError 'External or linked stylesheets are forbidden; CSS must remain embedded.'
+    $fontStylesheetCount = 0
+    $fontPreconnectCounts = @{
+        'https://fonts.googleapis.com' = 0
+        'https://fonts.gstatic.com' = 0
+    }
+    $linkTagMatches = [regex]::Matches($html, '<link\b[^>]*>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    foreach ($linkTagMatch in $linkTagMatches) {
+        $linkTag = $linkTagMatch.Value
+        $linkRelMatch = [regex]::Match($linkTag, '\brel\s*=\s*["'']([^"'']+)["'']', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if (-not $linkRelMatch.Success) {
+            continue
+        }
+
+        $linkRelations = @($linkRelMatch.Groups[1].Value -split '\s+' | ForEach-Object { $_.ToLowerInvariant() })
+        $linkHrefMatch = [regex]::Match($linkTag, '\bhref\s*=\s*["'']([^"'']+)["'']', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        $linkHref = if ($linkHrefMatch.Success) {
+            [System.Net.WebUtility]::HtmlDecode($linkHrefMatch.Groups[1].Value)
+        }
+        else {
+            ''
+        }
+
+        if ($linkRelations -contains 'stylesheet') {
+            $fontStylesheetCount++
+            if ($linkHref -cne $requiredFontStylesheet) {
+                Add-ValidationError "Unexpected linked stylesheet: $linkHref"
+            }
+        }
+
+        if ($linkRelations -contains 'preconnect') {
+            if ($linkHref -cnotin $requiredFontPreconnects) {
+                Add-ValidationError "Unexpected preconnect target: $linkHref"
+            }
+            else {
+                $fontPreconnectCounts[$linkHref]++
+                if ($linkHref -ceq 'https://fonts.gstatic.com' -and $linkTag -notmatch '(?i)\bcrossorigin(?:\s*=\s*(?:["''][^"'']*["'']|[^\s>]+))?') {
+                    Add-ValidationError 'The fonts.gstatic.com preconnect must include crossorigin.'
+                }
+            }
+        }
+
+        if ($linkRelations -contains 'preload' -and $linkTag -match '(?i)\bas\s*=\s*["'']font["'']') {
+            Add-ValidationError "Font preloads are forbidden; use only the canonical Google Fonts stylesheet and preconnects: $linkHref"
+        }
+    }
+
+    if ($fontStylesheetCount -ne 1) {
+        Add-ValidationError "Summary must contain exactly one canonical Google Fonts stylesheet; found $fontStylesheetCount."
+    }
+    foreach ($requiredFontPreconnect in $requiredFontPreconnects) {
+        if ($fontPreconnectCounts[$requiredFontPreconnect] -ne 1) {
+            Add-ValidationError "Summary must contain exactly one preconnect to $requiredFontPreconnect; found $($fontPreconnectCounts[$requiredFontPreconnect])."
+        }
     }
 
     $scriptSourceMatches = [regex]::Matches(
@@ -326,7 +517,18 @@ if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
         '<figure\b[^>]*>(.*?)</figure>',
         [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Singleline
     )
+    $methodFigureCount = 0
+    $resultFigureCount = 0
     foreach ($figureMatch in $figureMatches) {
+        if ($figureMatch.Value -match '(?i)^<figure\b[^>]*\bdata-figure-role\s*=\s*["'']method["'']') {
+            $methodFigureCount++
+        }
+        elseif ($figureMatch.Value -match '(?i)^<figure\b[^>]*\bdata-figure-role\s*=\s*["'']result["'']') {
+            $resultFigureCount++
+        }
+        else {
+            Add-ValidationError 'Every figure must declare data-figure-role="method" or "result" so it stays attached to the claim it explains.'
+        }
         $figureHtml = $figureMatch.Groups[1].Value
         $captionMatches = [regex]::Matches(
             $figureHtml,
@@ -376,6 +578,9 @@ if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
             if ($readingGuide -notmatch '^導讀\s*[：:]\s*\S') {
                 Add-ValidationError 'A figure reading guide must start with 導讀： and contain self-authored guidance.'
             }
+            elseif ($readingGuide.Length -lt 18) {
+                Add-ValidationWarning "Figure reading guide is very short and may not explain what to inspect or why it matters: $readingGuide"
+            }
         }
 
         $captionVisibleText = Get-VisibleHtmlText $captionHtml
@@ -390,15 +595,15 @@ if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
         }
     }
 
-    $discussionSection = [regex]::Match(
-        $html,
-        '<section\b[^>]*\bid\s*=\s*["'']discussion-questions["''][^>]*>(.*?)</section>',
-        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Singleline
-    )
-    if ($discussionSection.Success) {
-        $questionCount = [regex]::Matches($discussionSection.Groups[1].Value, '<li\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase).Count
-        if ($questionCount -lt 3 -or $questionCount -gt 5) {
-            Add-ValidationWarning "Discussion section should normally contain 3-5 list items; found $questionCount."
+    if ($figureMatches.Count -eq 0) {
+        Add-ValidationError 'The article has no explanatory figures. Extract at least one method and one result figure, or record a paper-specific omission in the validator contract.'
+    }
+    else {
+        if ($methodFigureCount -eq 0) {
+            Add-ValidationError 'The article needs at least one figure marked data-figure-role="method".'
+        }
+        if ($resultFigureCount -eq 0) {
+            Add-ValidationError 'The article needs at least one figure marked data-figure-role="result".'
         }
     }
 }

@@ -1,0 +1,941 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="DCQCN 論文選讀：從 PFC 的壅塞擴散出發，理解 ECN、CNP、NIC 逐流限速、buffer threshold 與實驗證據如何組成 RoCEv2 壅塞控制。">
+  <title>Congestion Control for Large-Scale RDMA Deployments｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 46rem;
+      --wide: 62rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">AI Infrastructure / Cluster Networking</p>
+      <h1>Congestion Control for Large-Scale RDMA Deployments</h1>
+      <div class="paper-dek" data-section-role="thesis"><p class="lead">DCQCN 不取代 PFC，而是把 PFC 降為控制迴路反應前的快速、粗粒度無損護欄，再由交換器 ECN 標記、接收端 CNP 回饋與傳送端 NIC 逐流限速，長期控制公平性、佇列與吞吐。<a class="source-ref" href="#source-conclusion-p13">§3、§9 · PDF pp.4–5、13（論文標示 pp.526–527、535）</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 這篇論文真正的新意不是一條降速公式，而是跨層角色重分配：交換器只留下標準化訊號，NIC 維持逐流狀態，PFC 只處理端到端回路來不及反應的瞬間。</p></div>
+      <p class="paper-byline">Yibo Zhu、Haggai Eran、Daniel Firestone、Chuanxiong Guo、Marina Lipshteyn、Yehonatan Liron、Jitendra Padhye、Shachar Raindel、Mohamad Haj Yahia、Ming Zhang</p>
+      <p class="paper-meta">
+        <span>ACM SIGCOMM 2015，London, United Kingdom</span>
+        <span>2015</span>
+        <span>AI Infrastructure / Cluster Networking</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-08">2026 年 9 月 8 日</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://doi.org/10.1145/2785956.2787484" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="Congestion%20Control%20for%20Large-Scale%20RDMA%20Deployments.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀路線：</strong>先用〈<a href="#problem">Port-level Pause 如何造成 HOL、Unfairness 與壅塞擴散</a>〉抓住根因，再讀〈<a href="#method">CP–NP–RP 控制迴路、α 記憶與快慢兩段恢復</a>〉走完整流程，最後用〈<a href="#evidence">從單一瓶頸到混合流量：DCQCN 是否修好尾端吞吐</a>〉逐項驗證。熟悉背景的讀者可直接從問題章開始。</p>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">RDMA／RoCE、PFC、ECN/CNP 與 Buffer 水位</a></li>
+            <li><a href="#problem">Port-level Pause 如何造成 HOL、Unfairness 與壅塞擴散</a></li>
+            <li><a href="#insight">讓 ECN 主動調速，讓 PFC 退回最後一道保險</a></li>
+            <li><a href="#method">CP–NP–RP 控制迴路、α 記憶與快慢兩段恢復</a></li>
+            <li><a href="#evidence">從單一瓶頸到混合流量：DCQCN 是否修好尾端吞吐</a></li>
+            <li><a href="#critique">流體模型、2015 硬體與參數可移植性</a></li>
+            <li><a href="#extensions">從 DCQCN 延伸到今天的無損網路</a></li>
+            <li><a href="#reference">狀態變數、門檻公式與證據索引</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>RDMA／RoCE、PFC、ECN/CNP 與 Buffer 水位</h2>
+          <h3>先補四個必要概念</h3>
+        <div class="takeaway-list">
+          <div class="takeaway-item"><p class="takeaway-label">RDMA</p><p>NIC 直接在預先註冊的記憶體間搬資料，繞過主機網路協定棧；目標是降低 CPU 與軟體路徑延遲。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">RoCEv2</p><p>保留 InfiniBand transport，改以 Ethernet／IP／UDP 封裝，使 RDMA 可跨 L3 路由並利用 ECMP。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">PFC</p><p>Ingress queue 達門檻便要求直接上游暫停某個 priority；反應快但粒度是 port／priority，不是 flow。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">ECN / CNP</p><p>交換器用 ECN 在封包留下壅塞訊號；RoCEv2 接收端再回 CNP，讓傳送端 NIC 知道該降哪一條 flow。</p></div>
+        </div>
+        <h3>為何值得承擔 lossless fabric 的複雜度？</h3>
+        <p id="source-intro-p1">RDMA 的吸引力來自硬體資料路徑。它讓 NIC 繞過 host network stack，直接操作預先註冊的 buffer；因此 RoCEv2 的核心價值不是「另一種 Ethernet 封裝」，而是把低 CPU、低延遲的 RDMA transport 帶到 IP-routed datacenter fabric。<a class="source-ref" href="#source-intro-p1">§1–§2.1 · PDF pp.1–2（論文標示 pp.523–524）</a></p>
+        <p id="source-fig1-p2" class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 兩台 Windows Server 2012 R2、40 Gb/s 主機的測試中，4 MB 傳輸要跑滿鏈路時，TCP 使用超過 20% aggregate CPU cycles；RDMA client 低於 3%，server 幾乎為零。2 KB 操作延遲為 TCP 25.4 µs、RDMA READ／WRITE 1.7 µs、SEND 2.8 µs。<a class="source-ref" href="#source-fig1-p2">§2.1 · PDF p.2（論文標示 p.524）· Figure 1</a></p>
+        <p>這些數字只描述本文當時的主機、作業系統、NIC 與 workload，不是 TCP 與 RDMA 的普遍倍率；它們的作用是說明作者為何不願把壅塞控制搬回 CPU 軟體路徑。</p>
+        <h3>PFC 的交換條件</h3>
+        <p id="source-pfc-p2">RoCEv2 transport 仍假設底層接近無損。PFC 可在局部 buffer 即將耗盡時迅速暫停上游，卻會讓同一 priority 的無辜 flows 一起停下；PAUSE 也可能逐跳擴散。因此，「能防止 buffer overflow」與「能做逐流壅塞控制」是兩件不同的事。<a class="source-ref" href="#source-pfc-p2">§2.2 · PDF pp.2–3（論文標示 pp.524–525）</a></p>
+<p class="bridge">有了這些背景，下一個問題是：Port-level Pause 如何造成 HOL、Unfairness 與壅塞擴散</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>Port-level Pause 如何造成 HOL、Unfairness 與壅塞擴散</h2>
+          <h3>問題不是單一 queue，而是 PFC 的控制粒度</h3>
+        <p>PFC 在 port／priority 上停流，無法分辨誰造成壅塞。作者先用兩個微基準建立因果鏈：</p>
+        <ol>
+          <li id="source-fig3-p3"><strong>不公平：</strong>四個 sender 共用 40 Gb/s bottleneck 時，拓樸上獨占一個 ingress port 的 H4 最高接近 20 Gb/s；H4 的最低吞吐仍高於 H1–H3 的最高吞吐。<a class="source-ref" href="#source-fig3-p3">§2.2 · PDF p.3（論文標示 p.525）· Figure 3</a></li>
+          <li><strong>Victim flow：</strong>遠端壅塞即使不與 victim 的資料路徑重疊，仍可透過 PAUSE 級聯讓 victim throughput 由約 10 Gb/s 降至 4.5 Gb/s。<a class="source-ref" href="#source-fig4-p3">§2.2 · PDF p.3（論文標示 p.525）· Figure 4</a></li>
+        </ol>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 局部 queue 壓力經逐跳 PAUSE 變成跨路徑干擾；因此只增加 ECMP path 或使用 8 個 priority class，都無法從根本上提供逐流公平。</p>
+        <h3>設計需求的交集</h3>
+        <ul>
+          <li>在 lossless、L3-routed datacenter fabric 運作；</li>
+          <li>主控制邏輯在 NIC，避免 host CPU 成本；</li>
+          <li>無壅塞時 hyper-fast start，不以 TCP slow start 犧牲短 flow；</li>
+          <li>不要求新增交換器 ASIC 功能，只使用既有 PFC 與 RED/ECN；</li>
+          <li>同時追求公平、低振盪、短 queue 與高利用率。</li>
+        </ul>
+        <p>QCN 的 flow identifier 與回饋封包設計綁在 L2，不能直接跨 IP-routed network；作者也認為 iWARP、DCTCP 與 TCP-Bolt 的 slow start、host software 或延遲／CPU 特性不符合上述交集。<a class="source-ref" href="#source-method-p4">§2.3–§3 · PDF p.4（論文標示 p.526）</a></p>
+<div class="table-scroll">
+          <table>
+            <caption>依本文需求比較；不是跨論文統一 benchmark。</caption>
+            <thead><tr><th>方案</th><th>訊號／控制位置</th><th>本文認為的差異</th></tr></thead>
+            <tbody>
+              <tr><td>PFC</td><td>逐跳、port／priority PAUSE</td><td>反應快且能防 overflow，但非逐流，會 congestion spreading；DCQCN 保留它作短期護欄。</td></tr>
+              <tr><td>QCN</td><td>L2 switch 計算量化壅塞回饋，sender rate control</td><td>Flow 定義依賴 L2 header，不能直接跨 IP-routed fabric；改造需 NIC 與 switch ASIC 變更。</td></tr>
+              <tr><td>DCTCP</td><td>ECN＋host TCP window control</td><td>提供 ECN fraction 思路，但有 TCP slow start 與 host software 路徑；DCQCN 改成 NIC rate control、CNP 節流回饋。</td></tr>
+              <tr><td>iWARP／TCP-Bolt</td><td>以 TCP 或改造 TCP 支承 RDMA</td><td>作者認為 latency、slow start、CPU／host implementation 與 threshold interplay 不符合其需求；本文未做完整 head-to-head benchmark。</td></tr>
+              <tr><td>TIMELY</td><td>NIC timestamp／RTT gradient，端點 rate control</td><td>同樣追求低 queue；本文指出 TIMELY 不以低 CPU 為主要目標，且未做直接比較，因此不能據此宣稱 DCQCN 勝出。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-method-p4">§2.3、§3.3、§8 · PDF pp.4–5、12–13（論文標示 pp.526–527、534–535）</a></p>
+<figure data-figure-role="method" id="source-fig4-p3">
+          <img src="assets/images/fig-04-p03-victim-flow.png" alt="Figure 4：PFC 造成 victim flow 的拓樸與吞吐變化">
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>上半部先追 PAUSE 如何由右側壅塞逐跳擴散；下半部再看新增不共用 victim 資料路徑的 sender，仍使 victim throughput 由約 10 Gb/s 降至 4.5 Gb/s。</span></figcaption>
+        </figure>
+<p class="bridge">問題的限制已經清楚；接著要抓住作者最關鍵的轉念。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>讓 ECN 主動調速，讓 PFC 退回最後一道保險</h2>
+          <div class="takeaway-list">
+          <div class="takeaway-item"><p class="takeaway-label">Problem</p><p>RoCEv2 需要近乎無損，但 PFC 以 port／priority 暫停上游，會把局部壅塞擴散成 head-of-line blocking、不公平與 victim flow。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">Mechanism</p><p>CP 以 RED/ECN 標記，NP 將壅塞轉成 CNP，RP 在 NIC 逐流降速與恢復；交換器無需新增自訂 ASIC 功能。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">Key constraint</p><p>新 flow 無 slow start、可由 line rate 起跑，所以仍需 PFC 防住回饋尚未抵達時的短暫 buffer overflow。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">Evidence verdict</p><p>小型 40 Gb/s testbed 證明機制對症且 tail throughput 改善；但多瓶頸公平、掉包恢復與跨硬體參數外推仍有限。</p></div>
+        </div>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 資料中心需要 40 Gb/s、每 hop 低於 10 µs 且低 CPU overhead 的網路；DCQCN 可在 L3 routed、lossless fabric 上達成快速收斂、低佇列與高鏈路利用率，並已實作於 Mellanox NIC。<a class="source-ref" href="#source-intro-p1">Abstract、§1、§3 · PDF pp.1、4（論文標示 pp.523、526）</a></p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 在作者的 3-tier Clos 測試床與 trace-derived benchmark 中，incast degree 10 時，DCQCN 將 incast flow 的第 10 百分位吞吐由低於 1.12 Gb/s 提至 3.43 Gb/s；同一次設定的 spine PAUSE 計數由超過 600 萬降至約 3,000。<a class="source-ref" href="#source-fig16-p10">§6.2 · PDF p.10（論文標示 p.532）· Figures 15–16</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 最穩健的結論是「DCQCN 在本文硬體與流量條件下顯著減少 PFC 介入並改善尾端吞吐」，而不是「任何規模的 RDMA 網路都得到固定倍數提升」。</p>
+        <h3>三個先記住的 Takeaways</h3>
+        <ul>
+          <li><strong>Lossless 不等於 congestion-free：</strong>PFC 防掉包，卻沒有逐流公平概念。</li>
+          <li><strong>端到端控制與逐跳流控互補：</strong>前者負責穩態，後者兜住回饋延遲。</li>
+          <li><strong>參數就是方法的一部分：</strong>ECN 必須有機會早於 PFC 觸發，timer、byte counter 與 RED 曲線也必須一起調。</li>
+        </ul>
+<p class="bridge">直覺成立後，再沿著一次完整執行看它如何落成系統。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>CP–NP–RP 控制迴路、α 記憶與快慢兩段恢復</h2>
+          <h3>控制迴路：CP → NP → RP</h3>
+        <ol>
+          <li id="source-method-p4"><strong>Congestion Point（CP，交換器）：</strong>egress queue 進入 RED-like 區間後，以 ECN 標記經過的資料封包。交換器只提供標準訊號，不替每條 flow 維護狀態。<a class="source-ref" href="#source-method-p4">§3.1 · PDF p.4（論文標示 p.526）· Figure 5</a></li>
+          <li><strong>Notification Point（NP，接收端 NIC）：</strong>同一 flow 收到 ECN-marked packet 且最近 (N) 微秒沒有送過 CNP 時，立即回傳 Congestion Notification Packet；其後每個時間窗最多一個。本文部署 (N=50\,\mu s)。</li>
+          <li><strong>Reaction Point（RP，傳送端 NIC）：</strong>收到 CNP 後儲存 target rate、依 α 降低 current rate；沒有回饋時讓 α 衰減，再由 timer 與 byte counter 觸發 fast recovery、additive increase 或 hyper increase。</li>
+        </ol>
+        <p><a class="source-ref" href="#source-fig7-p5">§3.1 · PDF pp.4–5（論文標示 pp.526–527）· Figures 6–7、Equations 1–4</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> CP 不直接計算「該降多少」；NP 只節流回饋；RP 才保存每 flow 的 (R_C)、(R_T)、α、timer 與 counter。這使交換器維持通用，但把 NIC state capacity 與 CNP generation rate 變成可擴展性邊界。</p>
+        <h3>為何新 flow 不 slow start？</h3>
+        <p>若本機沒有其他 active flow，新 flow 由 full line rate 起跑。作者用此選擇優化「小傳輸且通常無壅塞」的共同情境；代價是 ECN → CNP → 降速的回路尚未走完前，突發流量可能迅速吃掉 buffer。<a class="source-ref" href="#source-eq3-p5">§3.1、§3.3 · PDF p.5（論文標示 p.527）</a></p>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 本文版本的 DCQCN 依賴 PFC 在回饋延遲期間防止 packet loss；DCQCN 的目標是讓 PFC 在穩態很少被觸發，而不是取消 PFC。<a class="source-ref" href="#source-method-p4">§2.3、§3.3、§8 · PDF pp.4–5、12–13（論文標示 pp.526–527、534–535）</a></p>
+        <h3>ECN 與 PFC 門檻必須協同</h3>
+        <p>ECN 觀察 egress queue，PFC 卻由 ingress queue 觸發。若 (t_{PFC}) 太低或 (t_{ECN}) 太高，PAUSE 會先發生，逐流回路來不及接手；若 PFC 太晚，buffer 又可能 overflow。作者因此把 shared-buffer occupancy 納入動態 PFC threshold，目標僅是保證 ECN 有機會先發生。<a class="source-ref" href="#source-buffer-p6">§4 · PDF p.6（論文標示 p.528）</a></p>
+<h3>收到 CNP：記住目標並按壅塞程度降速</h3>
+        <div id="source-eq1-p4" class="formula-block">
+          \[
+          R_T \leftarrow R_C,\qquad
+          R_C \leftarrow R_C\left(1-\frac{\alpha}{2}\right),\qquad
+          \alpha \leftarrow (1-g)\alpha+g
+          \]
+          <p class="formula-block__meaning"><strong>意義：</strong>(R_C) 是目前 sending rate，(R_T) 是之後恢復時追趕的 target rate；α 是近期壅塞的平滑狀態，初值為 1。連續收到 CNP 時，α 趨高，降速更重。<a class="source-ref" href="#source-eq1-p4">§3.1 · PDF p.4（論文標示 p.526）· Equation 1</a></p>
+        </div>
+        <h3>沒有 CNP：讓壅塞記憶衰退</h3>
+        <div id="source-eq2-p5" class="formula-block">
+          \[
+          \alpha \leftarrow (1-g)\alpha
+          \]
+          <p class="formula-block__meaning"><strong>意義：</strong>若 (K) 時間內沒有回饋，RP 逐步降低 α；本文 (K=55\,\mu s)，必須大於 50 µs 的 CNP generation interval，以免兩個合法 CNP 之間誤判壅塞結束。<a class="source-ref" href="#source-eq2-p5">§3.1 · PDF p.5（論文標示 p.527）· Equation 2</a></p>
+        </div>
+        <h3>速率恢復：先快後慢</h3>
+        <div id="source-eq3-p5" class="formula-block">
+          \[
+          \text{Fast recovery: }R_C \leftarrow \frac{R_T+R_C}{2}
+          \]
+          \[
+          \text{Additive increase: }R_T \leftarrow R_T+R_{AI},\quad
+          R_C \leftarrow \frac{R_T+R_C}{2}
+          \]
+          <p class="formula-block__meaning"><strong>意義：</strong>前 (F=5) 次 recovery event 先向固定 (R_T) 折半逼近，之後每次把 target 增加固定 (R_{AI})。timer 讓低速 flow 即使送不滿 byte threshold 也能恢復。<a class="source-ref" href="#source-eq3-p5">§3.1 · PDF p.5（論文標示 p.527）· Equations 3–4</a></p>
+        </div>
+        <h3>Buffer threshold：先讓 ECN 發聲，再由 PFC 兜底</h3>
+        <div id="source-buffer-p6" class="formula-block">
+          \[
+          t_{PFC}=\frac{\beta(B-8n t_{flight}-s)}{8},\qquad
+          t_{ECN}<\frac{\beta(B-8n t_{flight})}{8n(\beta+1)}
+          \]
+          <p class="formula-block__meaning"><strong>變數：</strong>(B) 為 shared buffer、(n) 為 port 數、(s) 為目前已占用 buffer、(t_{flight}) 為 PAUSE 生效前的 headroom。本文 Trident II 設定 (t_{flight}=22.4\,KB)、β=8，得到 (t_{ECN}<21.75\,KB)。這只保證 ECN 先於 PFC，不保證 PFC 永不觸發。<a class="source-ref" href="#source-buffer-p6">§4 · PDF p.6（論文標示 p.528）</a></p>
+        </div>
+        <h3>流體模型：公平固定點，不是全域穩定性證明</h3>
+        <div id="source-eq10-p7" class="formula-block">
+          \[
+          R_C=\frac{C}{N}
+          \]
+          <p class="formula-block__meaning"><strong>意義：</strong>在 (N) 條 greedy long flows、單一容量 (C) bottleneck、ECN 早於 PFC、固定 control-loop delay 等假設下，令模型導數為零可得唯一公平 fixed point；作者也以數值方式求得唯一 marking probability。完整 stability analysis 留待未來工作。<a class="source-ref" href="#source-eq10-p7">§5.1 · PDF p.7（論文標示 p.529）· Equations 5–11，特別是 Equation 10</a></p>
+        </div>
+<figure data-figure-role="method" id="source-fig7-p5">
+          <img src="assets/images/fig-07-p05-rp-algorithm.png" alt="Figure 7：DCQCN Reaction Point 的逐流降速與恢復狀態機">
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 7</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>由最上方收到 CNP 開始向下讀；左側是收到壅塞訊號後的 cut rate，中央以 timer／byte counter 觸發 recovery，右側則獨立更新 α。</span></figcaption>
+        </figure>
+<p class="bridge">方法看似合理，真正的問題是：實驗有沒有把這條因果鏈撐起來？</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>從單一瓶頸到混合流量：DCQCN 是否修好尾端吞吐</h2>
+          <h3>三層證據鏈</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>本文從小型可控微基準逐步走向 trace-derived workload。</caption>
+            <thead><tr><th>層級</th><th>設定</th><th>回答的問題</th></tr></thead>
+            <tbody>
+              <tr><td>PFC 病徵與基本機制</td><td>40 Gb/s 主機與 Arista 7050QX32；重現 unfairness、victim flow，再啟用 DCQCN。</td><td>問題是否真的來自 PFC 粒度？逐流控制是否對症？</td></tr>
+              <tr><td>模型與參數</td><td>三台機器的兩 flow 實驗；另以 20 台機器做 (K{:}1) incast，(K=1\ldots19)。</td><td>流體模型是否貼近 NIC 實作？timer、RED、(g) 等旋鈕如何影響收斂與 queue？</td></tr>
+              <tr><td>3-tier Clos benchmark</td><td>4 ToR、4 leaf、2 spine，每 ToR 5 台主機；BGP／ECMP；20 組 user pairs 與一組 disk-rebuild-like incast。</td><td>混合流量下的 median／tail throughput、PAUSE 數量與負載承載能力。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p id="source-exp-setup-p9">Benchmark 的流量特徵取自某 480-machine cluster 一天、超過 1,000 萬條 flows 的 trace，但作者<strong>沒有直接 replay</strong>；而是合成相同 flow-size distribution，並用 incast 當 disk rebuild 的合理 proxy。Incast degree 為 2–10；每個設定隨機選 hosts 與 pairs、重複 5 次，每次 2 分鐘。<a class="source-ref" href="#source-exp-setup-p9">§6、§6.2 · PDF pp.9–10（論文標示 pp.531–532）</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> trace-derived 不等於 production replay；公開結果能回答控制機制在受控 3-tier 拓樸上的效果，不能直接代表 480 台叢集的端到端應用收益。</p>
+<h3>先確認 PFC 的兩個病徵被修復</h3>
+        <p>重做 Figure 3 與 Figure 4 的情境後，四個 senders 幾乎平分瓶頸，且增加遠端 sender 時 victim flow throughput 不再下降。這是最直接的「機制對症」證據。<a class="source-ref" href="#source-fig7-p5">§3.2 · PDF pp.5–6（論文標示 pp.527–528）· Figures 8–9</a></p>
+        <h3>模型、實作與單一瓶頸</h3>
+        <p>兩 flow 實驗中，第二條 flow 在 10 ms 後加入，流體模型與 NIC 實作的 sending-rate 曲線相近。20 台主機的 (K{:}1) incast 中，aggregate throughput 始終高於 39 Gb/s，queue 未超過 100 KB，作者換算為 40 Gb/s 下約 20 µs 的排隊量。<a class="source-ref" href="#source-eq10-p7">§5.1、§6.1 · PDF pp.6–7、9（論文標示 pp.528–529、531）· Figures 10、14</a></p>
+        <h3>混合 benchmark：收益主要出現在尾端</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> incast degree 10 時，兩台 spine 在未啟用 DCQCN 的單次 run 收到超過 600 萬個 PAUSE；啟用後約 3,000。相同 degree 下，incast flows 的第 10 百分位吞吐由低於 1.12 Gb/s 提升至 3.43 Gb/s，接近四分之一個 40 Gb/s bottleneck 的 4 Gb/s fair share。<a class="source-ref" href="#source-fig16-p10">§6.2 · PDF p.10（論文標示 p.532）· Figures 15–16</a></p>
+        <p>Figure 16 同時顯示 user-flow median／tail throughput 在 incast 增大時保持得更好；incast flows 本身的 median 可能稍降，但 tail 更均勻。這支持 DCQCN 把 PFC 造成的跨流干擾轉為較可控的逐流分享。</p>
+        <h3>正確解讀「16×」</h3>
+        <p id="source-fig17-p11" class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 固定 incast degree 10，在此 3-tier testbed 中，啟用 DCQCN 且有 80 組 user communicating pairs 的 user-flow throughput CDF，約可匹配未啟用 DCQCN、僅 5 組時的表現；作者據此稱可承載 16× 更多 user traffic 而不劣化。<a class="source-ref" href="#source-fig17-p11">§6.2 · PDF p.11（論文標示 p.533）· Figure 17</a></p>
+        <p>這不是 16× link throughput，也不是跨 workload 的一般容量倍數，而是兩個指定負載端點之間的比較。</p>
+        <h3>Queue-length proxy，而非 application latency</h3>
+        <p id="source-fig19-p11">20:1 incast microbenchmark 中，DCQCN 的第 95 百分位 instantaneous egress queue length 為 76.6 KB，DCTCP 為 162.9 KB。結果支持較低 queueing delay 的推論，但論文沒有直接量測 request latency 或 flow completion time。<a class="source-ref" href="#source-fig19-p11">§6.3 · PDF p.11（論文標示 p.533）· Figure 19</a></p>
+<h3>為何不能直接沿用 QCN／DCTCP 參數？</h3>
+        <p id="source-param-p8">Strawman 設定 (B=150\,KB)、(T=1.5\,ms)、(K_{min}=K_{max}=40\,KB)、(P_{max}=1)、(g=1/16) 時，兩 flows 無法收斂。原因是 byte counter 讓送得快的 flow 更快取得升速事件；QCN 原本用 probabilistic feedback 抵消，DCQCN 並沒有相同回饋。<a class="source-ref" href="#source-param-p8">§5.2 · PDF p.8（論文標示 p.530）· Figures 11–12</a></p>
+        <h3>作者選定的成套參數</h3>
+        <div class="table-scroll" id="source-fig14-p9">
+          <table>
+            <caption>本文 40 Gb/s、Trident II 測試床設定；不是 RoCEv2 的通用最佳值。</caption>
+            <thead><tr><th>參數</th><th>值</th><th>因果角色</th></tr></thead>
+            <tbody>
+              <tr><td>Rate-increase timer</td><td>55 µs</td><td>略大於 50 µs CNP interval；讓低速 flow 不靠送滿大量 bytes 也能恢復。</td></tr>
+              <tr><td>Byte counter</td><td>10 MB</td><td>避免高速 flow 太快進入 hyper increase。</td></tr>
+              <tr><td>(K_{min})</td><td>5 KB</td><td>儘早開始低機率 ECN marking。</td></tr>
+              <tr><td>(K_{max})</td><td>200 KB</td><td>保留漸進 RED marking 區間。</td></tr>
+              <tr><td>(P_{max})</td><td>1%</td><td>讓較高速 flow 統計上更易得到更多 CNP，而非所有 flow 同時硬切。</td></tr>
+              <tr><td>(g)</td><td>1/256</td><td>降低 queue 高度與振盪，接受稍慢收斂。</td></tr>
+              <tr><td>(R_{AI})</td><td>40 Mb/s</td><td>平衡恢復速度、振盪與 incast scalability。</td></tr>
+              <tr><td>(F)</td><td>5</td><td>Fast-recovery iterations。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-fig14-p9">§5.2 · PDF pp.8–9（論文標示 pp.530–531）· Figures 11–14、Table 2</a></p>
+        <h3>PFC 與門檻消融</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 8:1 incast 中，保留 DCQCN 但關閉 PFC 時，incast 第 10 百分位吞吐為 0；保留 PFC 卻設成 (t_{PFC}=24.47\,KB)、(t_{ECN}=120\,KB) 時，結果勝過僅用 PFC，仍劣於正確設定。<a class="source-ref" href="#source-fig18-p11">§6.2 · PDF p.11（論文標示 p.533）· Figure 18</a></p>
+        <p>這支持「本文 DCQCN 必須和 PFC、正確 threshold coordination 一起部署」，但不能推導所有 RDMA congestion control 都必須依賴 PFC。</p>
+        <h3>敏感度與可擴展性界線</h3>
+        <ul>
+          <li>額外 50 µs feedback delay 仍可收斂；α update interval 由 55 增至 110 µs 只略微放慢，但 RTT 顯著不同時仍須重調。</li>
+          <li>較小 (g) 降低 queue 與變動，代價是稍慢收斂。</li>
+          <li>目前 (R_{AI}) 設定在 16:1 incast 不造成 buffer starvation；減半可支援 32:1，但收斂更慢。</li>
+          <li>ConnectX-3 Pro 的 CNP capacity 約能以要求頻率服務 10–20 條同時壅塞 flows；ConnectX-4 則超過 200 條。這是 NIC 實作邊界，不是演算法方程式會自動消失的成本。</li>
+        </ul>
+        <p><a class="source-ref" href="#source-param-p8">§3.3、§5.2 · PDF pp.6、8（論文標示 pp.528、530）</a></p>
+<figure data-figure-role="result" id="source-fig16-p10">
+          <img src="assets/images/fig-16-p10-benchmark-traffic.png" alt="Figure 16：不同 incast degree 下 user 與 incast flows 的 median 與第 10 百分位吞吐">
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 16</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>上排 user flows 顯示沒有 DCQCN 時，incast 越大，尤其尾端吞吐越差；下排則確認 DCQCN 沒有只保護背景流量而完全犧牲 incast flows。</span></figcaption>
+        </figure>
+<figure data-figure-role="result" id="source-fig18-p11">
+          <img src="assets/images/fig-18-p11-pfc-threshold-ablation.png" alt="Figure 18：PFC、錯誤 buffer thresholds 與完整 DCQCN 的第 10 百分位吞吐比較">
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 18</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>藍色完整設定最好；關掉 PFC 時 incast tail throughput 接近零，錯配門檻雖勝過僅用 PFC，仍明顯落後，說明演算法與 switch buffer 設定必須成套。</span></figcaption>
+        </figure>
+<p class="bridge">數據回答了部分問題；剩下的是適用邊界與仍未被證明的部分。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>流體模型、2015 硬體與參數可移植性</h2>
+          <div class="table-scroll">
+          <table>
+            <caption>論文證明了什麼，以及尚未證明什麼。</caption>
+            <thead><tr><th>面向</th><th>優點／證據</th><th>限制／風險</th></tr></thead>
+            <tbody>
+              <tr><td>部署介面</td><td>交換器只需既有 PFC 與 RED/ECN；逐流狀態主要在 NIC。</td><td>不是零設定：ECN/PFC threshold coordination 是正確性的核心。</td></tr>
+              <tr><td>公平與隔離</td><td>單瓶頸與 benchmark 明顯改善 fairness、victim flow 與 tail throughput。</td><td id="source-fig20-p12">Multi-bottleneck parking-lot 情境只被 RED-like marking 緩解，未完全解決 max-min fairness。<a class="source-ref" href="#source-fig20-p12">§7 · PDF pp.11–12（論文標示 pp.533–534）· Figure 20</a></td></tr>
+              <tr><td>Loss tolerance</td><td>PFC 可防主要的 buffer-overflow loss。</td><td id="source-fig21-p12">Corruption、故障與錯誤設定仍會掉包；ConnectX-3 Pro 的 go-back-N 在 loss rate 超過 0.1% 後吞吐快速惡化。<a class="source-ref" href="#source-fig21-p12">§7 · PDF p.12（論文標示 p.534）· Figure 21</a></td></tr>
+              <tr><td>延遲</td><td>Queue-length CDF 支持較低 queueing delay。</td><td>沒有直接報告 application latency／FCT，也沒有與 TIMELY 做實驗比較。</td></tr>
+              <tr><td>規模</td><td>演算法以大型 routed datacenter 為設計目標，作者報告已進入 NIC 與資料中心部署。</td><td id="source-deployment-p12">公開 evaluation 仍是小型可控 testbed；超過 800 台 simulation 未刊出，full-scale deployment 當時仍進行中。<a class="source-ref" href="#source-deployment-p12">§7 · PDF p.12（論文標示 p.534）</a></td></tr>
+              <tr><td>共存與故障</td><td>可用 802.3 priority 隔離 TCP 與 RDMA traffic。</td><td>TCP friendliness 不是本文目標、沒有評估；故障 NIC 造成 PFC storm 的緩解仍在研究。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 應解讀為設計場景與部署方向，不是本文公開 testbed 的規模證據。最重要的未完成部分是一般化穩定性、多瓶頸公平、production failure handling 與跨硬體重調方法。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>從 DCQCN 延伸到今天的無損網路</h2>
+          <h3>最值得帶走的系統設計觀</h3>
+        <p>DCQCN 把一個看似「壅塞演算法」的問題拆成三種時間尺度：</p>
+        <ol>
+          <li><strong>封包／微秒級：</strong>PFC 先確保突發期間不因 buffer overflow 丟包；</li>
+          <li><strong>回饋回路級：</strong>ECN → CNP → RP 對真正壅塞的 flow 降速；</li>
+          <li><strong>穩態級：</strong>α、timer、byte counter、RED 機率與 additive increase 共同決定公平、queue 與振盪。</li>
+        </ol>
+        <p>這也解釋為何「開啟 ECN」不是完整部署：如果 PFC 比 ECN 更早觸發，或 timer 與 feedback latency 不匹配，控制迴路在名稱上存在，因果上卻沒有機會主導系統。</p>
+        <h3>搬到新硬體時，應重新量測而非複製 Table 2</h3>
+        <ul>
+          <li>鏈路速率、MTU、RTT／CNP generation interval；</li>
+          <li>switch shared-buffer accounting、PFC headroom 與 ingress／egress threshold 語義；</li>
+          <li>NIC 可維持的逐流 state、rate limiter granularity 與 CNP processing capacity；</li>
+          <li>目標 workload 的 incast degree、flow-size distribution、multi-bottleneck 頻率與可接受 tail metric。</li>
+        </ul>
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> 若把本文帶到更高速鏈路與更深的 oversubscription，最值得重做的不是單純提高 (K_{max})，而是把 control-loop delay、NIC feedback capacity、PFC activation ratio 與 multi-bottleneck fairness 納入同一個可驗證模型；否則 buffer 變大只會掩蓋反應時間，未必改善隔離。</p>
+        <p id="source-conclusion-p13" class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 本文的強項是把可部署限制、硬體狀態機、buffer 推導、流體模型與受控實驗串成閉環。它沒有證明所有情境的穩定與公平，卻清楚示範：datacenter congestion control 的正確性常存在於 NIC、switch threshold 與流量時間尺度的交界。<a class="source-ref" href="#source-conclusion-p13">§9 · PDF p.13（論文標示 p.535）</a></p>
+<ol>
+          <li>若允許新 flow line-rate 起跑，除了 PFC，還有哪些 bounded-burst 或 credit 機制可以兜住 ECN/CNP 回饋延遲？它們會改變 DCQCN 的哪些參數？</li>
+          <li>Figure 18 能證明「本文版本需要 PFC」，但能否證明「RDMA congestion control 必須使用 PFC」？還缺哪些對照組？</li>
+          <li>流體模型的 (R_C=C/N) 固定點在 multi-bottleneck、短流與非同步 CNP 下會如何改變？應以哪個 tail fairness 指標檢驗？</li>
+          <li>如果在 100／400 Gb/s、不同 shared-buffer ASIC 上重部署，應先量測哪些量，如何判斷 ECN 確實先於 PFC 主導？</li>
+        </ol>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>狀態變數、門檻公式與證據索引</h2>
+          <div class="table-scroll">
+          <table>
+            <caption>論文書目與來源。</caption>
+            <tbody>
+              <tr><th scope="row">正式標題</th><td>Congestion Control for Large-Scale RDMA Deployments</td></tr>
+              <tr><th scope="row">作者</th><td>Yibo Zhu、Haggai Eran、Daniel Firestone、Chuanxiong Guo、Marina Lipshteyn、Yehonatan Liron、Jitendra Padhye、Shachar Raindel、Mohamad Haj Yahia、Ming Zhang</td></tr>
+              <tr><th scope="row">單位</th><td>Microsoft、Mellanox、University of California, Santa Barbara</td></tr>
+              <tr><th scope="row">發表</th><td>ACM SIGCOMM ’15，2015 年 8 月 17–21 日，London, United Kingdom</td></tr>
+              <tr><th scope="row">DOI</th><td><a href="https://doi.org/10.1145/2785956.2787484" target="_blank" rel="noopener noreferrer">10.1145/2785956.2787484</a></td></tr>
+              <tr><th scope="row">官方 PDF</th><td><a href="https://conferences.sigcomm.org/sigcomm/2015/pdf/papers/p523.pdf" target="_blank" rel="noopener noreferrer">SIGCOMM 2015 PDF</a></td></tr>
+              <tr><th scope="row">本地 PDF</th><td><a href="Congestion%20Control%20for%20Large-Scale%20RDMA%20Deployments.pdf">開啟本地 PDF</a></td></tr>
+              <tr><th scope="row">頁數</th><td data-summary-field="pdf-page-count">共 14 頁</td></tr>
+              <tr><th scope="row">程式碼</th><td>論文未提供公開實作；演算法由作者實作於 Mellanox NIC。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 本文歸入 <strong>AI Infrastructure / Cluster Networking</strong>：其主要貢獻不是 RDMA transport 或交換器拓樸本身，而是資料中心 RoCEv2 網路上由 PFC、ECN/CNP 與 NIC 逐流 rate control 組成的壅塞控制閉環。<a class="source-ref" href="#source-method-p4">§2.3–§4 · PDF pp.4–6（論文標示 pp.526–528）</a></p>
+<h3>術語表</h3>
+        <dl class="term-list">
+          <dt>RDMA</dt><dd>Remote Direct Memory Access；NIC 直接存取已註冊記憶體，降低 CPU 與軟體路徑介入。</dd>
+          <dt>RoCEv2</dt><dd>RDMA over Converged Ethernet v2；以 Ethernet／IP／UDP 承載 InfiniBand transport。</dd>
+          <dt>PFC</dt><dd>Priority-based Flow Control；逐跳暫停某 priority 的 ingress traffic，用於避免 buffer overflow。</dd>
+          <dt>ECN</dt><dd>Explicit Congestion Notification；交換器在封包標記壅塞，而非先丟包。</dd>
+          <dt>CNP</dt><dd>Congestion Notification Packet；RoCEv2 接收端 NIC 回給 sender 的壅塞通知。</dd>
+          <dt>CP／NP／RP</dt><dd>Congestion Point／Notification Point／Reaction Point，分別是標記的交換器、回饋的接收端 NIC、降速的傳送端 NIC。</dd>
+          <dt>Head-of-line blocking</dt><dd>同一 queue 或 priority 中，無辜 flow 因前方／同組壅塞流量而一起被阻塞。</dd>
+          <dt>Incast</dt><dd>多個 sender 同時向少數 receiver 或同一 bottleneck 傳送，短時間形成大量聚合流量。</dd>
+          <dt>(R_C／R_T／α)</dt><dd>Current rate、target rate 與壅塞平滑狀態；三者共同控制 RP 的降速與恢復。</dd>
+          <dt>(K_{min}／K_{max}／P_{max})</dt><dd>RED-like ECN 曲線的起始門檻、全標記門檻與區間頂端標記機率。</dd>
+        </dl>
+        <h3>重點證據索引</h3>
+        <ol class="source-index">
+          <li><span><a href="#source-fig1-p2">RDMA CPU／latency 動機</a>：§2.1，PDF p.2（論文標示 p.524），Figure 1。</span></li>
+          <li><span><a href="#source-fig4-p3">PFC victim flow</a>：§2.2，PDF p.3（論文標示 p.525），Figure 4。</span></li>
+          <li><span><a href="#source-fig7-p5">RP 狀態機</a>：§3.1，PDF p.5（論文標示 p.527），Figure 7。</span></li>
+          <li><span><a href="#source-buffer-p6">ECN／PFC threshold 推導</a>：§4，PDF p.6（論文標示 p.528）。</span></li>
+          <li><span><a href="#source-eq10-p7">公平固定點</a>：§5.1，PDF p.7（論文標示 p.529），Equation 10。</span></li>
+          <li><span><a href="#source-fig14-p9">最終參數</a>：§5.2–§6.1，PDF pp.8–9（論文標示 pp.530–531），Figures 11–14。</span></li>
+          <li><span><a href="#source-fig16-p10">Benchmark throughput／PAUSE</a>：§6.2，PDF p.10（論文標示 p.532），Figures 15–16。</span></li>
+          <li><span><a href="#source-fig18-p11">PFC 與門檻消融</a>：§6.2，PDF p.11（論文標示 p.533），Figure 18。</span></li>
+          <li><span><a href="#source-fig19-p11">Queue-length latency proxy</a>：§6.3，PDF p.11（論文標示 p.533），Figure 19。</span></li>
+          <li><span><a href="#source-deployment-p12">規模與部署限制</a>：§7，PDF p.12（論文標示 p.534）。</span></li>
+        </ol>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>Congestion Control for Large-Scale RDMA Deployments · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>

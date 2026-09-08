@@ -1,0 +1,935 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="FlashAttention 論文閱讀紀錄：從 GPU 記憶體階層、分塊 online softmax、反向重算，到 IO 複雜度與端到端實驗的證據導讀。">
+  <title>FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 46rem;
+      --wide: 62rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">AI Infrastructure / GPU Attention Kernels</p>
+      <h1>FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness</h1>
+      <div class="paper-dek" data-section-role="thesis"><p class="lead"><strong>FlashAttention 不改變注意力的數學結果，而是改變資料在 GPU 記憶體階層中的旅程：</strong>以 SRAM 分塊、可合併的穩定 softmax 狀態與反向重算，避免在 HBM 實體化 \(N\times N\) 注意力矩陣，因而以更多局部計算換取更少昂貴 IO。</p>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 演算法仍回傳精確的 \(\operatorname{softmax}(QK^\top)V\)，額外記憶體為 \(O(N)\)，且在指定 SRAM 範圍內大幅降低 HBM 存取。 <a class="source-ref" href="#source-alg1-p5">§3.1–3.2 · PDF pp.4–5 · Algorithm 1</a></p></div>
+      <p class="paper-byline">Tri Dao、Daniel Y. Fu、Stefano Ermon、Atri Rudra、Christopher Ré</p>
+      <p class="paper-meta">
+        <span>Advances in Neural Information Processing Systems 35（NeurIPS 2022），Main Conference Track</span>
+        <span>2022</span>
+        <span>AI Infrastructure / GPU Attention Kernels</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-08">2026 年 9 月 8 日</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://proceedings.neurips.cc/paper/2022/hash/67d57c32e20fd0a7a302cb81d36e40d5-Abstract-Conference.html" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="FlashAttention-NeurIPS-2022.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀路線：</strong>先用〈<a href="#problem">瓶頸不是算多少，而是中間矩陣被搬了多少次</a>〉抓住根因，再讀〈<a href="#method">Tiling、Online Softmax 與反向重算如何消掉落盤</a>〉走完整流程，最後用〈<a href="#evidence">更多 FLOPs 卻更快：Kernel、端到端與長序列證據</a>〉逐項驗證。熟悉背景的讀者可直接從問題章開始。</p>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">從 SRAM／HBM、Softmax 到 N×N 中間矩陣</a></li>
+            <li><a href="#problem">瓶頸不是算多少，而是中間矩陣被搬了多少次</a></li>
+            <li><a href="#insight">精確 Attention 不必付出標準 Attention 的 I/O 代價</a></li>
+            <li><a href="#method">Tiling、Online Softmax 與反向重算如何消掉落盤</a></li>
+            <li><a href="#evidence">更多 FLOPs 卻更快：Kernel、端到端與長序列證據</a></li>
+            <li><a href="#critique">Crossover、硬體依賴與 Block-sparse 的適用邊界</a></li>
+            <li><a href="#extensions">把 IO-aware 思維帶到其他核心會發生什麼</a></li>
+            <li><a href="#reference">不變量、I/O 複雜度與關鍵圖表</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>從 SRAM／HBM、Softmax 到 N×N 中間矩陣</h2>
+          <h3>只需要四個前置概念</h3>
+        <ol>
+          <li><strong>Scaled dot-product attention：</strong>每個 query 與所有 keys 形成分數，逐列 softmax 後再加權 values；本論文為簡化記號省略 \(1/\sqrt d\)，不影響資料流論證。</li>
+          <li><strong>HBM 與 SRAM：</strong>HBM 容量大但較慢，on-chip SRAM 容量小但快。論文以 A100 為例：HBM 40–80 GB、1.5–2.0 TB/s；每個 SM 的 SRAM 192 KB，估計約 19 TB/s。 <a class="source-ref" href="#source-hardware-p3">§2.1 · PDF p.3</a></li>
+          <li><strong>memory-bound：</strong>若核心花在搬資料的時間多於算術，減少 FLOPs 未必縮短 wall-clock time；此時 arithmetic intensity（每搬一 byte 做多少運算）比 FLOPs 總數更有解釋力。</li>
+          <li><strong>kernel fusion 與 tiling：</strong>fusion 減少 kernel 邊界的 HBM 往返；tiling 則把工作集切小以重用 SRAM。難點是 softmax 跨越整列，不能單純逐塊獨立正規化。</li>
+        </ol>
+        <h3>為何既有方向仍留下空缺</h3>
+        <p>許多高效 Transformer 以稀疏、低秩或其他近似，把理論計算複雜度降為線性或近線性；但不規則存取、額外 kernel 與未消除的 IO 可能使理論 FLOPs 優勢沒有轉成實際速度。另一些記憶體高效 exact attention 已知道可分塊重算，卻未從 GPU HBM↔SRAM 的 IO 複雜度出發共同設計資料流與核心。 <a class="source-ref" href="#source-related-p17">Appendix A–B · Supplemental PDF pp.17–20</a></p>
+<p class="bridge">有了這些背景，下一個問題是：瓶頸不是算多少，而是中間矩陣被搬了多少次。</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>瓶頸不是算多少，而是中間矩陣被搬了多少次</h2>
+          <h3>症狀 → 根因 → 設計要求</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>觀察到的症狀</th><th>根本機制</th><th>FlashAttention 的要求</th></tr></thead>
+            <tbody>
+              <tr><td>序列變長時，注意力速度與記憶體迅速惡化。</td><td>標準實作在 HBM 實體化 \(S\) 與 \(P\) 兩個 \(N\times N\) 張量。</td><td>任何時刻只保留可放入 SRAM 的 tile，不讓完整 \(S/P\) 落地。</td></tr>
+              <tr><td>只把算式 fuse 起來仍要為 backward 保存中間值。</td><td>訓練反向需要 \(P\)；若把它寫到 HBM，主要 IO 又回來。</td><td>只存 \(O\) 與每列 normalizer，反向在 SRAM 內重算局部 \(S/P\)。</td></tr>
+              <tr><td>每個 key tile 各做 softmax 會得到錯誤結果。</td><td>softmax 分母與最大值跨越整列，tile 彼此耦合。</td><td>維護可合併的 row max \(m\) 與 exponential sum \(\ell\)，並在最大值更新時重縮放舊輸出。</td></tr>
+              <tr><td>近似演算法 FLOPs 較少，wall-clock 卻不一定較快。</td><td>GPU 執行時間取決於資料移動與硬體映射，不只算術次數。</td><td>把 HBM access 當一級成本，並以真實 runtime、memory 與端到端訓練驗證。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> FlashAttention 的設計目標不是改寫注意力函數，而是在 exactness、\(O(N^2d)\) 算術與 GPU 記憶體階層的約束下，最小化昂貴的 HBM access。 <a class="source-ref" href="#source-theory-p5">§3.1–3.2 · PDF pp.4–6</a></p>
+<div class="table-scroll">
+          <table>
+            <thead><tr><th>方法</th><th>是否 exact</th><th>如何處理 \(N^2\)</th><th>與 FlashAttention 的關係</th></tr></thead>
+            <tbody>
+              <tr><td>標準 PyTorch / Megatron attention</td><td>是</td><td>在 HBM 物化 score/probability；算術與 activation 皆二次方。</td><td>FlashAttention 保留相同函數與二次方算術，但消除二次方 activation。</td></tr>
+              <tr><td>Linformer、Performer 等近似 attention</td><td>否</td><td>以低秩、kernelization 等降低算術複雜度。</td><td>長序列可能跨越 dense FlashAttention 的速度；但需接受近似與不同品質/實作條件。</td></tr>
+              <tr><td>Reformer、Local / OpenAI Sparse Attention</td><td>通常為稀疏近似</td><td>只計算部分 token pairs。</td><td>block-sparse FlashAttention 把規則稀疏 mask 結合 IO-aware tiles，使 sparsity 較直接轉成 wall-clock。</td></tr>
+              <tr><td>Rabe &amp; Staats 的 memory-efficient exact attention</td><td>是</td><td>分塊、重算，避免保存完整 attention。</td><td>概念相近；FlashAttention 增量更新單一輸出，backward 只重算 attention、不重算每塊暫時輸出，並把 GPU IO 複雜度與 fused kernel 列為一級目標。 <a class="source-ref" href="#source-related-p20">Appendix B.5 · Supplemental PDF p.20</a></td></tr>
+              <tr><td>Apex FMHA / 自動 fusion</td><td>是</td><td>融合部分或全部操作，但 FMHA forward 仍把 attention matrix 存入 HBM。</td><td>補充實驗顯示 FlashAttention 對 NVFuser、Functorch、TVM 約快 2–3×；相對 FMHA 在短序列的總前反向優勢較小。 <a class="source-ref" href="#source-fusion-p27">Appendix E.5–E.6 · Supplemental PDF pp.27–28</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> FlashAttention 並非發明 tiling、online softmax 或 checkpointing 中的任何單一概念；創新在於把這些構件依 GPU IO 成本重新組合，給出 exactness/IO 證明，並做到足以改變端到端模型訓練的 CUDA 實作。這是系統論文常見但重要的貢獻型態：新穎性位於跨層協同設計。</p>
+<p class="bridge">問題的限制已經清楚；接著要抓住作者最關鍵的轉念。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>精確 Attention 不必付出標準 Attention 的 I/O 代價</h2>
+        <h3>先看結論</h3>
+        <p>傳統實作把 score \(S=QK^\top\) 與 probability \(P=\operatorname{softmax}(S)\) 寫入 HBM；兩者都是 \(N\times N\)。FlashAttention 將 Q、K、V 切成能放入 on-chip SRAM 的小塊，在 SRAM 中完成 score、softmax、遮罩、dropout 與 \(PV\) 的融合計算，只把輸出與每列兩個 softmax 統計量寫回 HBM。反向傳播再從 Q、K、V 與統計量重算局部 score/probability，而不是讀回整張注意力矩陣。 <a class="source-ref" href="#source-intro-p2">§1 · PDF p.2 · Figure 1</a></p>
+        <figure data-figure-role="method">
+          <a href="assets/images/figure-01-io-aware-tiling.png"><img src="assets/images/figure-01-io-aware-tiling.png" alt="GPU 記憶體階層、FlashAttention 分塊資料流與 GPT-2 注意力核心時間比較"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 1</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>先看左圖約一個數量級的 SRAM/HBM 頻寬差，再沿中圖紅色 K/V 外圈與藍色 Q 內圈追資料。虛線框的 \(N\times N\) 矩陣沒有落到 HBM；右圖才是這個資料流帶來的 7.6× attention-computation speedup，而非模型 FLOPs 變少。</span></figcaption>
+        </figure>
+        <div class="takeaway-list">
+          <div class="takeaway-item"><p class="takeaway-label">不變</p><p><strong>模型語義：</strong>dense 版本是 exact attention，FLOPs 仍為 \(O(N^2d)\)，不是近似或線性注意力。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">改變</p><p><strong>資料流：</strong>不在 HBM 保存 \(S\) 與 \(P\)，而以 tile 為單位在 SRAM 中即算即消化。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">關鍵交換</p><p><strong>多算、少搬：</strong>反向重算增加 FLOPs，卻因 HBM 讀寫從 35.3 GB 降到 4.4 GB，使測試案例由 35.1 ms 降到 11.7 ms。 <a class="source-ref" href="#source-fig2-p6">§3.2 · PDF p.6 · Figure 2</a></p></div>
+          <div class="takeaway-item"><p class="takeaway-label">實際價值</p><p><strong>把長上下文變成可訓練：</strong>實驗涵蓋 BERT、GPT-2、LRA、長文件分類與最長 64K 的 Path-256。</p></div>
+        </div>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 主論文報告 BERT-large 到目標精度的訓練時間由 20.0±1.5 分鐘降至 17.4±1.4 分鐘；GPT-2 small 在相同 18.2 perplexity 下由 HuggingFace 的 9.5 天降至 2.7 天；注意力記憶體隨序列長度呈線性成長。 <a class="source-ref" href="#source-table1-p7">§4.1 · PDF p.7 · Tables 1–2</a> <a class="source-ref" href="#source-fig3-p9">§4.3 · PDF p.9 · Figure 3</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 這篇論文的架構影響力來自一個可移植的系統觀念：對 memory-bound 核心，先追蹤最慢層級的位元組搬運，而非只比較 FLOPs。它把「exact attention 必然要存二次方中間張量」從模型假設改寫為實作選擇。</p>
+<p class="bridge">直覺成立後，再沿著一次完整執行看它如何落成系統。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>Tiling、Online Softmax 與反向重算如何消掉落盤</h2>
+          <h3>先用一列 query 走完一次</h3>
+        <p>想像一個 query row 的所有 keys 被切成三個 tiles。處理第一塊時，核心得到局部最大值、局部指數和與局部加權輸出；第二塊若出現更大的 score，不能把舊結果直接相加，而要先用新舊最大值差把舊累積量縮回同一尺度，再合併新塊。只要一路保存「截至目前的最大值 \(m\)」「截至目前的指數和 \(\ell\)」「已正規化的部分輸出 \(O\)」，掃完所有 tiles 就與整列一次 softmax 完全相同。</p>
+        <h3>前向傳播：六個動作</h3>
+        <ol>
+          <li><strong>依 SRAM 容量決定 tile：</strong>將 Q 切成 \(B_r\times d\)，K、V 切成 \(B_c\times d\)，讓 K/V、Q/O 與 score tile 能同時駐留 on-chip。</li>
+          <li><strong>外圈固定一塊 K、V：</strong>由 HBM 載入 \(K_j,V_j\) 一次，接著遍歷所有 Q tiles，使 K/V 在 SRAM 被重用。</li>
+          <li><strong>載入目前 Q 與狀態：</strong>取出 \(Q_i,O_i,m_i,\ell_i\)，在 SRAM 計算 \(S_{ij}=Q_iK_j^\top\)。</li>
+          <li><strong>局部穩定 softmax：</strong>求 tile 的 row max \(\tilde m_{ij}\)、未正規化機率 \(\tilde P_{ij}=\exp(S_{ij}-\tilde m_{ij})\) 與 row sum \(\tilde\ell_{ij}\)。</li>
+          <li><strong>線上合併：</strong>取 \(m_i^{new}=\max(m_i,\tilde m_{ij})\)，重縮放舊累積量和新 tile，再更新 \(\ell_i\) 與 \(O_i\)。</li>
+          <li><strong>只寫小狀態回 HBM：</strong>輸出 block 與每列 \(m,\ell\) 寫回；完整 \(S\) 與 \(P\) 從未離開 SRAM。遮罩與 dropout 也在同一 CUDA kernel 完成。 <a class="source-ref" href="#source-alg1-p5">§3.1 · PDF pp.4–5 · Algorithm 1</a></li>
+        </ol>
+        <h3>反向傳播：重算是優化，不是妥協</h3>
+        <p>標準 backward 會讀取已保存的 \(P\) 並產生 \(dP,dS\) 等二次方中間量。FlashAttention 保存前向的 \(O,m,\ell\)，反向逐 tile 從 Q、K、V 重建 \(S_{ij},P_{ij}\)，當場計算梯度後丟棄。dropout 不保存 \(N\times N\) mask，而保存隨機數生成器狀態並重播。多出的算術發生在快速的 on-chip 路徑，省下的則是慢速 HBM 往返。 <a class="source-ref" href="#source-backward-p20">Appendix B.4 · Supplemental PDF pp.20–21 · Algorithm 4</a></p>
+        <h3>Block-sparse 延伸</h3>
+        <p>若 mask 以 tile 為單位標記零/非零，核心直接跳過零 blocks。假設非零 block 比率為 \(s\)，主要 IO 項會再乘上 \(s\)。此版本改變了注意力模式，因此是近似延伸；dense FlashAttention 本身仍是 exact。 <a class="source-ref" href="#source-block-sparse-p6">§3.3 · PDF p.6 · Proposition 4</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 真正不可少的組合是「可合併的 softmax 狀態 × SRAM tiling × fused kernel × backward recomputation」。少其中任一環，分別會失去 exactness、資料重用、跨 kernel IO，或重新保存二次方 activation。</p>
+<h3>目標函數沒有改</h3>
+        <div class="formula-block">
+          \[
+            S=QK^\top\in\mathbb{R}^{N\times N},\qquad
+            P=\operatorname{softmax}(S),\qquad
+            O=PV\in\mathbb{R}^{N\times d}.
+          \]
+          <p class="formula-block__meaning">\(N\) 是序列長度、\(d\) 是每個 head 的維度。FlashAttention 改的是計算順序與存放位置，不是這個輸出。</p>
+        </div>
+        <h3>Online softmax 的合併不變量</h3>
+        <p>對某列已處理部分保存 \((m,\ell,O)\)，新 tile 的局部量為 \((\tilde m,\tilde\ell,\tilde P V_j)\)。合併時：</p>
+        <div class="formula-block">
+          \[
+          m'=\max(m,\tilde m),\qquad
+          \ell'=e^{m-m'}\ell+e^{\tilde m-m'}\tilde\ell,
+          \]
+          \[
+          O'=\operatorname{diag}(\ell')^{-1}
+          \left[\operatorname{diag}(\ell)e^{m-m'}O
+          +e^{\tilde m-m'}\tilde P V_j\right].
+          \]
+          <p class="formula-block__meaning">指數與向量的乘法逐列廣播。以新最大值 \(m'\) 為共同座標重縮放，確保數值穩定，也讓任意分塊次序最後得到同一個全列 softmax。</p>
+        </div>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> Theorem 1 以歸納法證明 Algorithm 1 回傳精確的 \(\operatorname{softmax}(QK^\top)V\)，做 \(O(N^2d)\) FLOPs，輸入與輸出之外只需 \(O(N)\) 額外記憶體。 <a class="source-ref" href="#source-alg1-p5">§3.1 · PDF p.5 · Theorem 1</a></p>
+        <h3>IO 複雜度才是理論核心</h3>
+        <div class="formula-block">
+          \[
+          \text{Standard: }\Theta(Nd+N^2),\qquad
+          \text{FlashAttention: }\Theta\!\left(\frac{N^2d^2}{M}\right)
+          \]
+          <p class="formula-block__meaning">\(M\) 是 SRAM 可容納的元素數。令 \(B_c=\Theta(M/d)\)，K/V 各元素約載入一次，而 Q/O 被掃過 \(T_c=\Theta(Nd/M)\) 次，故總 HBM access 為 \(\Theta(NdT_c)\)。</p>
+        </div>
+        <p>Theorem 2 對 forward 給出上述比較；Supplemental Theorem 5 對 backward 給出相同階。Proposition 3 再指出：對所有 \(d\le M\le Nd\) 同時成立時，不存在 HBM access 為 \(o(N^2d^2/M)\) 的 exact attention 演算法。 <a class="source-ref" href="#source-theory-p5">§3.2 · PDF pp.5–6 · Theorem 2 / Proposition 3</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 這個 lower bound 的措辭要讀仔細：它排除的是「在整個 SRAM 範圍都漸近更好」的演算法，不是對每一個固定 \(M\) 都給出完全參數化的下界；作者明列後者為未來工作。</p>
+<p class="bridge">方法看似合理，真正的問題是：實驗有沒有把這條因果鏈撐起來？</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>更多 FLOPs 卻更快：Kernel、端到端與長序列證據</h2>
+          <h3>評估軸與控制條件</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>主張</th><th>測試方式</th><th>主要對照與判準</th></tr></thead>
+            <tbody>
+              <tr><td><strong>C1：少搬 HBM 才是加速來源</strong></td><td>固定 A100、batch 64、16 heads、\(d=64\)、序列 1024，比較 FLOPs、HBM R/W、前反向時間；再掃 block size。</td><td>標準 attention；若 FLOPs 增加但 HBM 與時間同降，支持 IO 機制。 <a class="source-ref" href="#source-fig2-p6">§3.2 · PDF p.6 · Figure 2</a></td></tr>
+              <tr><td><strong>C2：核心優化能轉成端到端訓練加速</strong></td><td>BERT-large 到相同 72.0% MLM accuracy；GPT-2 以相同資料、步數與超參數比較 wall-clock 與 perplexity。</td><td>NVIDIA MLPerf 1.1、HuggingFace、Megatron-LM；需同時維持品質。 <a class="source-ref" href="#source-exp-p25">Appendix E.1–E.2 · Supplemental PDF pp.25–26</a></td></tr>
+              <tr><td><strong>C3：省記憶體可換成更長上下文與更高品質</strong></td><td>GPT-2 context 1K→4K；RoBERTa 長文件 512→16K；Path-X/Path-256 16K/64K。</td><td>perplexity、micro-F1、accuracy 與訓練時間；不是只量 kernel。 <a class="source-ref" href="#source-table4-p8">§4.2 · PDF p.8 · Tables 4–6</a></td></tr>
+              <tr><td><strong>C4：時間與記憶體趨勢可隨 \(N\) 延伸</strong></td><td>單張 A100-40GB，含 dropout 與 padding mask，掃序列長度並量前向+反向與 footprint。</td><td>PyTorch、Megatron、Linformer、OpenAI Sparse Attention 等。 <a class="source-ref" href="#source-fig3-p9">§4.3 · PDF p.9 · Figure 3</a></td></tr>
+              <tr><td><strong>C5：block-sparse 延伸能把稀疏度化為速度</strong></td><td>掃非零 blocks 比率，並在 LRA 比較五個任務的準確率與幾何平均 speedup。</td><td>dense FlashAttention 與多個近似 attention；須避免只快但失準。 <a class="source-ref" href="#source-table3-p8">§4.1 · PDF pp.6–8 · Table 3</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>重要設定</h3>
+        <ul>
+          <li><strong>BERT：</strong>8×A100-80GB、FP16 Apex AMP O2、batch 448、LAMB、最多 7,100 steps；沿用 MLPerf train/validation split，同一初始化，10 次平均。</li>
+          <li><strong>GPT-2：</strong>8×A100-40GB、effective batch 512、400K steps、PyTorch AMP、OpenWebText；small/medium 皆與 baselines 使用相同 hyperparameters。</li>
+          <li><strong>注意力 microbenchmark：</strong>單張 A100-40GB；主縮放圖含 dropout 與 padding mask。Figure 2 的機制測試則有 padding mask、無 dropout，讀圖時不可混為同一條件。</li>
+          <li><strong>LRA：</strong>ListOps、Text、Retrieval、Image、Pathfinder 五項；整體 speedup 是各任務 wall-clock speedup 的幾何平均。Performer 因混合精度不穩而用非 mixed precision，Local Attention 的實作不支援 FP16，跨方法時間比較因此並非完全同質。 <a class="source-ref" href="#source-exp-p26">Appendix E.3 · Supplemental PDF p.26</a></li>
+        </ul>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 評估最有說服力之處，是 C1 用 block size 操作 IO、C2 以品質約束檢查端到端速度、C4 看縮放曲線；三者分別排除「只是 FLOPs 少」、「只是 kernel 快」與「只在單一長度快」的替代解釋。</p>
+<h3>更多 FLOPs，反而更快</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 在序列 1024 的 A100 測試，標準 attention 與 FlashAttention 分別為 66.6 vs 75.2 GFLOPs、35.3 vs 4.4 GB HBM R/W、35.1 vs 11.7 ms。結果方向正是「多算 13%，少搬約 8×，總時間約快 3×」。 <a class="source-ref" href="#source-fig2-p6">§3.2 · PDF p.6 · Figure 2</a></p>
+        <figure data-figure-role="result">
+          <a href="assets/images/figure-02-io-runtime-sparsity.png"><img src="assets/images/figure-02-io-runtime-sparsity.png" alt="FlashAttention 的 HBM 存取、block size、runtime 與 block sparsity 關係"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 2</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>左側是最直接的機制檢驗：雖然 FLOPs 由 66.6 增至 75.2 GFLOPs，HBM R/W 卻由 35.3 降至 4.4 GB，runtime 由 35.1 降至 11.7 ms。中圖顯示 tile 變大時 IO 與時間同步下降，超過約 256 後時間趨平；右圖顯示 block-sparse 的時間近似隨非零 blocks 比例增加。</span></figcaption>
+        </figure>
+        <h3>端到端訓練是否維持品質</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>原文 Tables 1–2 的關鍵數字；GPT-2 speedup 以各表列 baseline 自身為 1.0×。</caption>
+            <thead><tr><th>工作負載</th><th>基線</th><th>FlashAttention</th><th>品質約束</th></tr></thead>
+            <tbody>
+              <tr><td>BERT-large</td><td>MLPerf 1.1：20.0±1.5 min</td><td><strong>17.4±1.4 min</strong>（約 15% 較快）</td><td>同達 72.0% MLM accuracy；10 runs</td></tr>
+              <tr><td>GPT-2 small</td><td>HuggingFace：9.5 days；Megatron：4.7 days</td><td><strong>2.7 days</strong></td><td>三者 perplexity 皆 18.2</td></tr>
+              <tr><td>GPT-2 medium</td><td>HuggingFace：21.0 days；Megatron：11.5 days</td><td><strong>6.9 days</strong></td><td>三者 perplexity 皆 14.2</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-table1-p7">§4.1 · PDF p.7 · Tables 1–2</a></p>
+        <h3>省下的記憶體能否轉成更長 context</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>模型／任務</th><th>短 context</th><th>長 context</th><th>結果</th></tr></thead>
+            <tbody>
+              <tr><td>GPT-2 small</td><td>Megatron 1K：ppl 18.2，4.7 days</td><td>FlashAttention 4K：ppl 17.2，3.6 days</td><td>context 4×，perplexity 改善 1.0，仍快約 30%</td></tr>
+              <tr><td>MIMIC-III</td><td>512：micro-F1 52.8</td><td>16K：57.1</td><td>+4.3 points</td></tr>
+              <tr><td>ECtHR</td><td>512：micro-F1 72.2</td><td>8K：80.7</td><td>+8.5 points；16K 回落至 79.2</td></tr>
+              <tr><td>Path-X</td><td>先前列舉的 Transformer baselines 未高於隨機</td><td>dense FlashAttention，16K</td><td>61.4% accuracy</td></tr>
+              <tr><td>Path-256</td><td>同上</td><td>block-sparse FlashAttention，64K</td><td>63.1% accuracy</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-table4-p8">§4.2 · PDF p.8 · Tables 4–6</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 摘要所稱長文件分類「平均提升 6.4 points」，可由 MIMIC 的 +4.3 與 ECtHR 的 +8.5 平均得到；但兩資料集並非每增加一級 context 都單調改善，ECtHR 16K 反而低於 8K。另須注意，GPT-2 正文稱改善 0.7 perplexity，但 Table 4 顯示的四捨五入數字 18.2→17.2 相差 1.0；本紀錄保留兩者而不替作者消除差異。較可靠的結論是「移除系統限制後，長 context 在這些任務上可帶來明顯提升」，而非「越長必然越好」。</p>
+        <h3>縮放曲線在哪裡交叉</h3>
+        <p>Figure 3 顯示 dense FlashAttention 在常見 128–2K 長度最高約比 PyTorch exact attention 快 3×；activation memory 隨序列長度近線性，對 exact baselines 最高省 20×。但 dense runtime 仍為二次方，近似方法在 512–1024 左右開始 crossover；到非常長序列，block-sparse 版本才同時呈近線性 runtime 並維持最低時間。 <a class="source-ref" href="#source-fig3-p9">§4.3 · PDF p.9 · Figure 3</a></p>
+        <figure data-figure-role="result">
+          <a href="assets/images/figure-03-runtime-memory-scaling.png"><img src="assets/images/figure-03-runtime-memory-scaling.png" alt="不同注意力實作隨序列長度變化的前反向時間與記憶體占用"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 3</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>左圖勿把黑色虛線誤讀為線性時間：dense FlashAttention runtime 仍呈二次方趨勢，只是常見長度下常數更低；近似方法約在 512–1024 tokens 出現 crossover。右圖才顯示核心優勢：activation footprint 隨長度近線性增加，且 64K 時仍約比 Linformer 省 2×。</span></figcaption>
+        </figure>
+<p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 作者據此主張 FlashAttention 能在不改模型定義的情況下，把 IO 優化轉成訓練加速與長 context 品質；block-sparse 則作為把近似結構落成 wall-clock 優勢的 proof of concept。 <a class="source-ref" href="#source-intro-p2">§1 · PDF p.2</a> <a class="source-ref" href="#source-block-sparse-p6">§3.3 · PDF p.6</a></p>
+<h3>論文真正做了哪些受控變因</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>變因</th><th>觀察</th><th>能支持的結論</th><th>不能支持的結論</th></tr></thead>
+            <tbody>
+              <tr><td>Block size：64→512</td><td>HBM access 持續下降；forward runtime 先降，約 256 後趨平。</td><td>tile 增大可減少 Q/O 掃描，直至算術或其他瓶頸接手。</td><td>不能推論「tile 越大永遠越快」；更大 tile 也可能放不進 SRAM。</td></tr>
+              <tr><td>非零 block 比率</td><td>block-sparse runtime 隨非零比例近似線性上升。</td><td>跳過零 tiles 能把結構化 sparsity 轉成時間收益。</td><td>未證明任意 sparsity pattern、任意硬體都同樣有效。</td></tr>
+              <tr><td>Sequence length</td><td>dense 與近似方法在 512–1024 附近出現速度 crossover；記憶體曲線分離。</td><td>最佳方法與 \(N\) 有關，不能只報單一長度。</td><td>圖中的 crossover 不是普遍常數；batch、head dim、mask 與硬體都可能移動它。</td></tr>
+              <tr><td>Context length</td><td>GPT-2 perplexity改善；兩個長文件任務整體提升但不單調。</td><td>系統效率可解鎖先前放不下的模型配置。</td><td>不構成「長 context 本身是唯一因果來源」的全面證明。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-fig2-p6">§3.2–3.3 · PDF p.6 · Figure 2</a> <a class="source-ref" href="#source-fig3-p9">§4.2–4.3 · PDF pp.8–9 · Figure 3</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 本論文沒有一張「移除 online softmax／fusion／recomputation」的傳統元件 ablation，因為拿掉其中任一項會回到不同或不可行的演算法。最接近因果 ablation 的是 block-size sweep：它直接改變 HBM traffic，並觀察 runtime 同方向變化。</p>
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> 若在另一代 GPU 上重做，block-size 最佳點與 crossover 應會隨 SRAM 容量、HBM bandwidth、tensor-core throughput 和 occupancy 改變；這需要實測，原文沒有跨架構 sweep。</p>
+<p class="bridge">數據回答了部分問題；剩下的是適用邊界與仍未被證明的部分。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>Crossover、硬體依賴與 Block-sparse 的適用邊界</h2>
+          <h3>優點</h3>
+        <ul>
+          <li><strong>語義保真：</strong>dense 版本精確重現標準 attention，讓系統優化與模型方法解耦。</li>
+          <li><strong>理論與系統閉環：</strong>IO 複雜度、lower bound、HBM counter、kernel runtime、端到端訓練與下游品質形成多層證據鏈。</li>
+          <li><strong>重新定義優化目標：</strong>以昂貴記憶體層的 bytes 為成本，合理解釋「FLOPs 多卻更快」。</li>
+          <li><strong>可組合：</strong>同一資料流容納 mask、dropout，也能以 block mask 延伸到結構化稀疏。</li>
+        </ul>
+        <h3>作者明列的限制</h3>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 每種新 attention 需另寫低階 CUDA kernel，工程成本高，且實作未必能跨 GPU 架構移植；單 GPU 的 IO 分析也未納入多 GPU 間通訊。作者因此提出高階語言編譯到 IO-aware CUDA 與 multi-GPU IO 分析為未來方向。 <a class="source-ref" href="#source-limit-p9">§5 · PDF pp.9–10</a></p>
+        <h3>解讀與部署風險</h3>
+        <ul>
+          <li><strong>硬體外推：</strong>主要速度數字來自 NVIDIA A100；不能直接當成其他 GPU、精度、head dimension 或 inference workload 的保證。</li>
+          <li><strong>問題沒有消失：</strong>dense attention 的算術與 runtime 漸近仍為二次方；線性的是額外 activation memory，不是全部成本。</li>
+          <li><strong>比較異質：</strong>LRA 某些 baselines 不能使用同一精度；端到端數字也同時含框架、實作與訓練配置差異。</li>
+          <li><strong>Block-sparse 品質：</strong>它是近似方法，速度來自跳過 blocks；mask 選擇與任務品質必須另行驗證，不能把 dense exactness 自動延伸過去。</li>
+        </ul>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 論文最強的普遍性在「設計原則」，不是 2022 年某一組毫秒數。工程上應重測本機 roofline、tile、occupancy 與端到端占比，而不是把 A100 結果視為硬體無關常數。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>把 IO-aware 思維帶到其他核心會發生什麼</h2>
+          <h3>對 AI Infra / inference engine 的啟示</h3>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> <strong>Prefill 與 decode 要分開看。</strong>本論文的核心適合大量 queries 同時參與的訓練與 prefill；autoregressive decode 每步 query 很短，瓶頸常轉向讀取長 KV cache。相同的 IO-first 思考仍成立，但應優化 KV 讀取、分頁與批次，而不能直接把本文 3× 訓練加速套到 decode。</p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> <strong>引擎 API 應把語義與 schedule 分離。</strong>只要 online reduction 維持同一不變量，tile 次序、融合範圍與記憶體配置可以依硬體調整。這為 compiler/autotuner 提供清楚介面：上層宣告 attention 語義，下層搜尋 \(B_r,B_c\)、pipeline 與 fusion。</p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> <strong>成本模型至少要有三層：</strong>FLOPs、HBM bytes、跨裝置 bytes。本文完成單 GPU 前兩層；cluster design 還要把 tensor/sequence parallel 帶來的互連傳輸納入，否則可能在單卡省 HBM、卻在網路上失去收益。</p>
+        <h3>可延伸的研究問題</h3>
+        <ul>
+          <li><strong>編譯器：</strong>能否從高階 attention 表達式自動推導 online reduction、backward recomputation 與硬體特定 tile，而非每個變體手寫 kernel？</li>
+          <li><strong>跨 GPU：</strong>若 sequence/head 被分割，如何共同最小化 HBM、片上記憶體與 NVLink/網路 IO？</li>
+          <li><strong>動態稀疏：</strong>block mask 若依輸入改變，metadata、load balance 與 kernel launch 開銷何時吃掉 sparsity 收益？</li>
+          <li><strong>端到端調度：</strong>continuous batching 混合不同長度時，kernel tile 最佳化與 batch packing 是否衝突？</li>
+        </ul>
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> 若未來 inference engine 能把模型層級的 batch/sequence packing 與 kernel 層級 tiling 放進同一成本模型，FlashAttention 類演算法的收益可能不只來自單次 kernel，更來自減少 padding、改善 locality 與降低峰值記憶體後允許更大的有效 batch；這些效果需在真實 serving trace 上驗證。</p>
+<ol>
+          <li>如果演算法做了更多 FLOPs 卻更快，我們在 profiler 中需要哪些 counter 才能區分真正的 IO 因果機制與巧合？這篇工作的核心是演算法、CUDA 工程，還是成本模型？</li>
+          <li>Proposition 3 為何只能說「不可能對所有 SRAM 大小都漸近更好」？若換 GPU、batch、head dimension 或只做 inference，Figure 3 的 crossover 預期怎麼移？</li>
+          <li>Online softmax 的 \(m,\ell,O\) 不變量若加入 causal mask、dropout、bias 或不同精度，哪些仍成立，哪些需重新設計？</li>
+          <li>GPT-2 4K 的品質提升應歸因於更長 context、token packing，還是有效訓練 tokens？需要什麼對照才能拆開？動態 block sparsity 又會增加哪些索引與負載均衡成本？</li>
+          <li>在 cluster 上，應如何把本文 HBM access 模型擴充成 HBM + NVLink/PCIe/RDMA 的分層成本模型，並與 continuous batching 的排程共同最佳化？</li>
+        </ol>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>不變量、I/O 複雜度與關鍵圖表</h2>
+          <div class="table-scroll">
+          <table>
+            <tbody>
+              <tr><th scope="row">正式標題</th><td>FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness</td></tr>
+              <tr><th scope="row">作者</th><td>Tri Dao；Daniel Y. Fu；Stefano Ermon；Atri Rudra；Christopher Ré</td></tr>
+              <tr><th scope="row">機構</th><td>Stanford University；University at Buffalo, SUNY</td></tr>
+              <tr><th scope="row">發表</th><td>NeurIPS 2022，Volume 35，Main Conference Track</td></tr>
+              <tr><th scope="row">DOI</th><td><a href="https://doi.org/10.52202/068431-1189" target="_blank" rel="noopener noreferrer">10.52202/068431-1189</a></td></tr>
+              <tr><th scope="row">頁數</th><td data-summary-field="pdf-page-count">共 16 頁</td></tr>
+              <tr><th scope="row">任務定位</th><td>精確注意力的 IO-aware 演算法與單 GPU CUDA kernel；另含 block-sparse 近似延伸。</td></tr>
+              <tr><th scope="row">官方資源</th><td><a href="https://proceedings.neurips.cc/paper_files/paper/2022/file/67d57c32e20fd0a7a302cb81d36e40d5-Paper-Conference.pdf" target="_blank" rel="noopener noreferrer">主論文 PDF</a> · <a href="https://proceedings.neurips.cc/paper_files/paper/2022/file/67d57c32e20fd0a7a302cb81d36e40d5-Supplemental-Conference.pdf" target="_blank" rel="noopener noreferrer">官方補充材料</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted">書目資料以 NeurIPS 官方 proceedings 為準；作者全名與機構以論文首頁為準。</p>
+<h3>術語表</h3>
+        <dl class="term-list">
+          <dt>HBM</dt><dd>GPU 的高頻寬主記憶體；容量遠大於片上 SRAM，但資料往返較慢、成本較高。</dd>
+          <dt>SRAM</dt><dd>位於 GPU streaming multiprocessor 附近的快速、小容量片上記憶體；tile 必須受其容量約束。</dd>
+          <dt>IO-aware</dt><dd>把記憶體階層之間的讀寫量納入演算法設計與複雜度分析，而不只計數 FLOPs。</dd>
+          <dt>Tiling</dt><dd>把矩陣切成能放入快速記憶體的 blocks，以提高資料重用並限制工作集。</dd>
+          <dt>Online softmax</dt><dd>用可合併的 row max 與 exponential sum 分段計算全列 softmax，仍保有數值穩定與精確結果。</dd>
+          <dt>Kernel fusion</dt><dd>在同一 GPU kernel 內串接 matmul、mask、softmax、dropout、matmul，避免中間結果反覆進出 HBM。</dd>
+          <dt>Recomputation</dt><dd>反向時從輸入與小型統計量重算局部 attention，以額外算術換取不保存二次方 activation。</dd>
+          <dt>Arithmetic intensity</dt><dd>每搬移一單位資料所做的算術量；用來判斷工作較可能 compute-bound 或 memory-bound。</dd>
+          <dt>Exact attention</dt><dd>與標準 \(\operatorname{softmax}(QK^\top)V\) 相同的輸出；dense FlashAttention 屬此類。</dd>
+          <dt>Block-sparse attention</dt><dd>以 tile 為單位跳過 mask 指定的區塊；可降低時間與 IO，但改變 dense attention，因此屬近似延伸。</dd>
+        </dl>
+        <h3>重點索引與證據定位</h3>
+        <ol class="source-index">
+          <li id="source-intro-p2"><span><strong>整體資料流與 7.6× attention 核心速度：</strong>主論文 §1，PDF p.2，Figure 1。</span></li>
+          <li id="source-hardware-p3"><span><strong>A100 記憶體階層與 memory-bound 背景：</strong>主論文 §2.1，PDF p.3。</span></li>
+          <li id="source-alg1-p5"><span><strong>前向 tiling、online softmax、exactness：</strong>主論文 §3.1，PDF pp.4–5，Algorithm 1 / Theorem 1。</span></li>
+          <li id="source-theory-p5"><span><strong>HBM IO 複雜度與下界：</strong>主論文 §3.2，PDF pp.5–6，Theorem 2 / Proposition 3。</span></li>
+          <li id="source-fig2-p6"><span><strong>FLOPs、HBM R/W、runtime、block-size sweep：</strong>主論文 §3.2，PDF p.6，Figure 2。</span></li>
+          <li id="source-block-sparse-p6"><span><strong>Block-sparse IO：</strong>主論文 §3.3，PDF p.6，Proposition 4。</span></li>
+          <li id="source-table1-p7"><span><strong>BERT/GPT-2 端到端結果：</strong>主論文 §4.1，PDF p.7，Tables 1–2。</span></li>
+          <li id="source-table3-p8"><span><strong>LRA accuracy 與 speedup：</strong>主論文 §4.1，PDF p.8，Table 3。</span></li>
+          <li id="source-table4-p8"><span><strong>長 context 的 perplexity、F1 與 Path 結果：</strong>主論文 §4.2，PDF p.8，Tables 4–6。</span></li>
+          <li id="source-fig3-p9"><span><strong>序列長度縮放、crossover 與記憶體：</strong>主論文 §4.3，PDF p.9，Figure 3。</span></li>
+          <li id="source-limit-p9"><span><strong>CUDA、可移植性與 multi-GPU 限制：</strong>主論文 §5，PDF pp.9–10。</span></li>
+          <li id="source-related-p17"><span><strong>IO-aware 與 efficient Transformer 脈絡：</strong>官方 Supplemental Appendix A–B，PDF pp.17–18。</span></li>
+          <li id="source-related-p20"><span><strong>與 Rabe &amp; Staats 比較：</strong>官方 Supplemental Appendix B.5，PDF p.20。</span></li>
+          <li id="source-backward-p20"><span><strong>反向重算與 dropout mask 重播：</strong>官方 Supplemental Appendix B.4，PDF pp.20–21，Algorithm 4。</span></li>
+          <li id="source-exp-p25"><span><strong>BERT/GPT-2 完整設定：</strong>官方 Supplemental Appendix E.1–E.2，PDF pp.25–26。</span></li>
+          <li id="source-exp-p26"><span><strong>LRA、Path 與 mixed-precision 條件：</strong>官方 Supplemental Appendix E.3，PDF p.26。</span></li>
+          <li id="source-fusion-p27"><span><strong>與自動 fusion、Apex FMHA 比較：</strong>官方 Supplemental Appendix E.5–E.6，PDF pp.27–28。</span></li>
+        </ol>
+        <p class="muted">閱讀時應把「dense FlashAttention 的 exact 結果」與「block-sparse 延伸的近似結果」分開；也要把 A100 上的實驗數字與可跨硬體延伸的 IO-aware 原則分開。</p>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>

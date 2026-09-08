@@ -1,76 +1,73 @@
 <!doctype html>
-<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="1.2.0">
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <meta name="paper-summary-template" content="notion-inspired-v1">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
   <meta name="description" content="{{META_DESCRIPTION}}">
-  <title>{{PAPER_TITLE}}｜Paper Reading</title>
+  <title>{{PAPER_TITLE}}｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
 
   <style>
     :root {
-      --page: #ffffff;
-      --text: #37352f;
-      --heading: #2f2e2a;
-      --muted: #787774;
-      --subtle: #9b9a97;
-      --line: #e9e9e7;
-      --surface: #f7f6f3;
-      --surface-hover: #efefed;
-      --link: #0b6bcb;
-      --selection: #d9eaf7;
-      --claim-bg: #f3f0ff;
-      --claim-accent: #6940a5;
-      --fact-bg: #edf7ed;
-      --fact-accent: #287d3c;
-      --analysis-bg: #eef5fb;
-      --analysis-accent: #276f9e;
-      --speculation-bg: #fff4e5;
-      --speculation-accent: #a05a00;
-      --content-width: 780px;
-      --toc-width: 232px;
-      --layout-gap: 44px;
-      --radius: 8px;
-      --shadow: 0 1px 2px rgb(15 15 15 / 4%), 0 3px 12px rgb(15 15 15 / 3%);
-      --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
-      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 46rem;
+      --wide: 62rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
     }
 
     *, *::before, *::after { box-sizing: border-box; }
 
     html {
       scroll-behavior: smooth;
-      scroll-padding-top: 28px;
-      background: var(--page);
+      scroll-padding-top: 2rem;
+      background: var(--paper);
     }
 
     body {
       margin: 0;
-      color: var(--text);
-      background: var(--page);
-      font-family: var(--font-sans);
-      font-size: 16.5px;
-      line-height: 1.75;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
       text-rendering: optimizeLegibility;
       -webkit-font-smoothing: antialiased;
     }
 
-    ::selection { background: var(--selection); }
+    ::selection { background: #dbe9f7; }
 
     a {
-      color: var(--link);
+      color: var(--accent);
       text-decoration-thickness: 1px;
-      text-underline-offset: 3px;
+      text-underline-offset: .2em;
       overflow-wrap: anywhere;
     }
 
     a:hover { text-decoration-thickness: 2px; }
 
     :focus-visible {
-      outline: 3px solid rgb(11 107 203 / 34%);
+      outline: 3px solid rgb(36 95 158 / 32%);
       outline-offset: 3px;
-      border-radius: 4px;
     }
 
     img { max-width: 100%; }
@@ -78,520 +75,415 @@
     .skip-link {
       position: fixed;
       z-index: 100;
-      top: 12px;
-      left: 12px;
-      transform: translateY(-160%);
-      padding: 8px 12px;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
       color: #fff;
       background: var(--heading);
-      border-radius: 6px;
       text-decoration: none;
     }
 
     .skip-link:focus { transform: translateY(0); }
 
-    .reading-progress {
-      position: fixed;
-      z-index: 90;
-      inset: 0 0 auto;
-      height: 3px;
-      background: transparent;
-    }
-
-    .reading-progress__bar {
-      display: block;
-      width: 0;
-      height: 100%;
-      background: var(--heading);
-      transition: width 100ms linear;
-    }
-
-    .paper-hero {
-      width: min(calc(100% - 40px), calc(var(--toc-width) + var(--layout-gap) + var(--content-width)));
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
       margin: 0 auto;
-      padding: 68px 0 34px calc(var(--toc-width) + var(--layout-gap));
-      border-bottom: 1px solid var(--line);
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
     }
 
-    .page-icon {
-      display: grid;
-      width: 64px;
-      height: 64px;
-      margin-bottom: 22px;
-      place-items: center;
-      color: #4b4a46;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      box-shadow: var(--shadow);
-      font-size: 32px;
-      line-height: 1;
-    }
-
-    .breadcrumb {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      align-items: center;
-      margin: 0 0 12px;
+    .site-masthead a {
       color: var(--muted);
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: .015em;
-    }
-
-    .breadcrumb span[aria-hidden="true"] { color: var(--subtle); }
-
-    h1, h2, h3, h4 {
-      color: var(--heading);
-      line-height: 1.25;
-      letter-spacing: -.018em;
-    }
-
-    h1 {
-      max-width: 930px;
-      margin: 0;
-      font-size: clamp(2.15rem, 4.5vw, 3.45rem);
-      font-weight: 750;
-      overflow-wrap: anywhere;
-    }
-
-    .paper-byline {
-      max-width: 850px;
-      margin: 15px 0 0;
-      color: var(--muted);
-      font-size: 17px;
-    }
-
-    .properties {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0 28px;
-      max-width: 780px;
-      margin: 30px 0 0;
-      padding: 0;
-    }
-
-    .property {
-      display: grid;
-      grid-template-columns: 112px minmax(0, 1fr);
-      gap: 12px;
-      align-items: baseline;
-      min-width: 0;
-      padding: 9px 0;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .property dt {
-      color: var(--muted);
-      font-size: 13px;
-      font-weight: 600;
-    }
-
-    .property dd {
-      min-width: 0;
-      margin: 0;
-      overflow-wrap: anywhere;
-    }
-
-    .tag {
-      display: inline-flex;
-      align-items: center;
-      min-height: 25px;
-      padding: 2px 9px;
-      color: #4d4c48;
-      background: #e9e9e7;
-      border-radius: 999px;
-      font-size: 12.5px;
-      font-weight: 650;
-      line-height: 1.4;
-    }
-
-    .hero-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 24px;
-    }
-
-    .button-link {
-      display: inline-flex;
-      gap: 8px;
-      align-items: center;
-      min-height: 38px;
-      padding: 7px 12px;
-      color: var(--text);
-      background: var(--page);
-      border: 1px solid #d8d8d5;
-      border-radius: 7px;
-      box-shadow: 0 1px 1px rgb(15 15 15 / 3%);
-      font-size: 14px;
-      font-weight: 600;
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
       text-decoration: none;
-    }
-
-    .button-link:hover { background: var(--surface); }
-
-    .page-layout {
-      display: grid;
-      grid-template-columns: var(--toc-width) minmax(0, var(--content-width));
-      gap: var(--layout-gap);
-      width: min(calc(100% - 40px), calc(var(--toc-width) + var(--layout-gap) + var(--content-width)));
-      margin: 0 auto;
-      padding: 44px 0 88px;
-    }
-
-    .toc-shell { min-width: 0; }
-
-    .toc {
-      position: sticky;
-      top: 28px;
-      max-height: calc(100vh - 56px);
-      overflow: auto;
-      padding-right: 10px;
-      scrollbar-width: thin;
-    }
-
-    .toc__label {
-      margin: 0 0 10px;
-      color: var(--subtle);
-      font-size: 11px;
-      font-weight: 750;
-      letter-spacing: .11em;
       text-transform: uppercase;
     }
 
-    .toc ol {
-      margin: 0;
-      padding: 0;
-      list-style: none;
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
     }
 
-    .toc a {
-      display: grid;
-      grid-template-columns: 25px minmax(0, 1fr);
-      gap: 5px;
-      padding: 5px 7px;
-      color: var(--muted);
-      border-radius: 5px;
-      font-size: 12.5px;
-      line-height: 1.4;
-      text-decoration: none;
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
     }
 
-    .toc a:hover,
-    .toc a[aria-current="location"] {
-      color: var(--text);
-      background: var(--surface);
-    }
-
-    .toc__number {
-      color: var(--subtle);
-      font-variant-numeric: tabular-nums;
-    }
-
-    main { min-width: 0; }
-
-    .reading-note {
-      margin: 0 0 44px;
-      padding: 18px 20px;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-    }
-
-    .reading-note h2 {
-      margin: 0 0 7px;
-      font-size: 15px;
-    }
-
-    .reading-note p,
-    .reading-note ul { margin-top: 7px; margin-bottom: 0; }
-
-    .paper-section {
-      padding: 9px 0 48px;
-      scroll-margin-top: 26px;
-    }
-
-    .paper-section + .paper-section { border-top: 1px solid var(--line); }
-
-    .section-heading {
-      display: grid;
-      grid-template-columns: 34px minmax(0, 1fr);
-      gap: 8px;
-      align-items: baseline;
-      margin: 25px 0 22px;
-    }
-
-    .section-number {
-      color: var(--subtle);
-      font-size: 13px;
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .section-heading h2 {
-      margin: 0;
-      font-size: clamp(1.45rem, 3vw, 1.9rem);
-      font-weight: 720;
-    }
-
-    h3 {
-      margin: 32px 0 10px;
-      font-size: 1.16rem;
-      font-weight: 700;
-    }
-
-    h4 {
-      margin: 25px 0 8px;
-      font-size: 1rem;
-      font-weight: 700;
-    }
-
-    p { margin: 0 0 1em; }
-
-    ul, ol { padding-left: 1.45em; }
-    li + li { margin-top: .32em; }
-
-    strong { color: var(--heading); }
-
-    .lead {
+    h1, h2, h3, h4 {
       color: var(--heading);
-      font-size: 1.17rem;
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
       line-height: 1.7;
     }
 
-    .muted { color: var(--muted); }
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
 
-    .statement {
-      margin: 20px 0;
-      padding: 15px 18px 15px 20px;
-      border: 1px solid transparent;
-      border-left-width: 4px;
-      border-radius: var(--radius);
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
     }
 
-    .statement p:last-child { margin-bottom: 0; }
-
-    .statement__label {
-      display: block;
-      margin-bottom: 5px;
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: .055em;
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
     }
 
-    .statement--claim {
-      background: var(--claim-bg);
-      border-color: #ded5f0;
-      border-left-color: var(--claim-accent);
-    }
-    .statement--claim .statement__label { color: var(--claim-accent); }
-
-    .statement--fact {
-      background: var(--fact-bg);
-      border-color: #cfe7d2;
-      border-left-color: var(--fact-accent);
-    }
-    .statement--fact .statement__label { color: var(--fact-accent); }
-
-    .statement--analysis {
-      background: var(--analysis-bg);
-      border-color: #d0e1ee;
-      border-left-color: var(--analysis-accent);
-    }
-    .statement--analysis .statement__label { color: var(--analysis-accent); }
-
-    .statement--speculation {
-      background: var(--speculation-bg);
-      border-color: #efdabc;
-      border-left-color: var(--speculation-accent);
-    }
-    .statement--speculation .statement__label { color: var(--speculation-accent); }
-
-    .source-ref {
-      display: inline-flex;
-      align-items: center;
-      min-height: 23px;
-      margin: 2px 2px 2px 0;
-      padding: 2px 8px;
-      color: #5c5b57;
-      background: rgb(255 255 255 / 72%);
-      border: 1px solid rgb(55 53 47 / 16%);
-      border-radius: 999px;
-      font-family: var(--font-mono);
-      font-size: 11.5px;
-      line-height: 1.35;
-      text-decoration: none;
-      vertical-align: .08em;
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
     }
 
-    .source-ref:hover { background: #fff; }
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
 
-    .key-grid {
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      margin: 20px 0;
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
     }
 
-    .key-card {
-      min-width: 0;
-      padding: 15px 16px;
-      background: var(--page);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-    }
-
-    .key-card__eyebrow {
-      margin: 0 0 5px;
+    .article-toc a {
       color: var(--muted);
-      font-size: 11px;
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
       font-weight: 800;
       letter-spacing: .08em;
       text-transform: uppercase;
     }
 
+    .takeaway-item p:last-child,
     .key-card p:last-child { margin-bottom: 0; }
 
     figure {
-      margin: 30px 0;
-      padding: 10px;
-      background: #fbfbfa;
-      border: 1px solid var(--line);
-      border-radius: 10px;
+      margin: 2.2rem 0 2.5rem;
     }
 
-    figure > a {
-      display: block;
-      line-height: 0;
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
     }
+
+    figure > a { display: block; line-height: 0; }
 
     figure img {
       display: block;
       width: 100%;
       height: auto;
       background: #fff;
-      border-radius: 6px;
     }
 
     figcaption {
-      padding: 11px 5px 4px;
+      margin-top: .7rem;
       color: var(--muted);
-      font-size: 13.5px;
-      line-height: 1.55;
+      font-size: .78rem;
+      line-height: 1.65;
     }
 
-    figcaption strong { color: var(--text); }
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
 
-    .reading-guide {
-      display: block;
-      margin-top: 5px;
-      color: var(--text);
-    }
+    .reading-guide { display: inline; margin-left: .45rem; }
 
     .formula-block {
-      margin: 22px 0;
-      padding: 18px 20px;
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
       overflow-x: auto;
-      background: #fbfbfa;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
+      border-block: 1px solid var(--line);
     }
 
     .formula-block__meaning {
-      margin-top: 12px;
+      margin: .85rem 0 0;
       color: var(--muted);
-      font-size: 14px;
+      font-size: .84rem;
     }
 
     .table-scroll {
       max-width: 100%;
-      margin: 22px 0;
+      margin: 1.8rem 0;
       overflow-x: auto;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
+      border-top: 1px solid var(--line);
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 14px;
-      line-height: 1.5;
+      font-size: .83rem;
+      line-height: 1.58;
     }
 
     caption {
-      padding: 12px 14px;
+      padding: .65rem 0;
       color: var(--muted);
-      background: var(--surface);
       border-bottom: 1px solid var(--line);
-      font-size: 12.5px;
+      font-size: .75rem;
       text-align: left;
     }
 
     th, td {
-      min-width: 118px;
-      padding: 10px 12px;
-      border-right: 1px solid var(--line);
+      min-width: 7rem;
+      padding: .7rem .65rem;
       border-bottom: 1px solid var(--line);
       text-align: left;
       vertical-align: top;
     }
 
-    tr:last-child > * { border-bottom: 0; }
-    tr > *:last-child { border-right: 0; }
-    th { color: var(--heading); background: #fbfbfa; font-weight: 700; }
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
 
-    code, pre { font-family: var(--font-mono); }
+    code, pre { font-family: var(--mono); }
 
     :not(pre) > code {
-      padding: .12em .32em;
-      color: #c7254e;
-      background: #f7f6f3;
-      border-radius: 4px;
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
       font-size: .9em;
     }
 
     pre {
       max-width: 100%;
-      margin: 22px 0;
-      padding: 16px 18px;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
       overflow: auto;
-      color: #383a42;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      font-size: 13px;
-      line-height: 1.6;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
       tab-size: 2;
     }
 
     blockquote {
-      margin: 20px 0;
-      padding: 2px 0 2px 18px;
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
       color: var(--muted);
-      border-left: 3px solid #d3d3d0;
+      border-left: 3px solid #c9ccd2;
     }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
 
     .term-list {
       display: grid;
-      grid-template-columns: minmax(140px, .75fr) minmax(0, 2fr);
-      margin: 20px 0;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
       border-top: 1px solid var(--line);
     }
 
     .term-list dt,
     .term-list dd {
       margin: 0;
-      padding: 11px 8px;
+      padding: .65rem .4rem;
       border-bottom: 1px solid var(--line);
     }
 
     .term-list dt { color: var(--heading); font-weight: 700; }
 
     .source-index {
-      margin: 20px 0;
+      margin: 1.5rem 0;
       padding-left: 0;
       list-style: none;
       counter-reset: source;
@@ -599,126 +491,60 @@
 
     .source-index li {
       display: grid;
-      grid-template-columns: 30px minmax(0, 1fr);
-      gap: 8px;
-      padding: 9px 0;
-      border-bottom: 1px solid var(--line);
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
       counter-increment: source;
     }
 
     .source-index li::before {
+      color: var(--faint);
       content: counter(source, decimal-leading-zero);
-      color: var(--subtle);
-      font-family: var(--font-mono);
-      font-size: 12px;
+      font-family: var(--mono);
+      font-size: .7rem;
     }
 
     .page-footer {
-      width: min(calc(100% - 40px), var(--content-width));
-      margin: 0 auto;
-      padding: 25px 0 45px;
-      color: var(--subtle);
-      border-top: 1px solid var(--line);
-      font-size: 12px;
-      text-align: center;
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
     }
 
-    @media (max-width: 1099px) {
-      .paper-hero {
-        width: min(calc(100% - 48px), var(--content-width));
-        padding: 56px 0 30px;
-      }
-
-      .page-layout {
-        display: block;
-        width: min(calc(100% - 48px), var(--content-width));
-        padding-top: 28px;
-      }
-
-      .toc {
-        position: static;
-        max-height: none;
-        margin-bottom: 44px;
-        padding: 15px;
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-      }
-
-      .toc ol { columns: 2; column-gap: 18px; }
-      .toc li { break-inside: avoid; }
-    }
-
-    @media (max-width: 699px) {
-      body { font-size: 16px; }
-
-      .paper-hero,
-      .page-layout,
-      .page-footer { width: min(calc(100% - 30px), var(--content-width)); }
-
-      .paper-hero { padding-top: 38px; }
-      .page-icon { width: 54px; height: 54px; font-size: 27px; }
-
-      .properties,
-      .key-grid { grid-template-columns: 1fr; }
-
-      .property { grid-template-columns: 96px minmax(0, 1fr); }
-      .toc ol { columns: 1; }
-      .section-heading { grid-template-columns: 29px minmax(0, 1fr); }
-      .paper-section { padding-bottom: 38px; }
-      .statement { padding-right: 14px; padding-left: 15px; }
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
       .term-list { grid-template-columns: 1fr; }
-      .term-list dt { padding-bottom: 2px; border-bottom: 0; }
-      .term-list dd { padding-top: 2px; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
     }
 
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
-      *, *::before, *::after { transition-duration: .01ms !important; }
     }
 
     @media print {
-      @page { size: A4; margin: 15mm 14mm 17mm; }
-
-      .skip-link,
-      .reading-progress,
-      .toc-shell,
-      .screen-only { display: none !important; }
-
-      body {
-        color: #000;
-        background: #fff;
-        font-size: 10.5pt;
-      }
-
-      .paper-hero,
-      .page-layout,
-      .page-footer {
-        display: block;
-        width: 100%;
-        margin: 0;
-        padding-right: 0;
-        padding-left: 0;
-      }
-
-      .paper-hero { padding-top: 0; }
-      .page-icon { box-shadow: none; }
-      .button-link { box-shadow: none; }
-      .button-link::after { content: " (" attr(href) ")"; font-weight: 400; }
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
       a { color: #000; }
-
-      figure,
-      table,
-      pre,
-      .statement,
-      .formula-block,
-      .key-card { break-inside: avoid; }
-
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
       h2, h3, h4 { break-after: avoid; }
       img { max-width: 100%; height: auto; }
       p { orphans: 3; widows: 3; }
-      .statement { background: #fff !important; border-color: #777 !important; }
-      .source-ref { background: #fff; border-color: #999; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
     }
   </style>
 
@@ -741,207 +567,110 @@
 <body>
   <!-- generated-from: html template/summary-template.html -->
   <a class="skip-link" href="#main-content">跳至正文</a>
-  <div class="reading-progress screen-only" aria-hidden="true"><span class="reading-progress__bar"></span></div>
 
-  <header class="paper-hero">
-    <div class="page-icon" aria-hidden="true">▤</div>
-    <p class="breadcrumb">
-      <span>Paper Reading</span>
-      <span aria-hidden="true">/</span>
-      <span>{{TOPIC}}</span>
-      <span aria-hidden="true">/</span>
-      <span>{{SUBTOPIC}}</span>
-    </p>
-    <h1>{{PAPER_TITLE}}</h1>
-    <p class="paper-byline">{{AUTHORS_TEXT}}</p>
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
 
-    <dl class="properties">
-      <div class="property">
-        <dt>發表資訊</dt>
-        <dd>{{VENUE_OR_ARCHIVE}}</dd>
-      </div>
-      <div class="property">
-        <dt>年份</dt>
-        <dd>{{YEAR}}</dd>
-      </div>
-      <div class="property">
-        <dt>分類</dt>
-        <dd><span class="tag">{{TOPIC}} / {{SUBTOPIC}}</span></dd>
-      </div>
-      <div class="property">
-        <dt>摘要更新</dt>
-        <dd><time datetime="{{LAST_UPDATED_ISO}}">{{LAST_UPDATED_DISPLAY}}</time></dd>
-      </div>
-    </dl>
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">{{TOPIC}} / {{SUBTOPIC}}</p>
+      <h1>{{PAPER_TITLE}}</h1>
+      <div class="paper-dek" data-section-role="thesis">{{DEK_HTML}}</div>
+      <p class="paper-byline">{{AUTHORS_TEXT}}</p>
+      <p class="paper-meta">
+        <span>{{VENUE_OR_ARCHIVE}}</span>
+        <span>{{YEAR}}</span>
+        <span>{{TOPIC}} / {{SUBTOPIC}}</span>
+        <span><time data-summary-field="last-updated" datetime="{{LAST_UPDATED_ISO}}">{{LAST_UPDATED_DISPLAY}}</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="{{PAPER_URL}}" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="{{LOCAL_PDF_HREF}}">開啟本地 PDF ↓</a>
+      </p>
+    </header>
 
-    <div class="hero-actions">
-      <a class="button-link" href="{{PAPER_URL}}" target="_blank" rel="noopener noreferrer">↗ 論文頁面</a>
-      <a class="button-link" href="{{LOCAL_PDF_HREF}}">↓ 開啟本地 PDF</a>
-    </div>
-  </header>
-
-  <div class="page-layout">
-    <aside class="toc-shell">
-      <nav class="toc" aria-label="文章目錄">
-        <p class="toc__label">Contents</p>
-        <ol>
-          <li><a href="#paper-info"><span class="toc__number">01</span><span>論文基本資料</span></a></li>
-          <li><a href="#one-sentence-summary"><span class="toc__number">02</span><span>一句話總結</span></a></li>
-          <li><a href="#executive-summary"><span class="toc__number">03</span><span>Executive Summary</span></a></li>
-          <li><a href="#background-motivation"><span class="toc__number">04</span><span>背景與動機</span></a></li>
-          <li><a href="#problem-definition"><span class="toc__number">05</span><span>問題定義</span></a></li>
-          <li><a href="#core-method"><span class="toc__number">06</span><span>核心方法</span></a></li>
-          <li><a href="#formulas-theory"><span class="toc__number">07</span><span>公式與理論</span></a></li>
-          <li><a href="#figures-guide"><span class="toc__number">08</span><span>圖片與圖表導讀</span></a></li>
-          <li><a href="#experimental-setup"><span class="toc__number">09</span><span>實驗設計</span></a></li>
-          <li><a href="#experimental-results"><span class="toc__number">10</span><span>實驗結果</span></a></li>
-          <li><a href="#ablation-sensitivity"><span class="toc__number">11</span><span>Ablation 與敏感度</span></a></li>
-          <li><a href="#strengths-limitations-risks"><span class="toc__number">12</span><span>優點、限制與風險</span></a></li>
-          <li><a href="#related-work"><span class="toc__number">13</span><span>與相關工作的比較</span></a></li>
-          <li><a href="#personal-analysis"><span class="toc__number">14</span><span>個人分析與延伸</span></a></li>
-          <li><a href="#discussion-questions"><span class="toc__number">15</span><span>組會討論問題</span></a></li>
-          <li><a href="#glossary-index"><span class="toc__number">16</span><span>術語表與重點索引</span></a></li>
-        </ol>
-      </nav>
-    </aside>
-
-    <main id="main-content">
-      <aside class="reading-note" aria-labelledby="reading-note-title">
-        <h2 id="reading-note-title">優先閱讀</h2>
-        {{PRIORITY_READS_HTML}}
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        {{READING_ROUTE_HTML}}
       </aside>
 
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">{{PREREQUISITES_TITLE}}</a></li>
+            <li><a href="#problem">{{PROBLEM_TITLE}}</a></li>
+            <li><a href="#insight">{{INSIGHT_TITLE}}</a></li>
+            <li><a href="#method">{{METHOD_TITLE}}</a></li>
+            <li><a href="#evidence">{{EVIDENCE_TITLE}}</a></li>
+            <li><a href="#critique">{{CRITIQUE_TITLE}}</a></li>
+            <li><a href="#extensions">{{EXTENSIONS_TITLE}}</a></li>
+            <li><a href="#reference">{{REFERENCE_TITLE}}</a></li>
+          </ol>
+        </nav>
+      </details>
+
       <!--
-        可重用元件：
-        作者主張：<aside class="statement statement--claim" data-kind="author-claim"><span class="statement__label">作者主張</span><p>...</p></aside>
-        實驗事實：<aside class="statement statement--fact" data-kind="experimental-fact"><span class="statement__label">實驗事實</span><p>...</p></aside>
-        分析：<aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>...</p></aside>
-        推測：<aside class="statement statement--speculation" data-kind="speculation"><span class="statement__label">推測</span><p>...</p></aside>
-        來源：<a class="source-ref" href="#source-fig3-p7">§4.2 · PDF p.7 · Fig. 3</a>
-        圖片：src 與 href 僅用 assets/images/...。固定格式：<figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>...</span></figcaption>。來源標籤只顯示 Figure／Table／Algorithm 與原編號，不加「原論文」、句點、頁碼、來源敘述或產製資訊；頁碼放正文來源標記或重點索引。
-        基本資料頁數欄固定寫法：<td data-summary-field="pdf-page-count">共 N 頁</td>（也可使用 dd）；完成頁面中必須恰有一個此 marker。
-        禁止把頁碼 offset 檢查、檔名／路徑處理、PDF signature／hash、下載／解析／裁圖工具或 QA 過程寫進讀者可見內容。
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
       -->
 
-      <section id="paper-info" class="paper-section">
-        <div class="section-heading"><span class="section-number">01</span><h2>論文基本資料</h2></div>
-        {{SECTION_01_BODY}}
-      </section>
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>{{PREREQUISITES_TITLE}}</h2>
+          {{PREREQUISITES_BODY}}
+        </section>
 
-      <section id="one-sentence-summary" class="paper-section">
-        <div class="section-heading"><span class="section-number">02</span><h2>一句話總結</h2></div>
-        {{SECTION_02_BODY}}
-      </section>
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>{{PROBLEM_TITLE}}</h2>
+          {{PROBLEM_BODY}}
+        </section>
 
-      <section id="executive-summary" class="paper-section">
-        <div class="section-heading"><span class="section-number">03</span><h2>Executive Summary</h2></div>
-        {{SECTION_03_BODY}}
-      </section>
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>{{INSIGHT_TITLE}}</h2>
+          {{INSIGHT_BODY}}
+        </section>
 
-      <section id="background-motivation" class="paper-section">
-        <div class="section-heading"><span class="section-number">04</span><h2>背景與動機</h2></div>
-        {{SECTION_04_BODY}}
-      </section>
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>{{METHOD_TITLE}}</h2>
+          {{METHOD_BODY}}
+        </section>
 
-      <section id="problem-definition" class="paper-section">
-        <div class="section-heading"><span class="section-number">05</span><h2>問題定義</h2></div>
-        {{SECTION_05_BODY}}
-      </section>
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>{{EVIDENCE_TITLE}}</h2>
+          {{EVIDENCE_BODY}}
+        </section>
 
-      <section id="core-method" class="paper-section">
-        <div class="section-heading"><span class="section-number">06</span><h2>核心方法</h2></div>
-        {{SECTION_06_BODY}}
-      </section>
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>{{CRITIQUE_TITLE}}</h2>
+          {{CRITIQUE_BODY}}
+        </section>
 
-      <section id="formulas-theory" class="paper-section">
-        <div class="section-heading"><span class="section-number">07</span><h2>公式與理論</h2></div>
-        {{SECTION_07_BODY}}
-      </section>
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>{{EXTENSIONS_TITLE}}</h2>
+          {{EXTENSIONS_BODY}}
+        </section>
 
-      <section id="figures-guide" class="paper-section">
-        <div class="section-heading"><span class="section-number">08</span><h2>圖片與圖表導讀</h2></div>
-        {{SECTION_08_BODY}}
-      </section>
-
-      <section id="experimental-setup" class="paper-section">
-        <div class="section-heading"><span class="section-number">09</span><h2>實驗設計</h2></div>
-        {{SECTION_09_BODY}}
-      </section>
-
-      <section id="experimental-results" class="paper-section">
-        <div class="section-heading"><span class="section-number">10</span><h2>實驗結果</h2></div>
-        {{SECTION_10_BODY}}
-      </section>
-
-      <section id="ablation-sensitivity" class="paper-section">
-        <div class="section-heading"><span class="section-number">11</span><h2>Ablation 與敏感度分析</h2></div>
-        {{SECTION_11_BODY}}
-      </section>
-
-      <section id="strengths-limitations-risks" class="paper-section">
-        <div class="section-heading"><span class="section-number">12</span><h2>優點、限制與風險</h2></div>
-        {{SECTION_12_BODY}}
-      </section>
-
-      <section id="related-work" class="paper-section">
-        <div class="section-heading"><span class="section-number">13</span><h2>與相關工作的比較</h2></div>
-        {{SECTION_13_BODY}}
-      </section>
-
-      <section id="personal-analysis" class="paper-section">
-        <div class="section-heading"><span class="section-number">14</span><h2>個人分析與可延伸方向</h2></div>
-        {{SECTION_14_BODY}}
-      </section>
-
-      <section id="discussion-questions" class="paper-section">
-        <div class="section-heading"><span class="section-number">15</span><h2>組會討論問題</h2></div>
-        {{SECTION_15_BODY}}
-      </section>
-
-      <section id="glossary-index" class="paper-section">
-        <div class="section-heading"><span class="section-number">16</span><h2>術語表與重點索引</h2></div>
-        {{SECTION_16_BODY}}
-      </section>
-    </main>
-  </div>
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>{{REFERENCE_TITLE}}</h2>
+          {{REFERENCE_BODY}}
+        </section>
+      </main>
+    </div>
+  </article>
 
   <footer class="page-footer">
-    <p>Paper Reading · {{PAPER_TITLE}} · 最後更新 {{LAST_UPDATED_DISPLAY}}</p>
-    <p>模板版本 1.2.0。頁面中的分析與推測不代表原論文作者立場。</p>
+    <p>{{PAPER_TITLE}} · 分析與推測不代表原論文作者立場。</p>
   </footer>
-
-  <script>
-    (() => {
-      const progressBar = document.querySelector('.reading-progress__bar');
-      const tocLinks = [...document.querySelectorAll('.toc a[href^="#"]')];
-      const sections = tocLinks
-        .map((link) => document.querySelector(link.getAttribute('href')))
-        .filter(Boolean);
-
-      const updateProgress = () => {
-        const root = document.documentElement;
-        const distance = root.scrollHeight - root.clientHeight;
-        const percent = distance > 0 ? Math.min(100, Math.max(0, root.scrollTop / distance * 100)) : 0;
-        if (progressBar) progressBar.style.width = `${percent}%`;
-      };
-
-      updateProgress();
-      document.addEventListener('scroll', updateProgress, { passive: true });
-      window.addEventListener('resize', updateProgress);
-
-      if ('IntersectionObserver' in window && sections.length) {
-        const byId = new Map(tocLinks.map((link) => [link.hash.slice(1), link]));
-        const observer = new IntersectionObserver((entries) => {
-          const visible = entries
-            .filter((entry) => entry.isIntersecting)
-            .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-          if (!visible) return;
-          tocLinks.forEach((link) => link.removeAttribute('aria-current'));
-          byId.get(visible.target.id)?.setAttribute('aria-current', 'location');
-        }, { rootMargin: '-12% 0px -72% 0px', threshold: 0 });
-        sections.forEach((section) => observer.observe(section));
-      }
-    })();
-  </script>
 </body>
 </html>

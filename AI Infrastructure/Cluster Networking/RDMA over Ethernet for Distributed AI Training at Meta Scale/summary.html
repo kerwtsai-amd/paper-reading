@@ -1,0 +1,1089 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="Meta SIGCOMM 2024 RoCE 論文深度閱讀：由 AI collective 流量特性推導 backend Clos topology、routing、receiver-driven transport、跨層 co-tuning 與營運方法。">
+  <title>RDMA over Ethernet for Distributed AI Training at Meta Scale｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 46rem;
+      --wide: 62rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">AI Infrastructure / Cluster Networking</p>
+      <h1>RDMA over Ethernet for Distributed AI Training at Meta Scale</h1>
+      <div class="paper-dek" data-section-role="thesis"><p class="lead">面對 AI collective 的低 flow entropy、同步 burst 與 400G 級 scale-out，Meta 以獨立 RoCEv2 backend fabric、GPU–NIC 1:1/Clos AI Zone、QP-aware E-ECMP 或集中式 TE、receiver-driven admission 及 network–collective co-tuning 組成可營運的訓練網路；受控測試顯示 QP scaling + E-ECMP 對 AllReduce 最高提升 40%，TE 在 128-GPU collective 再優於 E-ECMP 5–10%，但這些是不同測試中的局部結果，並非單一端到端加速倍率。<a class="source-ref" href="#source-qps-te-p6">§4.2 · PDF p.6 · Fig. 7</a><a class="source-ref" href="#source-routing-eval-p7">§4.4 · PDF p.7 · Fig. 10</a></p></div>
+      <p class="paper-byline">Adithya Gangidi、Rui Miao、Shengbao Zheng、Sai Jayesh Bondu、Guilherme Goes、Hany Morsy、Rohit Puri、Mohammad Riftadi、Ashmitha Jeevaraj Shetty、Jingyi Yang、Shuqiang Zhang、Mikel Jimenez Fernandez、Shashidhar Gandham、Hongyi Zeng</p>
+      <p class="paper-meta">
+        <span>ACM SIGCOMM 2024 Conference（ACM SIGCOMM ’24）</span>
+        <span>2024</span>
+        <span>AI Infrastructure / Cluster Networking</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-08">2026 年 9 月 8 日</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://doi.org/10.1145/3651890.3672233" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="RDMA over Ethernet for Distributed AI Training at Meta Scale.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀路線：</strong>先用〈<a href="#problem">低熵大象流、持續碰撞與 Incast 如何擊穿預設乙太網</a>〉抓住根因，再讀〈<a href="#method">從 QP 增熵、Demand-aware TE 到 Receiver-driven Admission</a>〉走完整流程，最後用〈<a href="#evidence">路由、壅塞與 Co-tuning：六組主張逐項驗證</a>〉逐項驗證。熟悉背景的讀者可直接從問題章開始。</p>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">Collective、Rail、Clos 與 ECMP：先看流量從哪裡來</a></li>
+            <li><a href="#problem">低熵大象流、持續碰撞與 Incast 如何擊穿預設乙太網</a></li>
+            <li><a href="#insight">Meta 如何把 RoCE 從 AI Zone 推到資料中心規模</a></li>
+            <li><a href="#method">從 QP 增熵、Demand-aware TE 到 Receiver-driven Admission</a></li>
+            <li><a href="#evidence">路由、壅塞與 Co-tuning：六組主張逐項驗證</a></li>
+            <li><a href="#critique">Production Evolution 能證明什麼，哪些仍只是觀察性證據</a></li>
+            <li><a href="#extensions">這套共同設計還留下哪些研究問題</a></li>
+            <li><a href="#reference">拓撲、指標、部署階段與證據索引</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>Collective、Rail、Clos 與 ECMP：先看流量從哪裡來</h2>
+          <h3>只需先懂六件事</h3>
+        <dl class="term-list">
+          <dt>RDMA / RoCEv2</dt><dd>Remote Direct Memory Access 讓 NIC 直接搬運 application/GPU memory，避開兩端 kernel copy。RoCEv2 將 RDMA verbs message 封裝成 Ethernet/IPv6/UDP，由 RNIC 處理。後文 routing hash、QP 與 lossless queue 都建立在此封裝上。</dd>
+          <dt>Collective</dt><dd>AllReduce、AllGather、ReduceScatter、AlltoAll(v) 把多 GPU 同步拆成 point-to-point RDMA writes。慢一條 flow 會延長整個 collective completion time（CCT）。</dd>
+          <dt>Queue Pair（QP）</dt><dd>RDMA 端點上的傳輸佇列。NCCL 一個 GPU pair 可用多 channels、NIC pair 可用多 QPs；增加 QP 並讓 switch hash QP field，可增加路徑 entropy。</dd>
+          <dt>Rail</dt><dd>本文硬體每台 Grand Teton 有 8 GPUs、8 RDMA NICs，呈 1:1 映射並以 8×400G 連 backend；可把同一 GPU/NIC index 的平行 lane 理解為 rail。論文也在 co-tuning 中使用 Rail-based AlltoAll，但沒有完整定義其演算法。</dd>
+          <dt>Clos / oversubscription</dt><dd>RTSW leaf 連主機，CTSW spine 連 rack；跨 AI Zone 再經 ATSW。單一 Zone 設計為 non-blocking，跨 Zone 則刻意 oversubscribe，所以 job placement/rank assignment 會改變可用 bisection bandwidth。</dd>
+          <dt>PFC / ECN / DCQCN</dt><dd>Priority Flow Control（PFC）逐 hop pause lossless queue；ECN 在壅塞時標記 packet；DCQCN 由 receiver 回 CNP，sender 再降速。PFC 防丟包但傳播會造成 head-of-line blocking，DCQCN 則要在 CCT 與 queue/PFC 間調參。</dd>
+        </dl>
+        <p><a class="source-ref" href="#source-overview-p2">§2.1–2.2 · PDF p.2</a><a class="source-ref" href="#source-traffic-hardware-p4">§3.1–3.2 · PDF p.4 · Figs. 4–5</a><a class="source-ref" href="#source-transport-dcqcn-p8">§5.1–5.2 · PDF p.8</a></p>
+        <figure data-figure-role="method">
+          <a href="assets/images/fig-04-p04-grand-teton.png"><img src="assets/images/fig-04-p04-grand-teton.png" alt="Grand Teton CPU switch GPU trays 與八個 400G RDMA NIC 的硬體連線"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>先看底部 8 GPUs 經 NVSwitch scale-up，再看每 GPU 經 PCIe/retimer 對應 400G RNIC。這個 1:1 GPU–NIC 結構是八條 scale-out rails、QP 分布與 topology-aware rank 的物理基礎。</span></figcaption>
+        </figure>
+
+        <h3>Collective 決定 traffic，而不是只決定 API 名稱</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>論文 Table 1 的最小閱讀版；M 為 NCCL channels，N 為 RDMA NIC 數</caption>
+            <thead><tr><th>Collective</th><th>常見用途</th><th>Traffic / congestion</th><th>NIC message</th><th>每 NIC entropy</th><th>Topology 需求</th></tr></thead>
+            <tbody>
+              <tr><td>AlltoAll(v)</td><td>Embedding distribution</td><td>Full mesh、可能 N-to-N incast</td><td>128 KB</td><td>\(\log(MN)\)</td><td>Full bisection bandwidth</td></tr>
+              <tr><td>AllReduce</td><td>DDP</td><td>Tree 或 Ring；Tree 可能 2-to-1 incast</td><td>512 KB</td><td>\(\log(M)\)</td><td>可容忍 oversubscription</td></tr>
+              <tr><td>AllGather</td><td>FSDP</td><td>Ring、1-to-1，較低 congestion</td><td>512 KB</td><td>\(\log(M)\)</td><td>可容忍 oversubscription</td></tr>
+              <tr><td>ReduceScatter</td><td>FSDP</td><td>Ring、1-to-1，較低 congestion</td><td>512 KB</td><td>\(\log(M)\)</td><td>可容忍 oversubscription</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-overview-p2">§2.2 · PDF p.2 · Table 1</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 這張表解釋後續為何不能只選一套「最佳 RoCE 設定」：AlltoAll 的 full mesh entropy 較高但 microburst 強；hierarchical AllReduce 的 flow 少，容易 hash collision。Routing 解「落在哪條 path」，receiver admission 解「同時能注入多少」，兩者控制不同。</p>
+<figure data-figure-role="method">
+          <a href="assets/images/fig-06-p05-backend-topology.png"><img src="assets/images/fig-06-p05-backend-topology.png" alt="兩個 AI Zone 的 host RTSW CTSW 與 ATSW backend topology"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 6</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>每個虛線框內是 two-stage Clos AI Zone：Host→RTSW→CTSW；上方 ATSW 才跨 Zone。Zone 內 non-blocking、跨 Zone oversubscribed，說明為何 scheduler 要把 collective rank placement 變成 minimum-cut 問題。</span></figcaption>
+        </figure>
+<p class="bridge">有了這些背景，下一個問題是：低熵大象流、持續碰撞與 Incast 如何擊穿預設乙太網。</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>低熵大象流、持續碰撞與 Incast 如何擊穿預設乙太網</h2>
+          <h3>症狀 → 根因 → 最近解法的缺口</h3>
+        <ol>
+          <li><strong>症狀：</strong>collective 的 BusBW/CCT 在相同總容量下仍波動；少數 link 過載會讓同步 gang 全體等待。</li>
+          <li><strong>根因 A——空間不均：</strong>訓練 job 專占 GPU、logical topology 稀疏，UDP 5-tuple 重複；ECMP 的隨機 hash 樣本太少，elephant flows 持續撞同一 uplink。作者以 16 links/1,000 flows simulation 得到平均 Max-Mean Ratio（MMR）&gt;1.2；真實 Table 2 的 AllReduce 只有平均 4 QPs/GPU。<a class="source-ref" href="#source-topology-routing-p5">§4.1.1 · PDF p.5</a></li>
+          <li><strong>根因 B——時間突發：</strong>即使 path 完美均衡，collective 仍在毫秒尺度 on/off；AlltoAll 或 incast 可同時把 line-rate traffic 壓向 receiver，形成 ephemeral queue/PFC。<a class="source-ref" href="#source-traffic-hardware-p4">§2.4 · PDF p.4 · Fig. 3</a></li>
+          <li><strong>根因 C——跨層假設不合：</strong>out-of-box NCCL 假設 &lt;10 µs RTT、adaptive routing、無 oversubscription；Meta production unloaded RTT 約 22 µs，且跨 Zone oversubscribed，控制訊息與小 message 的最佳選擇因此改變。<a class="source-ref" href="#source-cotuning-p10">§6.1 · PDF p.10 · Fig. 15</a></li>
+          <li><strong>根因 D——營運狀態會變：</strong>link failure、job fragmentation、switch image、NIC/firmware 與新 GPU I/O 需求共同改變流量；靜態模型無法涵蓋所有交互作用。<a class="source-ref" href="#source-incidents-p12">§6.4 · PDF p.12</a></li>
+        </ol>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-03-p04-traffic-patterns.png"><img src="assets/images/fig-03-p04-traffic-patterns.png" alt="Ranking 與 LLM 八台 server 間的 normalized traffic matrix"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 3</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>對角線是 node 內／自身對應，非對角線顯示 Ranking 較密的 full-mesh，而 LLM traffic 更稀疏。稀疏不是流量小，而是可供 ECMP hash 的獨立 pairs 少，persistent collision 更難平均。</span></figcaption>
+        </figure>
+
+        <h3>為什麼最近的單點方案不夠</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>方案</th><th>能解什麼</th><th>在本文環境的缺口</th></tr></thead>
+            <tbody>
+              <tr><td>5-tuple ECMP</td><td>無狀態地分散大量獨立 flows</td><td>low entropy 時碰撞機率高，且是 probabilistic；不理解 job demand</td></tr>
+              <tr><td>Path pinning</td><td>滿 rack、無故障時可確定地分路</td><td>fragmented placement 與 failure reassignment 破壞平衡，曾使 training performance 降逾 30%</td></tr>
+              <tr><td>單純加 2× uplink</td><td>以容量掩蓋 collision</td><td>快速但昂貴；Stage 2 投入 2× network infrastructure</td></tr>
+              <tr><td>Central TE</td><td>用實際 demand、topology 做 CSPF，可逼近 roofline</td><td>多 link failures 時可能輸 E-ECMP；控制面與 DC-scale path diversity 成本高</td></tr>
+              <tr><td>DCQCN</td><td>由 ECN/CNP 對 flow 反應式降速</td><td>緊 threshold 傷 CCT；放鬆調參只小幅改善 CCT 卻增加 PFC，400G firmware 還有可見性／bug 問題</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-topology-routing-p5">§4.1 · PDF p.5</a><a class="source-ref" href="#source-routing-eval-p7">§4.4 · PDF p.7</a><a class="source-ref" href="#source-transport-dcqcn-p8">§5.2.1 · PDF p.8</a><a class="source-ref" href="#source-admission-p9">§5.2.1 · PDF p.9</a></p>
+
+        <h3>由此推導的需求</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>需求</th><th>成功條件</th><th>對應機制</th></tr></thead>
+            <tbody>
+              <tr><td>R1：隔離並獨立演進訓練流量</td><td>checkpoint/ingestion 不干擾 collective，400G 世代可獨立升級</td><td>Frontend / Backend physical separation</td></tr>
+              <tr><td>R2：使 physical topology 配合 logical collective</td><td>減少跨 oversubscribed Zone 的 cut traffic</td><td>GPU–NIC 1:1、AI Zone Clos、topology-aware placement/rank assignment</td></tr>
+              <tr><td>R3：消除 persistent path collision</td><td>link utilization 均衡、接近 roofline，故障仍有 fallback</td><td>QP scaling + E-ECMP；部分 Zone 用 TE + BGP/E-ECMP backup</td></tr>
+              <tr><td>R4：控制 ephemeral microburst</td><td>receiver 來得及消耗，PFC 不向上游持續傳播</td><td>receiver CTS admission、channel buffers、高優先 CTS、deep CTSW buffer</td></tr>
+              <tr><td>R5：共同最佳化 network 與 collective</td><td>production RTT/oversubscription 下仍有高 BusBW</td><td>message size、channel、protocol/topology、QoS、switch credit co-tuning</td></tr>
+              <tr><td>R6：故障可診斷、可回退</td><td>快速把慢 job 對應到 fabric/NIC/QP 狀態</td><td>OOS、link flap、LAT、PFC watchdog、buffer alarms、reachability 與 baseline</td></tr>
+            </tbody>
+          </table>
+        </div>
+<p>本節只比較論文自己定位的工作；沒有用外部論文補入本文未做的數值。比較重點不是「哪個 protocol 名字最好」，而是控制點是否看得到 AI collective 的結構。</p>
+        <div class="table-scroll">
+          <table>
+            <caption>本文相對既有路線的設計位置</caption>
+            <thead><tr><th>路線</th><th>既有工作關注</th><th>本文的差異</th><th>證據邊界</th></tr></thead>
+            <tbody>
+              <tr><td>Storage-oriented RoCE deployment / DCQCN</td><td>以 PFC、ECN、CNP 與 sender rate control 維持 lossless RDMA</td><td>AI collective 同步、低 entropy 且有 receiver semantics；Meta 把 admission window 上移到 NCCL，再以 PFC/deep buffer 接住短暫 burst</td><td>本文沒有同平台重做 storage workload，也未證明 DCQCN 對所有 AI workload 都不合適</td></tr>
+              <tr><td>InfiniBand 與 proprietary AI fabric</td><td>專用高效能互連與整合式 routing/transport</td><td>本文選 RoCEv2，重用 Ethernet 生態並以 scheduler、switch、RNIC、collective library 補上跨層控制</td><td>沒有 InfiniBand 或其他 fabric 的 controlled performance／cost comparison</td></tr>
+              <tr><td>HPCC 等 transport congestion control</td><td>利用更細緻的 telemetry 或 feedback 調整 sender rate</td><td>本文判斷同步 collective 的 transient burst 可在應用層先限制 inflight data，減少 transport reaction 的負擔</td><td>只實測 DCQCN 參數；未與其他 congestion-control algorithms 對照</td></tr>
+              <tr><td>ECMP、flowlet 與 centralized TE</td><td>從無狀態 hashing 到依 demand／burst 動態分流</td><td>本文同時部署 QP-aware E-ECMP 與 TE，依故障率、scale 與控制面成本選擇；flowlet 仍在初期驗證</td><td>沒有一個統一 policy 在所有 failure/load 狀態下直接比較三者</td></tr>
+              <tr><td>Topology/parallelism co-design</td><td>共同最佳化 model parallelism、collective 與實體拓撲</td><td>保留標準 Clos，以 AI Zone、rail/rank placement、minimum-cut scheduling 與 NCCL algorithm/protocol threshold 適配真實 fabric</td><td>paper 不提出新的 topology synthesis，也未量化與客製拓撲的差距</td></tr>
+              <tr><td>Collective compiler / parameter-server optimization</td><td>生成或優化 collective schedule、分片與通訊次序</td><td>本文把 collective engine 視為 network admission controller，並共同調整 CTS/ACK QoS、channel buffer、VOQ credit 與 protocol switch point</td><td>沒有與 TACCL、MSCCLang、BytePS 等在同一 cluster 的 head-to-head evaluation</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-incidents-p12">§7 Related Work · PDF p.12</a><a class="source-ref" href="#source-transport-dcqcn-p8">§5.1–5.2 · PDF p.8</a><a class="source-ref" href="#source-cotuning-p10">§5.3–6.1 · PDF p.10</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 本文最獨特的比較軸不是 Ethernet 對另一種 fabric，而是<strong>誰擁有 traffic semantics</strong>：ECMP 只見 packet/flow，TE 見 topology 與 demand，NCCL 還知道 receiver readiness 與 collective phase。越接近 semantics 的控制越能預防同步 incast，但越依賴單一 software stack 與運維整合。</p>
+<p class="bridge">問題的限制已經清楚；接著要抓住作者最關鍵的轉念。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>Meta 如何把 RoCE 從 AI Zone 推到資料中心規模</h2>
+          <div class="takeaway-list">
+          <div class="takeaway-item"><p class="takeaway-label">可觀察症狀</p><p>collective completion time 不穩、link utilization 偏斜；即使總容量足夠，少數 path collision 或同步 incast 仍拖慢整個 gang。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">兩個根因</p><p>低 5-tuple entropy 造成持續性 hash collision；collective 的 on/off burst 造成瞬時 queue buildup。兩者需不同控制位置。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">跨層答案</p><p>Topology/job placement 減少跨 zone 流量；routing 分散長流；collective admission 限制 in-flight bytes；operations 以 OOS/PFC/LAT 找故障。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">論文性質</p><p>多年生產演進與 case study，證據混合 trace、simulation、microbenchmark、production observation；不是單一新演算法的封閉評測。</p></div>
+        </div>
+        <p>Meta 的核心洞見是：訓練 traffic 並不像典型資料中心的大量短 flow。GPU gang 週期性地同時做 collective，少量大 flow 可達 NIC line rate；一條慢路徑會讓所有 rank 等待。因此「平均總頻寬」不足以保證訓練效率，必須把 logical collective topology、physical rail/fabric、routing hash 與 receiver readiness 一起設計。<a class="source-ref" href="#source-workload-p3">§2.3–2.4 · PDF p.3 · Tables 1–2</a><a class="source-ref" href="#source-traffic-hardware-p4">§2.4–3 · PDF p.4 · Figs. 3–5</a></p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 在 controlled 128-GPU NCCL benchmark、16 uplinks 下，E-ECMP 的 link utilization 分散在 40–90%，TE 約一致地使用 80%；Figure 10 的 AllReduce／AlltoAll BusBW 顯示 TE 高 5–10%。在另一個 400G、16:1 incast、各跑五分鐘的測試中，streaming Perftest 產生 350K/s 與 183K/s 的兩段 PFC，Gather + receiver admission 則兩段皆為 0。<a class="source-ref" href="#source-routing-eval-p7">§4.4.2 · PDF p.7 · Fig. 10</a><a class="source-ref" href="#source-admission-p9">§5.2.2 · PDF p.9 · Table 3</a></p>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 作者報告已把 RoCE 從 prototype 擴展到多個、每個容納數千 GPU 的 production clusters，先前公開設計可達 32,000 GPUs；另舉 Llama 3 大型變體在 24,000-GPU RoCE cluster 中使用 16,000 GPUs。這些數字證明部署規模，但本論文沒有對 16K/32K job 做端到端 controlled experiment。<a class="source-ref" href="#source-overview-p2">§1 · PDF p.2</a><a class="source-ref" href="#source-workload-p3">§2.3 · PDF p.3</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 最可泛化的成果不是「關掉 DCQCN」這個表面操作，而是先辨識 congestion 是空間上的 path imbalance 還是時間上的 admission burst，再把控制放到能看見正確訊號的層。Meta 的 PFC-only transport 仍依賴 dedicated fabric、deep-buffer spine、receiver-gated NCCL 與細緻營運監控，不能拆開套用。</p>
+<p class="bridge">直覺成立後，再沿著一次完整執行看它如何落成系統。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>從 QP 增熵、Demand-aware TE 到 Receiver-driven Admission</h2>
+          <h3>先走完一個跨節點 collective chunk</h3>
+        <ol>
+          <li><strong>Placement / rank assignment：</strong>job scheduler 先知道 server 在 GPU logical topology 與 AI Zones 的位置；若跨 Zone，盡量找較小的 cut，讓較少 collective traffic 穿越 oversubscribed ATSW layer。</li>
+          <li><strong>準備資料：</strong>sender GPU thread 從 compute buffer 複製 chunk 到可用的 channel buffer。每 GPU 對應一張 RNIC；同 host 的 8 GPUs 先由 NVSwitch scale-up，跨 host 才走各自的 400G rail。</li>
+          <li><strong>Receiver 授權：</strong>receiver CPU proxy 只有在 channel buffer 可用時才送 clear-to-send（CTS），內容帶 size 與 memory information；sender proxy 收到後才 post RDMA write。這把 in-flight traffic 上限綁到 receiver 的可用 channels。</li>
+          <li><strong>選路：</strong>DC-scale 主要由 E-ECMP 將 destination QP field 加入 hash；部分 ranking AI Zones 由中央 TE 依 topology、job placement、flow counters 每約 30 s 算 CSPF，寫入 RTSW Exact Match table。BGP/default route 保留為 fallback。</li>
+          <li><strong>穿越 fabric：</strong>RoCEv2 packet 經 RTSW→CTSW，在跨 Zone 時再經 ATSW。單一 lossless queue 用 DSCP-based PFC 防丟包；deep-buffer CTSW 以 per-port ingress carve 吸收短暫 burst。</li>
+          <li><strong>完成與回授：</strong>receiver RNIC 將資料 DMA 到 channel buffer，GPU 再 copy 到 compute buffer；兩端 proxy recycle buffer，receiver 才發下一個 CTS。OOS、PFC pause、link flap、LAT 與 collective instrumentation 進入診斷工具。</li>
+        </ol>
+        <p><a class="source-ref" href="#source-topology-routing-p5">§3.3 · PDF p.5 · Fig. 6</a><a class="source-ref" href="#source-qps-te-p6">§4.2–4.3 · PDF p.6 · Figs. 7–9</a><a class="source-ref" href="#source-admission-p9">§5.2.2–5.2.3 · PDF p.9 · Fig. 14</a><a class="source-ref" href="#source-operations-p11">§6.3 · PDF p.11</a></p>
+
+        <h3>元件 A：node rails、AI Zone 與 DC-scale fabric</h3>
+        <p>Grand Teton 將 8 GPUs、8 RDMA NICs 做 1:1 mapping；GPU 之間在 node 內由 NVSwitch 相連，GPUDirect 使跨 node traffic 繞過 host memory。每個 rack 的 RTSW leaf 以 copper DAC 連 host，CTSW spine 以 400G optics 組成 two-stage Clos AI Zone。Zone 內主張為 non-blocking；ATSW 把多 Zone 擴成 datacenter-scale，但 cross-Zone 刻意 oversubscribe。因此 rail/topology 不只是 cabling：rank placement 會決定 collective 的哪一維跨越哪一層。<a class="source-ref" href="#source-traffic-hardware-p4">§3.1–3.2 · PDF p.4 · Figs. 4–5</a><a class="source-ref" href="#source-topology-routing-p5">§3.3 · PDF p.5 · Fig. 6</a></p>
+
+        <h3>元件 B：由 hash 增熵，到 demand-aware routing</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>論文的 routing 演進與實際落點</caption>
+            <thead><tr><th>階段</th><th>訊號 → 決策 → 動作</th><th>留下的問題／部署狀態</th></tr></thead>
+            <tbody>
+              <tr><td>ECMP</td><td>UDP 5-tuple → hash → 選 equal-cost path</td><td>低 entropy 時 elephant flows 持續碰撞</td></tr>
+              <tr><td>Path pinning</td><td>destination RTSW downlink “slice” → 固定 path</td><td>只在滿 rack、無 failure 時穩；fragmentation/failed path 破壞平衡</td></tr>
+              <tr><td>E-ECMP + QP scaling</td><td>NCCL 以 round-robin 分配 messages 至多 QPs；switch UDF 額外 hash destination QP</td><td>仍為機率式且需按 workload 調 QP；是 DC-scale 主路由</td></tr>
+              <tr><td>Central TE</td><td>static/dynamic topology + job map + traffic counters → CSPF → RTSW exact-match override</td><td>需求足、無多重失效時接近理想；控制與故障成本使其留在多數 ranking Zones</td></tr>
+              <tr><td>Flowlet switching</td><td>µs 級 flow gap + port load → 動態換 path</td><td>初測可近 TE 且低操作成本，但論文發表時仍是 future rollout</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-topology-routing-p5">§4.1 · PDF p.5</a><a class="source-ref" href="#source-qps-te-p6">§4.2–4.3 · PDF p.6</a><a class="source-ref" href="#source-routing-eval-p7">§4.4–4.5 · PDF p.7</a></p>
+        <figure data-figure-role="method">
+          <a href="assets/images/fig-09-p06-te-architecture.png"><img src="assets/images/fig-09-p06-te-architecture.png" alt="Centralized traffic engineering 的 collector CSPF engine switch programmer 與支援服務"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 9</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>沿箭頭讀三種輸入：static/dynamic topology、job-to-host map、raw flow counters；TE Engine 用 CSPF 形成 placement，再由 switch programmer 寫 data plane。這比 ECMP 多了 demand visibility，也多了控制面狀態與故障風險。</span></figcaption>
+        </figure>
+
+        <h3>元件 C：把 congestion admission 上移到 collective library</h3>
+        <p>Meta 不是聲稱 PFC 本身已成為完整 congestion control，而是利用既有 two-stage copy / receiver-initiated NCCL data path：channel 數與 buffer 大小共同限制可同時注入的 bytes，receiver 消耗完才發下一個 CTS。switch 再把 CTS/ACK 放較高優先 queue，避免控制封包在壅塞中飢餓。底層仍以 PFC 保持 lossless、CTSW deep buffer 吸收 ephemeral burst；罕見 drop 用 go-back-N retransmit，LAT 需另行調校。<a class="source-ref" href="#source-transport-dcqcn-p8">§5.1–5.2.1 · PDF p.8</a><a class="source-ref" href="#source-admission-p9">§5.2.2–5.2.3 · PDF p.9 · Fig. 14</a></p>
+        <figure data-figure-role="method">
+          <a href="assets/images/fig-14-p09-receiver-admission.png"><img src="assets/images/fig-14-p09-receiver-admission.png" alt="NCCL receiver CTS 控制 sender RDMA write 的 GPU to GPU data path"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 14</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>資料不是直接從 compute buffer 無限注入：sender 先 copy 到 channel，收到 receiver CTS 才 RDMA write；receiver copy/flush/recycle 後才再釋出 buffer。此 feedback window 是 congestion admission 的核心。</span></figcaption>
+        </figure>
+
+        <h3>元件 D：network–collective co-tuning</h3>
+        <p>production RTT 約 22 µs，而 NCCL developer assumptions 小於 10 µs。Meta 因此一起調整 channel/message size、Tree/Ring/Rail-based AlltoAll 選擇、LL/LL128/Simple protocol 轉換點、CTS/ACK QoS、CTSW VOQ credit、NIC PCIe credits、relaxed ordering 與 topology-aware rank assignment。這些設定不是獨立 knobs：增大 channel buffer 可增加 bandwidth utilization，卻也擴大 congestion spreading 與 GPU thread/resource 競爭。<a class="source-ref" href="#source-cotuning-p10">§6.1 · PDF p.10 · Fig. 15</a><a class="source-ref" href="#source-operations-p11">§6.1 · PDF p.11</a></p>
+
+        <h3>元件 E：把 slow job 變成可定位事件</h3>
+        <p>Job-facing RoCET 彙整 switch、NIC、PCIe switch 與 GPU counters：Out-of-Sequence（OOS）揭露未被其他層回報的 drop/NIC bug，link flap 找硬軟體抖動，Local ACK Timeout（LAT）對應 QP sender timeout。Operator 端再用 &gt;200 ms PFC watchdog、RTSW buffer &gt;80% alarm、congestion-drop 與 reachability 檢查執行自動緩解。<a class="source-ref" href="#source-operations-p11">§6.3 · PDF p.11</a></p>
+
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> Topology 先減少必須穿越的昂貴 cut；routing 把長流平均到可用 paths；receiver admission 限制同時到達的 burst；co-tuning 讓 control/data message 適配真實 RTT；observability 則處理任何 model 無法預見的 failure。五層共同回答 R1–R6，不能把其中一個 benchmark gain 當成整套 production fabric 的唯一原因。</p>
+<h3>路徑不均衡：Max–Mean Ratio</h3>
+        <div class="formula-block">
+          \[
+            \mathrm{MMR}=\frac{\max_{\ell\in L} c_\ell}
+            {\frac{1}{|L|}\sum_{\ell\in L}c_\ell}
+          \]
+          <p class="formula-block__meaning">\(c_\ell\) 是 link \(\ell\) 上的 flow count，\(L\) 是等價 links。MMR = 1 代表完全均衡；越高表示最忙 link 相對平均越嚴重。論文以「同一 collective 內多數 flow 大小相近」為前提，用 flow count 近似 load；在 16 links、1,000 flows 的 ECMP simulation 中平均 MMR &gt;1.2。</p>
+        </div>
+        <p><a class="source-ref" href="#source-topology-routing-p5">§4.1.1 · PDF p.5</a></p>
+
+        <h3>QP/channel 數只增加可 hash 的選項</h3>
+        <div class="formula-block">
+          \[
+            H_{\mathrm{AlltoAll}}\sim \log(MN),\qquad
+            H_{\mathrm{hierarchical}}\sim \log(M)
+          \]
+          <p class="formula-block__meaning">Table 1 以 \(M\) 表 NCCL channels、\(N\) 表每 host 的 RDMA NICs，描述每 NIC 可見的相對 flow entropy。AlltoAll full mesh 可同時利用 NIC 與 channels；Ring/Tree 類 hierarchical collective 的 destination pairs 稀疏，主要只由 channels 增熵。因此 LLM 使用 QP scaling factor 16，而 Ranking 只用 4。</p>
+        </div>
+        <p><a class="source-ref" href="#source-overview-p2">§2.2 · PDF p.2 · Table 1</a><a class="source-ref" href="#source-qps-te-p6">§4.2.3 · PDF p.6 · Fig. 8</a></p>
+
+        <h3>Receiver admission 的容量直覺</h3>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 論文沒有提供 end-to-end iteration-time 公式，也未把 normalized BusBW 映射成模型收斂時間。後續只能說 routing/transport 改善 collective communication；不能據此推導固定的訓練加速比。</p>
+<p class="bridge">方法看似合理，真正的問題是：實驗有沒有把這條因果鏈撐起來？</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>路由、壅塞與 Co-tuning：六組主張逐項驗證</h2>
+          <h3>證據不是同一種實驗</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>資料來源、控制程度與適合回答的問題</caption>
+            <thead><tr><th>層級</th><th>設定</th><th>能回答</th><th>主要限制</th></tr></thead>
+            <tbody>
+              <tr><td>Production trace</td><td>Chakra 蒐集 2023Q4 約 30K 隨機 training jobs；Figure 1–2、Table 2</td><td>collective type、job size、QP、buffer occupancy 的真實分布</td><td>排除 &gt;128-GPU long tail，明確不含 LLM jobs</td></tr>
+              <tr><td>Flow-level simulation</td><td>production job placement；E-ECMP QP=4/32 對 TE</td><td>理想 capacity 與 link failure 下 routing 上界</td><td>traffic model、simulator calibration 與完整分布未提供</td></tr>
+              <tr><td>Controlled collective benchmark</td><td>NCCL/nccl-tests；32／128 GPU、16 uplinks 或 200G/400G 子系統</td><td>QP scaling、TE、ECN/DCQCN、flowlet、co-tuning 的局部機制</td><td>不同圖使用不同平台；軟體/firmware 版本與重複統計多未提供</td></tr>
+              <tr><td>Production longitudinal</td><td>一個 ZionEX 200G AI Zone，四階段、數萬 jobs、跨年</td><td>routing/topology 演進能否長期維持 BusBW</td><td>同時有年代、job mix、software 與容量變化，非嚴格因果消融</td></tr>
+              <tr><td>Incident reports</td><td>switch image regression；buffer assumption × firmware × burst × H100</td><td>操作面 failure modes 與可觀測性需求</td><td>個案，無發生率／平均修復時間統計</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-workload-p3">§2.3 · PDF p.3</a><a class="source-ref" href="#source-routing-eval-p7">§4.4 · PDF p.7</a><a class="source-ref" href="#source-operations-p11">§6.2–6.3 · PDF p.11</a><a class="source-ref" href="#source-incidents-p12">§6.4 · PDF p.12</a></p>
+
+        <h3>Claim–test 配對</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>每個主要主張如何被測試</caption>
+            <thead><tr><th>主張</th><th>測試與控制</th><th>Metric / observation</th><th>不能推論</th></tr></thead>
+            <tbody>
+              <tr><td>C1：提高 entropy 可修正 ECMP collision</td><td>AllReduce，同 message size；QP=1 對 split/round-robin QP=4/16，switch 加 destination-QP hash</td><td>Normalized bandwidth；最高 +40%</td><td>未映射到 full training step，也沒有 error bars</td></tr>
+              <tr><td>C2：TE 比機率 hash 更均衡</td><td>128-GPU AlltoAll/AllReduce、16 uplinks；TE 對 E-ECMP</td><td>40–90% vs uniform 80% link utilization；BusBW +5–10%</td><td>多 link failures 或 DC-scale 控制成本下不一定勝</td></tr>
+              <tr><td>C3：DCQCN 難兼顧 CCT 與 PFC</td><td>32-GPU AllReduce ECN threshold；128-GPU AlltoAll 多組 DCQCN</td><td>Tight threshold CCT 約 +5%；最佳調參 CCT 約 −3% 但 PFC 2–3×</td><td>未和其他 modern CC 做同平台比較</td></tr>
+              <tr><td>C4：receiver admission 抑制 incast</td><td>400G、16:1、五分鐘、同 traffic volume；Perftest 對 recurring NCCL Gather</td><td>Table 3 三段 PFC：Perftest 非零，Gather 皆 0</td><td>兩個 generators 的 burst shape/implementation 不完全相同</td></tr>
+              <tr><td>C5：co-tuning 適配真實 fabric</td><td>Out-of-box、collective-only、network+collective；AlltoAll/AllReduce 多 message sizes</td><td>Normalized BusBW；作者稱多個 case &gt;2×</td><td>圖未給 cluster/GPU/software 完整設定與 training time</td></tr>
+              <tr><td>C6：routing 可替代永久 overbuild</td><td>同一 200G AI Zone 四個歷史 stages</td><td>Normalized AllReduce BusBW 分布；Stage 4 收回 CTSW 仍無負面</td><td>歷史 observational data 無法排除 workload/stack 演進</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>硬體與軟體資訊缺口</h3>
+        <p>ZionEX 為 NVIDIA A100 世代、Grand Teton 為 H100 世代；Grand Teton 每 host 8 GPUs、8×400G RNIC。論文使用 NCCL、RoCEv2、Open/R、FBOSS、BGP、PFC 與不同 NIC firmware，但<strong>沒有</strong>為每張結果圖列出 CPU、記憶體、NIC/switch 型號、driver/CUDA/NCCL/firmware 版本、run repetitions、warm-up 或統計信賴區間。這使微觀數值難以原樣重現。<a class="source-ref" href="#source-traffic-hardware-p4">§3.1 · PDF p.4</a><a class="source-ref" href="#source-qps-te-p6">§4.3 · PDF p.6</a><a class="source-ref" href="#source-transport-dcqcn-p8">§5.1–5.2 · PDF p.8</a></p>
+        <h3>QP-aware routing 能否修正 low entropy？</h3>
+        <p><strong>測試：</strong>AllReduce benchmark 在相同 collective size 下比較 out-of-box QP=1、QP=4/16 的 split 與 round-robin；switch 用 E-ECMP 額外 hash destination QP。<strong>觀察：</strong>正文報告相對 baseline ECMP without QP scaling 最高 <strong>40%</strong> performance improvement；Figure 7 顯示較大 messages 時 round-robin QP=4/16 接近 90–100% normalized bandwidth，而 QP=1 明顯較低。<strong>支持：</strong>更多可辨識 flows 可減少持續碰撞。<strong>限制：</strong>圖沒有 error bars、完整 testbed 或 end-to-end step time。<a class="source-ref" href="#source-qps-te-p6">§4.2.2–4.2.4 · PDF p.6 · Fig. 7</a></p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> QP 數並非越多越好：Ranking full-mesh traffic 已有較高 entropy，production 採 factor 4；LLM hierarchical collectives 採 16。Split-message 方法會造成更小 network messages 與多 ACK，本文 workload 下 round-robin posting 較好。<a class="source-ref" href="#source-qps-te-p6">§4.2.3–4.2.4 · PDF p.6 · Figs. 7–8</a></p>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-07-p06-qp-scaling.png"><img src="assets/images/fig-07-p06-qp-scaling.png" alt="AllReduce 在不同 message size 與 QP scaling 方法下的 normalized bandwidth"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 7</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>比較相同 message size 的五根柱；round-robin QP=4/16 在 128 MB 以上明顯優於 out-of-box QP=1，split 方法反而可能因小封包與多 ACK 落後。此圖同時說明「更多 QP」還需正確 message mapping。</span></figcaption>
+        </figure>
+
+        <h3>Demand-aware TE 是否優於 E-ECMP？</h3>
+        <ul>
+          <li><strong>Simulation：</strong>production placement、非最佳 scheduling 下，E-ECMP QP=4 的平均 completion time 比 roofline 長 40%；提高至 QP=32 後，worst case roofline utilization 從 20% 升到 52%，但多數 jobs 仍不到 roofline。TE 在 network capacity 足夠時可達 100% utilization；若 failures 使 link availability 低於 1:1 subscription，E-ECMP 可能反勝。<a class="source-ref" href="#source-routing-eval-p7">§4.4.1 · PDF p.7</a></li>
+          <li><strong>Controlled benchmark：</strong>128-GPU、16-uplink 的 real-world NCCL benchmark 中，E-ECMP links 使用率 40–90%，TE 約均勻 80%；AllReduce/AlltoAll BusBW 高 5–10%。<a class="source-ref" href="#source-routing-eval-p7">§4.4.2 · PDF p.7 · Fig. 10</a></li>
+          <li><strong>Production decision：</strong>TE 用於多數 ranking AI Zones，E-ECMP 是 failure backup；但 multiple-link failure 比 simulation 預期常見，加上 DC-scale ATSW path diversity 與控制成本，Meta 選 E-ECMP 作 DC-scale 主方案。<a class="source-ref" href="#source-routing-eval-p7">§4.4.3 · PDF p.7</a></li>
+        </ul>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> TE 的 5–10% benchmark 優勢與未被全域採用並不矛盾：它最佳化 steady-state utilization，但 production 目標還包含 failure fallback、控制面複雜度與 operator burden。這篇 paper 的「最佳」是 multi-objective operational choice，不只是一條 performance curve。</p>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-10-p07-routing-benchmark.png"><img src="assets/images/fig-10-p07-routing-benchmark.png" alt="128 GPU AlltoAll 與 AllReduce 下 TE 對 E-ECMP 的 normalized BusBW utilization"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 10</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>AlltoAll 左圖的 TE/E-ECMP 差距比 AllReduce 更持續；兩圖都只到 normalized BusBW。正文補充 16 uplinks 時 TE 將 link utilization 收斂到約 80%，而 E-ECMP 分布 40–90%。</span></figcaption>
+        </figure>
+
+        <h3>為何不把 DCQCN 當主要答案？</h3>
+        <p><strong>32-GPU AllReduce：</strong>將 CTSW ECN threshold 從 baseline low/high 都 5 MB 收緊為 300/600 KB，collective completion time 在示例中約惡化 5%；作者另稱更嚴重 corner cases 沒有分享資料。<strong>128-GPU AlltoAll：</strong>放鬆的一些 DCQCN 組合最多只改善約 3% CCT，卻使 PFC 指標惡化 2–3×。因此 200G 保留 relaxed 5 MB ECN/default DCQCN；400G 因 default performance degradation、firmware change/bug 與 CNP visibility 問題，deployment 最終不啟用 DCQCN。<a class="source-ref" href="#source-transport-dcqcn-p8">§5.2.1 · PDF p.8 · Fig. 12</a><a class="source-ref" href="#source-admission-p9">§5.2.1 · PDF p.9 · Fig. 13</a></p>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 截至論文撰寫，400G production 已有一年以上只靠 PFC flow control、沒有 transport-level congestion control，但仍使用 collective-layer controls；作者稱 performance 穩定且沒有 persistent congestion。這是 production observation，沒有同期 DCQCN A/B 或 raw time series。<a class="source-ref" href="#source-admission-p9">§5.2.1 · PDF p.9</a></p>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-12-p08-ecn-threshold.png"><img src="assets/images/fig-12-p08-ecn-threshold.png" alt="32 GPU AllReduce 在 5MB 與 300 600KB ECN threshold 下的 completion time"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 12</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>藍斜線 tight ECN threshold 在各 collective size 都沒有更快，較大 message 約慢 5%。它只示範作者所見 regression 的較小案例；正文承認更極端 corner cases 未提供資料。</span></figcaption>
+        </figure>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-13-p08-dcqcn-tuning.png"><img src="assets/images/fig-13-p08-dcqcn-tuning.png" alt="128 GPU AlltoAll 在多組 DCQCN 參數下的 completion time"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 13</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>多組 DCQCN 柱幾乎重合：最好 CCT 只約改善 3%；但正文指出對應 PFC 指標惡化 2–3×。圖只呈 CCT，PFC trade-off 必須配合文字讀。</span></figcaption>
+        </figure>
+
+        <h3>Receiver-driven admission 是否真的壓住 incast？</h3>
+        <p><strong>測試：</strong>400G network、16:1 incast、相同 traffic volume，各跑五分鐘；比較 continuous streaming Perftest 與 recurring NCCL Gather。Gather 雖非常用 production collective，作者選它是因為在 collective 中產生最嚴重 incast。<strong>觀察：</strong></p>
+        <div class="table-scroll">
+          <table>
+            <caption>Table 3：receiver admission 下的 PFC</caption>
+            <thead><tr><th>PFC 方向</th><th>Perftest</th><th>Gather</th></tr></thead>
+            <tbody>
+              <tr><td>Downstream RTSW → CTSW</td><td>350K/s</td><td>0</td></tr>
+              <tr><td>CTSW → Upstream RTSW</td><td>183K/s</td><td>0</td></tr>
+              <tr><td>Upstream RTSW → Sender NIC</td><td>10% duration</td><td>0</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>另把 Gather receiver bandwidth 限成 25% 時，receiver NIC 對 RTSW 發出 75% TX pause duration，但 RTSW 吸收，沒有把 backpressure 推到 CTSW。這支持「CTS + channel window 能隨 receiver throughput 控制注入」；但 Perftest/Gather 的 sender behavior 不只差一個 admission flag，因果仍限於這兩種 traffic generator。<a class="source-ref" href="#source-admission-p9">§5.2.2 · PDF p.9 · Fig. 14 &amp; Table 3</a></p>
+
+        <h3>Co-tuning 帶來多少差距？</h3>
+        <p>Figure 15 在 AlltoAll/AllReduce、16 MB–4 GB collective sizes 比較 out-of-box、collective-only tuned、network+collective co-tuned normalized bandwidth。作者稱多個案例超過 <strong>2×</strong> out-of-box，圖上小／中 message 差距尤其大。具體機制證據包括：</p>
+        <ul>
+          <li>將 CTS/ACK 置於較高 QoS 後，sender 等 rendezvous messages 的延遲從 <strong>P90 43 µs 降到 4 µs</strong>。<a class="source-ref" href="#source-cotuning-p10">§6.1 · PDF p.10</a></li>
+          <li>調整 CTSW VOQ egress→ingress credit allocation，在 latency-sensitive hierarchical collectives 的 small sizes 最高改善 <strong>15%</strong>。<a class="source-ref" href="#source-cotuning-p10">§6.1 · PDF p.10</a></li>
+          <li>較大的 message/channel buffer、延後 Tree/Rail-based AlltoAll 與 LL128 的切換點，減少 CTS/completion 次數並填滿 22 µs RTT fabric。</li>
+        </ul>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> Figure 15 直接支持 communication BusBW 改善；43→4 µs 與 15% 是正文報告的局部 measurements。論文沒有把這些改進合成模型 training throughput、time-to-train 或收斂品質結果。<a class="source-ref" href="#source-cotuning-p10">§6.1 · PDF p.10 · Fig. 15</a></p>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-15-p10-cotuning.png"><img src="assets/images/fig-15-p10-cotuning.png" alt="AlltoAll 與 AllReduce 的 network plus collective co-tuned normalized bandwidth"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 15</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>每組由藍色 out-of-box、綠色只調 collective、紅色 network+collective 共調組成。小／中 message 的差距最大，顯示 RTT、control messages 與 protocol threshold 的跨層設定比單純加 bandwidth 更關鍵。</span></figcaption>
+        </figure>
+
+        <h3>多年 production evolution 是否支持設計？</h3>
+        <p>Figure 16 聚合一個 200G ZionEX AI Zone、跨年數萬 jobs 的 normalized AllReduce BusBW：</p>
+        <ol>
+          <li>Stage 1：1:1 subscription、static routing、collision，分布低且寬。</li>
+          <li>Stage 2：paper 所稱 1:2 under-subscription，以 <strong>2× network infrastructure</strong> 消除 performance impact。</li>
+          <li>Stage 3：維持 1:2 並導入 TE，中位 performance 類似 Stage 2，但分布更緊。</li>
+          <li>Stage 4：收回 CTSW hardware 至 1:1.125，保留最多兩條 link failure 緩衝，作者報告沒有 performance loss。</li>
+        </ol>
+        <p><a class="source-ref" href="#source-operations-p11">§6.2 · PDF p.11 · Fig. 16</a></p>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-16-p11-prod-stages.png"><img src="assets/images/fig-16-p11-prod-stages.png" alt="一個 200G ZionEX AI Zone 四個 network stages 的 normalized AllReduce bandwidth 分布"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 16</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>Stage 1 分布寬且低；Stage 2 以 2× network capacity 拉高；Stage 3 加 TE 後中位數近似但更集中；Stage 4 將 under-subscription 收回至 1:1.125 仍維持表現。這是多年 observational evidence，不是隨機化消融。</span></figcaption>
+        </figure>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 這是最貼近「production works」的長期證據，也最難做純因果解讀：各 stage 發生於不同時間，job mix、collective library、firmware 與 failure state 可能一併改變。它支持可營運性與一致性趨勢，不等價於 controlled ablation。</p>
+
+        <h3>規模與穩定度主張：單獨列示</h3>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 作者稱四年 production AI traffic 中，即使關閉 DCQCN、RTSW 多次對 deep-buffer CTSW 發 PFC，也未遇 CTSW 持續向 RTSW 發 PFC；RTSW buffer 監控亦從未超過 80% alarm threshold。這些 observation 沒有事件總數、分母、tail duration 或跨 cluster raw distribution，不能作為「PFC-only 普遍安全」的實驗定理。<a class="source-ref" href="#source-cotuning-p10">§5.3 · PDF p.10</a><a class="source-ref" href="#source-operations-p11">§6.3.2 · PDF p.11</a></p>
+<h3>已測的設計敏感度</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>變因</th><th>範圍／對照</th><th>結果</th><th>決策</th></tr></thead>
+            <tbody>
+              <tr><td>QP factor / mapping</td><td>1、4、16；split vs round-robin</td><td>大 message 下 round-robin 明顯較佳；Ranking/LLM entropy 需求不同</td><td>Ranking=4，LLM=16；switch hash destination QP</td></tr>
+              <tr><td>TE vs QP scaling</td><td>E-ECMP QP 4→32；TE；capacity/failure</td><td>QP32 改善但多數未到 roofline；TE capacity 足時100%，failure 可反勝</td><td>TE ranking Zones；E-ECMP DC-scale/fallback</td></tr>
+              <tr><td>Flowlet interval</td><td>128、175、200、256、512 µs</td><td>256–512 µs 的 out-of-order &lt;1 packet/s；200G AlltoAll 在256/512間 performance 差異不顯著</td><td>初測可近 TE，尚未完成 production rollout</td></tr>
+              <tr><td>ECN/DCQCN</td><td>5 MB vs 300/600 KB；多組 rate parameters</td><td>Tight threshold CCT 約+5%；best relaxed CCT 約−3%但 PFC 2–3×</td><td>400G 不用 DCQCN，以 collective admission 取代</td></tr>
+              <tr><td>Receiver speed</td><td>Gather receiver 100%→25%</td><td>receiver NIC pause 75%，RTSW 吸收且不向 CTSW傳播</td><td>以 ready channels 適應慢 receiver</td></tr>
+              <tr><td>Fabric capacity</td><td>Stage 1:1、paper-defined 1:2、1:1.125</td><td>overbuild 提升後 TE 可收回多數額外 CTSW，維持分布</td><td>保留兩條 link failure headroom</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-qps-te-p6">§4.2 · PDF p.6 · Figs. 7–8</a><a class="source-ref" href="#source-routing-eval-p7">§4.4–4.5 · PDF p.7 · Figs. 10–11</a><a class="source-ref" href="#source-transport-dcqcn-p8">§5.2.1 · PDF p.8 · Fig. 12</a><a class="source-ref" href="#source-admission-p9">§5.2 · PDF p.9 · Fig. 13 &amp; Table 3</a><a class="source-ref" href="#source-operations-p11">§6.2 · PDF p.11 · Fig. 16</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 論文沒有在同一 cluster、同一 workload、同一時間依序拆掉 topology-aware placement、QP-aware routing、receiver admission、deep buffer、PFC、QoS 與 collective tuning；Figure 15 也只分成 out-of-box／collective-only／co-tuned 三組。因此無法把整體 improvement 精確歸因到每個元件，亦沒有通用的 parameter-selection algorithm。</p>
+<p class="bridge">數據回答了部分問題；剩下的是適用邊界與仍未被證明的部分。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>Production Evolution 能證明什麼，哪些仍只是觀察性證據</h2>
+          <h3>優點</h3>
+        <ul>
+          <li><strong>由 workload 推導網路：</strong>先以 collective/QP/buffer trace 說明 traffic entropy 與 burst，再設計 topology、routing、transport，因果鏈完整。</li>
+          <li><strong>不掩飾演進失敗：</strong>path pinning、昂貴 overbuild、TE failure cases、DCQCN tuning/firmware 問題都被保留，提供 production decision 的真實 multi-objective 脈絡。</li>
+          <li><strong>跨層控制：</strong>job scheduler、NCCL、RNIC、switch queue/credit、routing controller 與 observability 串在同一 data path，而非只調單一 protocol。</li>
+          <li><strong>多種證據互補：</strong>simulation 解釋上界，microbenchmark 隔離機制，長期 production distribution 與 incidents 驗證可營運性。</li>
+        </ul>
+
+        <h3>限制與外部有效性</h3>
+        <ul>
+          <li><strong>Traffic trace 不含 LLM long tail：</strong>約 30K jobs 明確排除 &gt;128 GPU、因此排除 LLM jobs；作者以 multidimensional parallelism 說明 16–128 GPU collective 仍相關，但無法代表 16K-GPU job 的跨 Zone coordination 全貌。<a class="source-ref" href="#source-workload-p3">§2.3 · PDF p.3</a></li>
+          <li><strong>不是端到端 training evaluation：</strong>主指標是 CCT/normalized BusBW/PFC；沒有 iteration time、MFU、time-to-train、job completion time 或模型品質。</li>
+          <li><strong>重現資訊不足：</strong>多數圖缺完整 CPU/NIC/switch SKU、driver/CUDA/NCCL/firmware、run count、variance、warm-up 與 raw data。</li>
+          <li><strong>跨圖不可直接相加：</strong>32-GPU、128-GPU、200G、400G、simulation 與歷史 production 各回答不同 claim；40%、10%、2× 不能合成總加速。</li>
+          <li><strong>DCQCN 比較有限：</strong>只掃一些 DCQCN/ECN 設定，未同平台比較 HPCC 等其他 congestion-control algorithms；firmware bug 也混入架構判斷。</li>
+          <li><strong>Flowlet 尚非已證 production：</strong>Figure 11 是 initial testing，作者明說 future rollout 取決於 early deployment signals。</li>
+          <li><strong>成本未量化：</strong>只指出 overbuild 要 2× network infrastructure；沒有 TCO、功耗、cabling、ATSW optics 或 operator-hours 分析。</li>
+        </ul>
+
+        <h3>部署風險</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>風險</th><th>觸發條件</th><th>本文緩解</th><th>仍未解</th></tr></thead>
+            <tbody>
+              <tr><td>PFC HoL / deadlock</td><td>persistent backpressure、bad NIC 長時間 pause</td><td>receiver admission、deep CTSW buffer、&gt;200ms watchdog</td><td>形式化 deadlock freedom、multi-tenant fairness 未提供</td></tr>
+              <tr><td>Control-message starvation</td><td>CTS/ACK 和 data 共用擁塞路徑</td><td>高優先 QoS/DSCP，P90 43→4 µs</td><td>priority interaction、starvation of other classes 未評</td></tr>
+              <tr><td>TE stale state / failure</td><td>30 s recompute 遇 µs burst 或 multiple-link failures</td><td>BGP/E-ECMP fallback；DC-scale不用 TE</td><td>切換瞬間與 consistency 收斂未量化</td></tr>
+              <tr><td>Configuration coupling</td><td>GPU、firmware、buffer、job pattern 同時變更</td><td>baseline、synthetic traffic、library instrumentation、alerts</td><td>config search/rollout 仍人工且容易 corner case</td></tr>
+              <tr><td>Hardware/vendor variation</td><td>不同 RNIC firmware、VOQ、400G/更快世代</td><td>inbox driver、vendor collaboration、co-tuning</td><td>open Ethernet 不等於行為可攜；跨 vendor 結果未示</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 「不用 transport-level CC」只適用於這個完整組合：dedicated lossless backend、可控 job/collective library、receiver-gated traffic、deep buffers、PFC 與成熟監控。若 endpoint 不能被共同控制、混合任意 traffic、buffer 淺、RTT/BDP 或 GPU:network throughput 比例不同，結論必須重新驗證。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>這套共同設計還留下哪些研究問題</h2>
+          <h3>可重用的設計原則</h3>
+        <ol>
+          <li><strong>先把不平衡拆成空間與時間兩種：</strong>low-entropy 5-tuples 造成空間上的 persistent path collision，應靠 QP entropy、placement 或 demand-aware routing；collective barrier 造成時間上的 microburst，應靠 admission、buffer 與 feedback window。混成單一「congestion」問題，會讓參數調整互相傷害。</li>
+          <li><strong>把控制放到看得見因果的層：</strong>NCCL 知道 receiver 是否有 buffer，因而可在 sender 注入前阻止 incast；switch 只看到 queue 形成後的結果。這不是否定 transport，而是用語意更完整的上層縮小 transport 必須處理的狀態空間。</li>
+          <li><strong>最佳化目標必須包含 failure 與操作成本：</strong>TE 在理想 capacity 下達到較均勻 utilization，但 E-ECMP 的 stateless fallback 與 DC-scale simplicity 可能有更高 production value。單次 benchmark 的 peak 不是 deployment winner。</li>
+          <li><strong>標準 topology 仍可 co-design：</strong>不必先發明新 fabric；rank placement、rail alignment、QP mapping、collective algorithm、QoS 與 buffer credit 已能把 Clos 的可用能力釋放出來。</li>
+        </ol>
+
+        <h3>值得補做的實驗</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>實驗</th><th>最小控制</th><th>應量測</th><th>能關閉的疑問</th></tr></thead>
+            <tbody>
+              <tr><td>同平台 factorial ablation</td><td>固定 H100 cluster/job placement；逐一切換 QP scaling、TE、CTS、deep buffer、PFC、QoS</td><td>step time、BusBW、link skew、queue/PFC tails、failure recovery</td><td>把 2×/40%/10% 等局部收益分配到元件與交互作用</td></tr>
+              <tr><td>完整 LLM job trace/replay</td><td>包含 &gt;128 GPU、跨 Zone、不同 parallelism dimensions</td><td>per-collective critical path、cross-zone bytes、tail iteration time</td><td>30K trace 排除 LLM long tail 的外部有效性缺口</td></tr>
+              <tr><td>End-to-end training A/B</td><td>固定 model、tokens、GPU count、software/firmware</td><td>MFU、iteration/JCT、time-to-train、recovery time、quality parity</td><td>communication metric 是否真正轉成訓練成果</td></tr>
+              <tr><td>Hybrid routing state machine</td><td>相同 topology 注入多 link failures、stale telemetry、controller partition</td><td>TE↔E-ECMP↔flowlet switch time、packet reordering、tail CCT</td><td>何時應犧牲理想 utilization 換可靠性</td></tr>
+              <tr><td>Transport/admission comparison</td><td>同一 burst trace 比 DCQCN、其他 CC、CTS-only 與組合</td><td>PFC duration、queue occupancy、goodput、fairness、deadlock events</td><td>400G 關閉 DCQCN 是原理優勢或特定 firmware/參數結果</td></tr>
+              <tr><td>Mixed-tenant safety</td><td>共同 fabric 放 collective、storage、latency traffic 與 slow/bad receiver</td><td>隔離、HoL、priority starvation、租戶公平性</td><td>PFC-only 在非 dedicated/fully controlled 環境的適用邊界</td></tr>
+              <tr><td>自動化 co-tuning</td><td>跨 GPU/NIC/firmware/RTT 變更，以 canary + rollback 搜尋</td><td>performance、incident rate、operator-hours、收斂速度</td><td>人工跨層調參是否可規模化與安全升級</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> 若未來 GPU injection rate 成長快於 per-port network/buffer，或 cluster 開始混合不可控 endpoints，PFC-only + receiver admission 的穩定區間可能縮小，transport-level CC 的 break-even 會重新移動。這是由本文「GPU-to-network throughput ratio 需整體考量」延伸的假說，不是論文已驗證結果。<a class="source-ref" href="#source-cotuning-p10">§5.3 · PDF p.10</a></p>
+<ol>
+          <li><strong>PFC-only 的結論能移植到哪裡？</strong><br>為何重要：本文成功經驗同時依賴 dedicated backend、deep buffers、receiver-gated NCCL 與成熟 watchdog。討論時應明確列出少一個前提會出現哪種 failure mode，而不是把「一年穩定」當成 RoCE 的普遍性質。</li>
+          <li><strong>排除 &gt;128-GPU LLM jobs 的 trace，足以支持 16K-GPU training 嗎？</strong><br>為何重要：作者以 multidimensional parallelism 說明小 group collective 仍代表關鍵 traffic，但跨 group／跨 Zone synchronization 可能改變 entropy、burst 與 tail。需要哪些 trace 或 replay 才能補上？</li>
+          <li><strong>TE、E-ECMP 與 flowlet 應如何形成可證安全的 hybrid policy？</strong><br>為何重要：TE 的 steady-state bandwidth 較好，E-ECMP failure robustness 較高，flowlet 介於兩者；真正系統問題是偵測、切換與 rollback，而不是只選一條曲線。</li>
+          <li><strong>5–10% BusBW、40% QP improvement 與 &gt;2× co-tuning，會轉成多少 time-to-train？</strong><br>為何重要：不同數字來自不同 testbeds/claims，不能相乘；模型 step 中 compute overlap、critical collective 與 straggler 決定實際價值。</li>
+          <li><strong>跨層 co-tuning 能否自動化而不放大 incident blast radius？</strong><br>為何重要：switch image、firmware、buffer assumption 與 H100 burst 的案例顯示局部「最佳」可能在組合後失效；需要什麼 invariant、canary、telemetry 與 regression suite？</li>
+        </ol>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>拓撲、指標、部署階段與證據索引</h2>
+          <div class="table-scroll">
+          <table>
+            <caption>正式出版資訊</caption>
+            <tbody>
+              <tr><th scope="row">正式標題</th><td>RDMA over Ethernet for Distributed AI Training at Meta Scale</td></tr>
+              <tr><th scope="row">作者</th><td>Adithya Gangidi、Rui Miao、Shengbao Zheng、Sai Jayesh Bondu、Guilherme Goes、Hany Morsy、Rohit Puri、Mohammad Riftadi、Ashmitha Jeevaraj Shetty、Jingyi Yang、Shuqiang Zhang、Mikel Jimenez Fernandez、Shashidhar Gandham、Hongyi Zeng</td></tr>
+              <tr><th scope="row">機構</th><td>Meta</td></tr>
+              <tr><th scope="row">會議</th><td>ACM SIGCOMM ’24，2024 年 8 月 4–8 日，Sydney, NSW, Australia</td></tr>
+              <tr><th scope="row">DOI</th><td><a href="https://doi.org/10.1145/3651890.3672233" target="_blank" rel="noopener noreferrer">10.1145/3651890.3672233</a></td></tr>
+              <tr><th scope="row">篇幅</th><td data-summary-field="pdf-page-count">共 14 頁</td></tr>
+              <tr><th scope="row">本閱讀分類</th><td>AI Infrastructure / Cluster Networking</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 分類重點不是單一 DCQCN 或 RDMA protocol，而是把訓練 workload 轉譯成整個 cluster fabric 的 topology、routing、transport、collective library 與 operations 設計。因此歸入 <strong>Cluster Networking</strong>；RoCE 是承載這套跨層系統的傳輸語意。<a class="source-ref" href="#source-meta-p1">Abstract &amp; §1 · PDF p.1</a><a class="source-ref" href="#source-overview-p2">§1–2 · PDF p.2</a></p>
+<h3>術語表</h3>
+        <dl class="term-list">
+          <dt>RDMA</dt><dd>Remote Direct Memory Access；RNIC 直接在遠端記憶體讀寫，繞過遠端 CPU data path。</dd>
+          <dt>RoCEv2</dt><dd>RDMA over Converged Ethernet v2；把 RDMA transport 放在 routable UDP/IP Ethernet 上。</dd>
+          <dt>RNIC</dt><dd>支援 RDMA 的 network interface card；Grand Teton 是每 GPU 對一個 400G RNIC。</dd>
+          <dt>QP</dt><dd>Queue Pair，RDMA sender/receiver 的通訊端點；本文增加 QP 並把 destination QP 納入 switch hash，以增加 path entropy。</dd>
+          <dt>Collective</dt><dd>多 ranks 共同參與的通訊，如 AllReduce、AlltoAll(v)、AllGather、ReduceScatter。</dd>
+          <dt>Rail</dt><dd>此閱讀中指同 index GPU/RNIC 沿 cluster topology 形成的 lane；paper 提到 rail-based collective，但未提供通用 rail algorithm 定義。</dd>
+          <dt>FE / BE</dt><dd>Frontend / Backend network；FE 處理資料載入、checkpoint、logs，BE 是專用 RoCE collective fabric。</dd>
+          <dt>RTSW / CTSW / ATSW</dt><dd>Rack、Cluster、Aggregation tier switches；RTSW–CTSW 組成 AI Zone Clos，ATSW 連接多 Zones。</dd>
+          <dt>ECMP / E-ECMP</dt><dd>Equal-Cost Multi-Path 以 hash 選路；本文 E-ECMP 再納入 destination QP，增加相同 host pair 的可分流 flows。</dd>
+          <dt>TE / CSPF</dt><dd>Traffic Engineering / Constrained Shortest Path First；central controller 依 topology、job placement 與 traffic matrix 計算 exact-match paths。</dd>
+          <dt>PFC</dt><dd>Priority Flow Control，對指定 priority 暫停上游傳送以避免 loss；可能產生 head-of-line blocking 或 backpressure propagation。</dd>
+          <dt>ECN / CNP / DCQCN</dt><dd>Switch 以 ECN 標記 congestion，receiver 回 CNP，DCQCN sender 據此降速。</dd>
+          <dt>CTS</dt><dd>Clear To Send；receiver 準備好 channel buffer 後授權 sender 執行 RDMA write。</dd>
+          <dt>HoL</dt><dd>Head-of-Line blocking；隊首被阻擋時，同 queue 其他 traffic 也無法前進。</dd>
+          <dt>OOS / LAT</dt><dd>Out-of-Sequence packet / Locally Acknowledged Timeout；RoCE telemetry 用來定位 reordering、drop 或 ACK/NACK 問題。</dd>
+          <dt>MMR</dt><dd>Max-to-Mean Ratio，最忙 link 的 flow count 除以平均；1 代表完全均勻。</dd>
+          <dt>BusBW</dt><dd>NCCL bus bandwidth，以 collective algorithm 對可用 fabric bandwidth 的利用作正規化觀察；不是 model training throughput。</dd>
+        </dl>
+
+        <h3>重點來源索引</h3>
+        <ol class="source-index">
+          <li id="source-meta-p1"><span><strong>Title、Abstract、metadata</strong>——正式標題、作者、SIGCOMM 2024、DOI 與全篇貢獻概述。PDF p.1。</span></li>
+          <li id="source-overview-p2"><span><strong>§1 Introduction</strong>——多 cluster/數千 GPUs、RoCE backend 分離、up to 32K GPUs、Llama 3 operational context。PDF p.2。</span></li>
+          <li id="source-workload-p3"><span><strong>§2、Figures 1–2</strong>——約 30K jobs 的 collective/job-size trace、排除 &gt;128-GPU LLM long tail、collective traffic。PDF p.3。</span></li>
+          <li id="source-traffic-hardware-p4"><span><strong>Table 1–2、Figures 3–4、§3.1</strong>——traffic pattern/QP/buffer occupancy 與 Grand Teton 8 GPU/8×400G RNIC。PDF p.4。</span></li>
+          <li id="source-topology-routing-p5"><span><strong>§3.2–4.2、Figures 5–6</strong>——FE/BE、AI Zone Clos、ATSW、placement、ECMP collision、MMR、path pinning/overbuild。PDF p.5。</span></li>
+          <li id="source-qps-te-p6"><span><strong>§4.2–4.3、Figures 7–9</strong>——QP scaling/mapping、E-ECMP、central TE inputs/CSPF/switch programming。PDF p.6。</span></li>
+          <li id="source-routing-eval-p7"><span><strong>§4.4–4.5、Figures 10–11</strong>——TE/E-ECMP simulation 與 128-GPU benchmark、deployment decision、flowlet interval。PDF p.7。</span></li>
+          <li id="source-transport-dcqcn-p8"><span><strong>§5.1–5.2、Figure 12</strong>——PFC/ECN/DCQCN data path、tight threshold 的 AllReduce regression。PDF p.8。</span></li>
+          <li id="source-admission-p9"><span><strong>§5.2、Figures 13–14、Table 3</strong>——DCQCN trade-off、400G decision、receiver CTS admission 與 16:1 incast。PDF p.9。</span></li>
+          <li id="source-cotuning-p10"><span><strong>§5.3–6.1、Figure 15</strong>——PFC-only design reasoning、22 µs RTT、QoS/channel/protocol/VOQ co-tuning。PDF p.10。</span></li>
+          <li id="source-operations-p11"><span><strong>§6.2–6.3、Figure 16</strong>——200G AI Zone 四階段 production evolution、RoCET/alert/watchdog。PDF p.11。</span></li>
+          <li id="source-incidents-p12"><span><strong>§6.4、§7 Related Work、§8 Conclusion</strong>——switch/firmware/buffer incidents、先前 RoCE/CC/topology/collective 工作與結論。PDF p.12。</span></li>
+        </ol>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 查 workload 是否代表 LLM 看來源 03–04；查 topology/rail/routing 看 05–07；查 transport 與 receiver admission 看 08–09；查 co-tuning、production stability 與 incident evidence 看 10–12。</p>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>RDMA over Ethernet for Distributed AI Training at Meta Scale · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>

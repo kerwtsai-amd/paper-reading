@@ -2,6 +2,24 @@
 
 This repository turns paper discovery, deep reading, and evidence-traceable Traditional Chinese HTML summaries into a browsable research website. Both HTML and Confluence summaries use a reader-first explanatory spine: minimal prerequisites → problem and root cause → prior-art gap → derived requirements → end-to-end method → claim-aligned evidence → limitations. Each paper follows the project structure `<Topic>/<Subtopic>/<Formal Paper Title>/`. Its summary is created from `html template/summary-template.html` and must pass validation defined by the paper-reading Skill. All generated paper summaries must be written in Traditional Chinese, even though the repository documentation and Skill instructions are written in English.
 
+## Repository Layout
+
+```text
+<repository root>/
+├── <Topic>/<Subtopic>/<Windows-safe Formal Paper Title>/
+│   ├── summary.html
+│   ├── <paper>.pdf                 # local-only research input
+│   └── assets/images/              # only cited, publishable figures
+├── html template/                  # canonical summary template
+├── .agents/skills/                 # paper-reading contracts and validator
+├── automation/                     # local daily-reading configuration
+├── scripts/ and tests/             # Pages builder and regression tests
+├── _site/                          # generated and Git-ignored Pages output
+└── tmp/                            # local, Git-ignored QA scratch space
+```
+
+Topic directories intentionally live directly under the repository root; there is no extra `src/` or `content/` layer. The root is the paper-content source, and the builder and publication validator enforce the exact `<Topic>/<Subtopic>/<Paper>/summary.html` depth. Avoiding a cosmetic wrapper also limits already-long Windows and OneDrive paths. Keep the exact formal title in the HTML; folder names may replace Windows-forbidden characters, and PDF filenames may use a shorter traceable identifier when the full path is unsafe.
+
 ## Automation Architecture
 
 The workflow is deliberately divided into three stages so that paper processing, website deployment, and notification each have a clear responsibility boundary:

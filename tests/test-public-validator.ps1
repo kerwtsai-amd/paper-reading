@@ -48,7 +48,53 @@ try {
         throw 'Default validation must still reject a paper package without a local PDF.'
     }
 
-    Write-Host 'Public validator mode test PASSED.' -ForegroundColor Green
+    $fixtureSummaryPath = Join-Path $paperDirectory 'summary.html'
+    $validSummaryHtml = Get-Content -Raw -LiteralPath $fixtureSummaryPath -Encoding UTF8
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    $fontFailureFixtures = @(
+        @{
+            Name = 'wrong font stack'
+            Find = '--mono: "Open Sans", "Noto Sans TC", sans-serif;'
+            Replace = '--mono: Consolas, monospace;'
+            Expected = 'Typography variable --mono must be'
+        },
+        @{
+            Name = 'unexpected font stylesheet'
+            Find = '&amp;display=swap'
+            Replace = '&amp;display=block'
+            Expected = 'Unexpected linked stylesheet'
+        },
+        @{
+            Name = 'missing gstatic crossorigin'
+            Find = '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+            Replace = '<link rel="preconnect" href="https://fonts.gstatic.com">'
+            Expected = 'fonts.gstatic.com preconnect must include crossorigin'
+        },
+        @{
+            Name = 'CSS font import bypass'
+            Find = '</head>'
+            Replace = '<style>@import url("https://example.com/font.css");</style></head>'
+            Expected = 'CSS @import is forbidden'
+        }
+    )
+
+    foreach ($fontFailureFixture in $fontFailureFixtures) {
+        $invalidSummaryHtml = $validSummaryHtml.Replace($fontFailureFixture.Find, $fontFailureFixture.Replace)
+        if ($invalidSummaryHtml -ceq $validSummaryHtml) {
+            throw "Font fixture '$($fontFailureFixture.Name)' could not mutate the selected summary."
+        }
+        [System.IO.File]::WriteAllText($fixtureSummaryPath, $invalidSummaryHtml, $utf8NoBom)
+        $fontFailureOutput = (& pwsh -NoProfile -File $validator -PaperDirectory $paperDirectory -PublicCheck 2>&1 | Out-String)
+        if ($LASTEXITCODE -eq 0) {
+            throw "Font fixture '$($fontFailureFixture.Name)' should fail validation."
+        }
+        if ($fontFailureOutput -notmatch [regex]::Escape($fontFailureFixture.Expected)) {
+            throw "Font fixture '$($fontFailureFixture.Name)' failed for the wrong reason: $fontFailureOutput"
+        }
+    }
+    [System.IO.File]::WriteAllText($fixtureSummaryPath, $validSummaryHtml, $utf8NoBom)
+
+    Write-Host 'Public validator mode and font-contract tests PASSED.' -ForegroundColor Green
 }
 finally {
     if (Test-Path -LiteralPath $testRoot) {

@@ -1,0 +1,1014 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="SGLang 論文精讀：從 LM program 結構、RadixAttention、compressed FSM 到 API speculative execution，核對最高 6.4× throughput 的條件與限制。">
+  <title>SGLang: Efficient Execution of Structured Language Model Programs｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 46rem;
+      --wide: 62rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">LLM Systems / Inference Serving</p>
+      <h1>SGLang: Efficient Execution of Structured Language Model Programs</h1>
+      <div class="paper-dek" data-section-role="thesis">
+        <p>複雜的語言模型程式（Language Model Program, LM program）會反覆延伸同一段 prompt、分叉多個 generation，還會要求 JSON 等固定格式；若 serving engine 只看到彼此獨立的 requests，就會重做 prefix prefill、串行化可平行分支，並對 grammar 已決定的 token 仍逐步 decode。SGLang 以 Python-embedded frontend 暴露這些結構，再由 RadixAttention、compressed finite-state machine（FSM）與 API speculative execution 分別消除三類浪費。</p>
+        <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>在論文的 Llama-2-7B、FP16、單張 NVIDIA A10G 24GB、離線最大 programs/s 評估中，作者報告最高 6.4× throughput、最高 3.7× latency reduction；這兩個數字都是 11 類 workload 與 2023 年版 baselines 中的最佳案例，Figure 5–6 沒有標出是哪一組 workload–baseline，也不是平均或現代通用 serving 保證。 <a class="source-ref" href="#source-e2e-p7">§6.1–6.2 · PDF pp.7–8 · Figures 5–6</a></p>
+      </div>
+      <p class="paper-byline">Lianmin Zheng、Liangsheng Yin、Zhiqiang Xie、Chuyue Sun、Jeff Huang、Cody Hao Yu、Shiyi Cao、Christos Kozyrakis、Ion Stoica、Joseph E. Gonzalez、Clark Barrett、Ying Sheng</p>
+      <p class="paper-meta">
+        <span>NeurIPS 2024 · Main Conference Track</span>
+        <span>2024</span>
+        <span>LLM Systems / Inference Serving</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-08">2026 年 9 月 8 日</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://proceedings.neurips.cc/paper_files/paper/2024/hash/724be4472168f31ba1c9ac630f15dec8-Abstract-Conference.html" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="SGLang%20-%20Efficient%20Execution%20of%20Structured%20Language%20Model%20Programs.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <ul>
+          <li><strong>先建立因果：</strong>讀「逐一執行 LLM 呼叫」與「把 prompt history 當成一棵樹」，看 workload structure 如何推導出 runtime requirements。</li>
+          <li><strong>再追完整執行：</strong>讀「前端結構一路影響 serving runtime」，依 prompt stream → radix cache → scheduler → FSM／API 路徑前進。</li>
+          <li><strong>最後核對證據：</strong>讀「哪些 workload 真的得到加速」與「證據支持到哪裡」，特別留意 6.4×、normalized plots、舊版 baseline 與 long-output 邊界。</li>
+        </ul>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">為什麼 LM program 會產生可重用的工作？</a></li>
+            <li><a href="#problem">逐一執行 LLM 呼叫，浪費究竟從哪裡來？</a></li>
+            <li><a href="#insight">把 prompt history 當成一棵樹，為何就能少算？</a></li>
+            <li><a href="#method">SGLang 如何讓前端結構一路影響 serving runtime？</a></li>
+            <li><a href="#evidence">哪些 workload 真的得到加速，6.4× 又代表什麼？</a></li>
+            <li><a href="#critique">證據支持到哪裡，哪些部署風險仍未回答？</a></li>
+            <li><a href="#extensions">這套 co-design 還能往哪裡推？</a></li>
+            <li><a href="#reference">查核本篇時需要哪些原始座標？</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>為什麼 LM program 會產生可重用的工作？</h2>
+          <p class="lead">理解 SGLang 不需要先學一套新語言；真正的門檻，是看見「一次應用」已不等於「一次模型呼叫」。Agent、tree search、few-shot evaluation、RAG 與 multi-turn chat 都會讓多次 generation 共享歷史、彼此依賴或分叉，而這些關係正是 serving runtime 原本看不見的最佳化訊號。</p>
+
+          <h3>後文只需要四個概念</h3>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>概念</th><th>最小直覺</th><th>後文用在哪裡</th></tr></thead>
+              <tbody>
+                <tr><td>Prefill／decode</td><td>prefill 平行處理輸入 tokens；decode 自回歸產生後續 tokens。長 prefix 重做 prefill 很昂貴，長 output 則會讓 decode 主導總時間。</td><td>解釋 RadixAttention 省下什麼，以及為何 short-output chat 加速、long-output chat 幾乎不加速。</td></tr>
+                <tr><td>Key–Value cache（KV cache）</td><td>Attention 為既有 tokens 保存 key/value tensors；同一模型下，相同 token prefix 會得到可重用的 KV。</td><td>radix-tree edges 指向 KV pages，讓多次 calls 與不同 program instances 共用 prefix。</td></tr>
+                <tr><td>Prompt stream 與 dependency</td><td>一個 LM program 是 prompt state 加上 <code>gen</code>、<code>select</code>、Python control flow、<code>fork</code>／<code>join</code>；只有真的讀取某個結果時，後續才必須等待它。</td><td>frontend 以非同步 streams 暴露可平行 branches，又不違反資料相依。</td></tr>
+                <tr><td>有限狀態機（Finite-State Machine, FSM）</td><td>regex 可轉成狀態與合法轉移；若目前狀態只有唯一後續字串，就沒有選擇需要模型逐 token 判斷。</td><td>compressed FSM 把連續唯一轉移合併，觸發 jump-forward。</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>一個共用 prefix 的最小例子</h3>
+          <pre><code>P = system_prompt + five_shot_examples
+request_1 = P + question_1
+request_2 = P + question_2
+request_3 = P + question_2 + draft_answer + critique</code></pre>
+          <p>若三個 requests 分開送入普通 API，<code>P</code> 至少被 prefill 三次；第三個 request 又包含第二個 request 的更長 prefix。只要 runtime 能把 token sequence 當 key，便可計算一次 <code>KV(P)</code>，再從分叉點各自延伸。論文 Appendix A 的 few-shot、self-consistency、multi-turn chat 與 tree-of-thought 圖例都具有這種結構。 <a class="source-ref" href="#source-radix-background-p15">Appendix A.1 · PDF p.15 · Figure 9</a></p>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>這個例子把「程式相依」與「token prefix」刻意分開：前者決定何時可並行，後者決定哪些 KV 可 exact reuse。兩者常同時出現，但不是同一件事；SGLang 的 frontend 與 runtime 分別處理它們。</p>
+          <p class="bridge">下一個問題因此不是「KV cache 有沒有存在」，而是：為什麼既有 API 與 inference engine 即使都有 KV cache，仍反覆做相同工作？</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>逐一執行 LLM 呼叫，浪費究竟從哪裡來？</h2>
+          <p class="lead">讀者最容易把問題誤解成「寫 prompt 不方便」。論文真正瞄準的是一個跨層資訊斷點：program 知道哪些 calls 共享 history、哪些 branches 可並行、哪些字元被格式強制；通用 serving API 卻只收到一串互不相關的 requests。</p>
+
+          <h3>三種症狀，共同根因是 runtime 缺少 workload structure</h3>
+          <p><strong>第一種是重複 prefill。</strong> Few-shot examples、agent history、tree search path 與 chat history會跨呼叫重複。一般 request 完成後只釋放其 KV，或只能重用單一、預先指定的 prefix；它無法把多層且動態出現的共享片段當作一個可驅逐 cache。 <a class="source-ref" href="#source-intro-p2">§1 · PDF pp.1–2</a></p>
+          <p><strong>第二種是失去程式內平行。</strong> 用 OpenAI-like API 寫 Figure 2 的 multi-dimensional judge，需要手工拼字串、等待 calls、管理多 branches 與 parse structured result；作者量得等價版本需要 2.1× 程式碼行數。更重要的是，若每個 call 在 Python 層同步，可同時生成的 dimensions 就被序列化。 <a class="source-ref" href="#source-program-p3">§2 · PDF p.3 · Figure 2</a></p>
+          <p><strong>第三種是確定輸出仍逐 token 推論。</strong> 一般 regex constrained decoding 每一步用 FSM mask 掉非法 tokens，但像 JSON 的標點與欄位名常只有一條合法路徑；即使下一個 token 已被 grammar 唯一決定，engine 仍做一次模型 forward。 <a class="source-ref" href="#source-fsm-api-p6">§4 · PDF p.6</a></p>
+
+          <h3>最近方法為何仍不夠</h3>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>路線</th><th>已解決</th><th>對本文 workload 的缺口</th></tr></thead>
+              <tbody>
+                <tr><td>OpenAI-like Completion API</td><td>介面通用、可連接黑箱服務。</td><td>每個 call 重傳累積 context；program 必須手工管理字串、parallelism 與 parsing。</td></tr>
+                <tr><td>Guidance／LMQL 等 LM programming systems</td><td>提供 generation control 與 structured primitives。</td><td>作者認為 runtime 沒有同時處理 multi-level prefix reuse、tree-aware eviction／scheduling 與本篇 jump-forward。</td></tr>
+                <tr><td>vLLM／TGI／TensorRT-LLM 等通用 engines</td><td>batching、memory management、optimized kernels。</td><td>API 將 workload 結構藏在獨立 requests 之後；本文實驗只直接比較 vLLM 0.2.5，沒有評估 TGI／TensorRT-LLM。</td></tr>
+                <tr><td>vLLM／ChunkedAttention 的 prefix sharing</td><td>可共享一層或已知 prefix KV。</td><td>本文主張不能自動表示任意、多層 tree sharing 並配合 LRU eviction。 <a class="source-ref" href="#source-related-p9">§7 · PDF pp.9–10</a></td></tr>
+                <tr><td>一般 regex FSM decoder</td><td>保證輸出符合 grammar。</td><td>仍每 token forward，不辨認連續唯一轉移。</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>由失敗模式推導五項成功條件</h3>
+          <ol>
+            <li><strong>R1 · 可泛化的 prefix reuse：</strong>任意 token sequence 都可查詢、插入、split 與 eviction，不要求使用者預先宣告固定模組。</li>
+            <li><strong>R2 · 記憶體安全：</strong>cache 與 active requests 共用有限 GPU memory，eviction 不得刪除 in-flight KV。</li>
+            <li><strong>R3 · locality-aware execution：</strong>排程真的把「可重用」轉成較少 prefill，而不只把 KV 留在記憶體。</li>
+            <li><strong>R4 · 保留 program semantics：</strong>independent generations 可並行，真正的 Python result dependency 仍是同步點。</li>
+            <li><strong>R5 · structured path 少做 rounds：</strong>對 deterministic grammar path 一次前進多 tokens；黑箱 API 則盡量少重傳 context。</li>
+          </ol>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>本文沒有以 R1–R5 編號；這裡依 §1–§5 的症狀、機制與 correctness 約束重組。它們讓後文每個 component 都能回答一個具體問題，而不是把 RadixAttention、FSM 與 DSL 當成互不相干的功能清單。</p>
+          <p class="bridge">要同時滿足 R1–R3，關鍵不是再加一張 hash table，而是先換一個 cache 的心智模型。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>把 prompt history 當成一棵樹，為何就能少算？</h2>
+          <p class="lead">SGLang 的核心洞見可用「共用路段的導航圖」理解：完整 request 不是一塊不可分割的字串，而是一條從 root 沿 tokens 前進的路徑；兩個 requests 在分叉前走過同一路段，就只需鋪設一次 KV。Radix tree 讓這張圖同時成為索引、cache 與排程提示。</p>
+
+          <h3>三條 request 路徑如何變成 cache</h3>
+          <p>假設 \(r_1=[A,B,C]\)、\(r_2=[A,B,D]\)、\(r_3=[A,B,D,E]\)。root 到 \([A,B]\) 是共同 edge；\(C\) 與 \([D,E]\) 是兩個 branches。當 \(r_2\) 已完成，\(r_3\) 只需命中 \([A,B,D]\) 並計算 \(E\)；若記憶體不足，leaf \(C\) 可先被 LRU eviction，而共同 ancestor \([A,B]\) 仍被其他 branch 使用。</p>
+          <p>Figure 3 把同一操作展開成九個時間點：新 prompt 匹配／split tree、建立新 leaf、request 完成後 cache 保留，以及容量不足時 leaf-first eviction。橘色節點的 reference count 保護 active request，避免 R2 的 in-flight KV 被刪除。 <a class="source-ref" href="#source-radix-fig3-p5">§3.2 · PDF p.5 · Figure 3</a></p>
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-03-p05-radix-attention.png"><img src="assets/images/fig-03-p05-radix-attention.png" alt="RadixAttention 在四個請求步驟中的 prefix matching、tree split、cache insertion 與 LRU eviction"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 3</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>由左到右追蹤 requests a–d；先看 token edge 如何在 partial match 處 split，再看 completion 後節點留在 cache，最後只從無引用的 leaf 開始 eviction。圓角框是 radix nodes，方框是 non-contiguous KV pages，兩者不是同一份資料。</span></figcaption>
+          </figure>
+
+          <h3>把直覺寫成 hit-rate 下界</h3>
+          <div class="formula-block">
+            \[
+            H = 1 - \frac{C}{\sum_{r\in R}|r|},
+            \qquad
+            C \ge \sum_{e\in E(T)}|e|.
+            \]
+            <p class="formula-block__meaning"><code>R</code> 是離線已知的一批 request token sequences，<code>|r|</code> 是完全重算時的 prefill token 數，<code>C</code> 是實際新計算的 KV token 數，<code>T</code> 是它們組成的 radix tree，<code>|e|</code> 是 edge 上 token 數。任何執行順序至少計算每條 edge 一次；因此 \(\sum |e|\) 是計算下界。 <a class="source-ref" href="#source-radix-theory-p16">Appendix A.3 · PDF p.16 · Theorem 3.1</a></p>
+          </div>
+          <p>若 cache 至少容納最長 request，depth-first search（DFS）會在離開一個 subtree 前處理完其 descendants，使每條 edge 恰好算一次；longest-shared-prefix-first 是 runtime 對此順序的近似。這把 R3 具體化：保留 KV 不等於命中，排程必須趁 prefix 還熱時延伸它。</p>
+          <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>導航圖類比到此為止：實際 edge 可含多 tokens、KV pages 在 GPU 且不連續，token tree metadata 在 CPU；更重要的是，定理只適用 offline batch 與容量條件。Online arrivals 下，偏好最長 prefix 可能讓沒有 locality 的 request starvation，作者明確把公平整合留作未來工作。</p></aside>
+
+          <h3>同一洞見也適用於 grammar：辨認「沒有分叉的路」</h3>
+          <p>對 regex FSM，可把每個合法輸出想成另一棵路徑圖。若目前狀態往後只有固定字串 <code>{"grade":"</code>，模型在這段沒有決策要做；真正需要 sampling 的是 <code>A/B/C/D</code> 等分叉。Compressed FSM 便把無分叉的連續 edges 壓成一條，跳到下一個 choice point。這個 intuition 直接導向 method 的兩條 runtime path：prefix tree 少做已經算過的工作，compressed FSM 少做根本不必決策的工作。</p>
+          <p class="bridge">有了兩張「路徑圖」，接下來只剩一個系統問題：Python 程式如何把它們送進 runtime，runtime 又如何安全地執行與回收狀態？</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>SGLang 如何讓前端結構一路影響 serving runtime？</h2>
+          <p class="lead">本章要跨過的理解障礙，是不要把 SGLang 看成「DSL 加上一個快取」。它是一條由 program semantics 驅動的執行鏈：frontend 決定何時提交、分叉與等待，SGLang Runtime（SRT）再依 token prefix、memory state 與 grammar state 做 cache、batching、scheduling 與 decode。</p>
+
+          <h3>先走一次完整流程</h3>
+          <ol>
+            <li><strong>Program 建立 prompt state。</strong>Python 函式以 <code>+=</code>／<code>extend</code> 加文字，用 <code>gen</code>、<code>select</code> 宣告 generation，並可加入 image／video。</li>
+            <li><strong>Interpreter 建立非同步 prompt stream。</strong>primitive submission 不阻塞；背景 stream executor 依序送工作。只有 Python 真的讀取 <code>s["variable"]</code> 時才等待，因而滿足 R4。</li>
+            <li><strong><code>fork</code> 暴露 branches。</strong>共同 prefix 會先送往 server，children 再各自延伸；這既擴大 batch，也避免並發 children 在 radix tree 中以錯誤順序插入。</li>
+            <li><strong>SRT 做 longest-prefix match。</strong>命中的 token path 直接指向既有 KV pages，只對 unmatched suffix 做 prefill，滿足 R1。</li>
+            <li><strong>Scheduler 在有限 memory 中組 batch。</strong>cache 與 active requests 共用 pool；不足時先 evict reference count 為 0 的 LRU leaf，並優先排 matched prefix 長的 waiting request，滿足 R2–R3。</li>
+            <li><strong>Decoder 選擇一般或 jump-forward path。</strong>自由生成逐 token decode；regex FSM 的唯一轉移串可一次跨過，再 retokenize 對齊。</li>
+            <li><strong>結果回到 stream，KV 留作後續重用。</strong>program 在 dependency 處取得值；已完成 request 的 KV 繼續留在 radix tree，直到被 eviction。</li>
+          </ol>
+          <p>Figure 2 將同一條鏈縮成一頁：左側程式同時含 multi-modal input、early return、fork/join 與 regex output；右側逐一對應 frontend parallelism、KV reuse、compressed FSM 與 API speculation。 <a class="source-ref" href="#source-program-p3">§2 · PDF p.3 · Figure 2</a></p>
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-02-p03-lm-program.png"><img src="assets/images/fig-02-p03-lm-program.png" alt="SGLang 多維度評審 LM program，標示前端語言 primitives 與 runtime 最佳化位置"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 2</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>先沿左側程式找四個同步點：related 判斷、fork、join、JSON 輸出；再向右對照藍色 frontend 與綠色 runtime 標籤。重點不是語法簡短本身，而是同一份結構同時服務 correctness 與最佳化。</span></figcaption>
+          </figure>
+
+          <h3>Frontend：用「提交非同步、取值才等待」保留 Python 動態性</h3>
+          <p><code>gen(name, stop, regex)</code> 將生成結果綁到名稱；<code>select</code> 從 choices 中選最高機率項；<code>fork(n)</code> 複製 prompt state，<code>join</code> 回收 branches。Interpreter 不要求先建完整 graph，所以可執行資料相依的 Python control flow；代價是跨整個 program 的靜態 rewrite 空間較小。Table 1 顯示 SGLang 以 Python 語法涵蓋 video、fork/join、自有 runtime 與 OpenAI backend。 <a class="source-ref" href="#source-program-p3">§2.1–2.3 · PDF pp.3–4 · Table 1</a></p>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>這個 blocking-on-fetch 規則很像 future/promise：它讓 branches 在 server 端重疊，卻不假設任意兩個 Python statements 都可重排。Frontend 因而不是 performance 的裝飾，而是把 R4 所需的 dependency signal 送入 runtime。</p>
+
+          <h3>RadixAttention：索引、記憶體與排程必須共同運作</h3>
+          <p>CPU 上的 radix tree 把 token edges 映射到 GPU 上 non-contiguous KV tensors；每個 page 在本文實作中只含一個 token。Lookup 回傳 longest match；insert 可在 partial match 處 split node；completion 只降低 reference count，不立即刪除。Memory pool 被新 batch 壓縮時，evictor 從 least-recently-used leaf 開始，直到足夠空間。 <a class="source-ref" href="#source-radix-p4">§3.2 · PDF pp.4–6 · Figure 3</a></p>
+          <p>Tensor parallelism 下每張 GPU 維護相同 token tree、各自保存 sharded KV，不需新增同步。Data parallelism 則讓 worker 各有 subtree，router 保存弱一致 meta-tree並做 prefix-affinity dispatch；作者以四 workers／MMLU 文字報告 linear scaling 與 optimal hit rate，但沒有附圖或數值。 <a class="source-ref" href="#source-radix-dist-p17">Appendix A.4 · PDF p.17</a></p>
+
+          <h3>Compressed FSM：只跳過 grammar 已唯一決定的 tokens</h3>
+          <p>作者把「source state 只有一個 successor，且只允許一個 character/string」定義為 singular edge；連續 singular edges 合成 compressed edge。Decoder 抵達該 edge 時，先 append 固定字串，再將既有文字與新字串一起用原 tokenizer 重分詞，最後以一次 multi-token forward 更新 KV。 <a class="source-ref" href="#source-fsm-detail-p18">Appendix B · PDF pp.18–19 · Figure 10</a></p>
+          <div class="formula-block">
+            \[
+            \Delta N_{\mathrm{decode\ rounds}} \approx k-1
+            \quad\text{for a forced path of }k\text{ tokens}.
+            \]
+            <p class="formula-block__meaning">這是依執行流程整理的成本記號，不是作者編號公式。一般 FSM 對 \(k\) 個強制 tokens 做 \(k\) 次 decode；jump-forward 理想上以一次 forward 處理，少約 \(k-1\) rounds。實際收益仍要扣 FSM preprocessing、retokenization 與不同 kernel shape 的成本。</p>
+          </div>
+          <p>Figure 11 左半以 forward-pass 序列比較 normal FSM 與 jump-forward；右半把生成 JSON 分成 model 自由生成與 FSM 強制加入的片段。 <a class="source-ref" href="#source-fsm-risk-p19">Appendix B · PDF p.19 · Figure 11</a></p>
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-11-p19-jump-forward.png"><img src="assets/images/fig-11-p19-jump-forward.png" alt="Compressed FSM 與一般 FSM 的 forward passes 比較，以及 JSON 中模型生成與 jump-forward 片段"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 11</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>左側每一欄代表一次 forward；一般 FSM 對固定標點與欄位名仍逐步 decode，compressed FSM 則在 choice points 間 jump-forward。右側灰色是模型需決策的內容，藍色是 FSM 可直接補上的固定片段。</span></figcaption>
+          </figure>
+
+          <h3>黑箱 API：先多生成，再用下一段模板驗證</h3>
+          <p>若無法修改 provider runtime，SGLang 讓前一個 generation 暫時越過 stop，多保留一段 suffix。後續 constant／primitive 到達時，interpreter 比對 suffix；吻合便直接消費，未命中則回退正常 API call。以 \(m\) 次 calls、每次累積 prompt \(P_i\) 表示，baseline input-token cost 為 \(\sum_{i=1}^{m}|P_i|\)；全部命中時接近只付 \(|P_1|\) 加少量 speculative output，miss 則多出 fallback。這是說明成本的分析式，不是作者公式。 <a class="source-ref" href="#source-fsm-api-p6">§5 · PDF pp.6–7</a></p>
+          <p><span class="evidence-kind evidence-kind--claim">作者主張</span>精心設計 prompt 可讓模型按預期模板續寫並取得高 speculation accuracy；論文只在 GPT-3.5 三欄位 extraction 檢查 input-token cost，未給一般命中率或 latency 分布。</p>
+
+          <h3>Compiler 是另一條受限路徑，不是正文結果的必要前提</h3>
+          <p>預設 interpreter 之外，Appendix D 可用 abstract arguments trace SGLang program 成 dataflow IR，節點包括 ConstantText、Argument、Gen、Select、Variable 與 Fork；graph executor 可 scheduling、memory planning 與 code movement。Model-output-dependent control flow 在 trace 時未知，因此目前不支援。 <a class="source-ref" href="#source-compiler-p20">Appendix D.1 · PDF pp.19–20</a></p>
+          <p>作者也用 GPT-4 把常數片段提前，目標是拉長可共享 prefix；20 個 templates 中以 5 個作 demonstrations、15 個測試，人工判斷 12/15 語義正確，平均增加 60 個 shareable-prefix tokens。失敗案例會把 constants 全部前移而改變 program meaning。 <a class="source-ref" href="#source-compiler-eval-p21">Appendix D.2 · PDF pp.20–21 · Figure 14</a></p>
+          <p class="bridge">方法的因果鏈已完整：structure → signal → cache／schedule／jump → 少算。但「少算」是否真的成為端到端速度，必須逐一看 workload、baseline 與量測邊界。</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>哪些 workload 真的得到加速，6.4× 又代表什麼？</h2>
+          <p class="lead">這一章的障礙不是數字太少，而是比較邊界容易被 headline 隱藏。論文把 programming system、runtime、backend 與 workload-specific reuse 一起比較；因此每個結論都必須連回硬體、baseline 版本、batching 定義與真正觸發的機制。</p>
+
+          <h3>先固定共同實驗邊界</h3>
+          <div class="table-scroll wide">
+            <table>
+              <thead><tr><th>面向</th><th>論文設定</th><th>判讀影響</th></tr></thead>
+              <tbody>
+                <tr><td>Implementation</td><td>PyTorch；自訂 CUDA kernels 來自 FlashInfer 與 Triton。</td><td>結果包含 engine、kernels、frontend 與 API overhead 的綜合差異。</td></tr>
+                <tr><td>Models／precision</td><td>Llama-2 dense、Mixtral MoE、LLaVA image/video、GPT-3.5 API；open-weight 7B–70B，FP16。</td><td>沒有量化 INT8／FP8、其他架構或不同 tokenizer 對 FSM 的影響。</td></tr>
+                <tr><td>主要硬體</td><td>AWS EC2 G5，NVIDIA A10G 24GB；7B 用單 GPU。Mixtral-8x7B 用 8×A10G tensor parallel；Llama-70B 用 4×A100 80GB；multimodal 另用單 A10G／A100。</td><td>不同模型結果不是同一 GPU configuration；不能把柱高直接跨圖比較。</td></tr>
+                <tr><td>Baselines</td><td>Guidance 0.1.8 + llama.cpp；vLLM 0.2.5 default API server；LMQL 0.7.3 + Hugging Face Transformers。</td><td>比較含語言／backend 差異；部分 workloads 因太慢或缺功能而缺 Guidance／LMQL。</td></tr>
+                <tr><td>Throughput</td><td>以「sufficiently large」program-instance batch 求最大 programs per second。</td><td>是離線 saturation throughput，不是 arrival-rate/SLO goodput；確切 batch size 論文未提供。</td></tr>
+                <tr><td>Latency</td><td>一次只跑一個 program、不 batching，對多個 instances 報 average。</td><td>不是 production concurrency 下的 TTFT／TPOT／p95／p99。</td></tr>
+                <tr><td>可重現資訊</td><td>每根 benchmark bar 需數分鐘至一小時；作者稱結果 deterministic。</td><td>request 數、重複次數、warmup、SGLang commit、PyTorch／CUDA／driver 版本與 error bars：<strong>論文未提供</strong>。</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><a class="source-ref" href="#source-setup-p7">§6.1 · PDF p.7</a> <a class="source-ref" href="#source-extra-setup-p19">Appendix C · PDF p.19</a></p>
+
+          <div class="claim-test">
+            <h3>Claim–test 1：co-design 是否改善 11 類 LM programs 的端到端效能？</h3>
+            <p><strong>Claim。</strong><span class="evidence-kind evidence-kind--claim">作者主張</span>SGLang 藉 prefix reuse、program 內平行與 faster constrained decoding，對多種 LM workloads 提升 throughput／降低 latency。</p>
+            <p><strong>Test。</strong>在單張 A10G 24GB 上跑 Llama-2-7B／FP16；比較 MMLU、ReAct agents、generative agents、Tree-of-Thought、Skeleton-of-Thought、LLM judge、HellaSwag、JSON decoding、四輪 short/long multi-turn chat 與 DSPy RAG。Figure 5 求最大 programs/s；Figure 6 單 program、無 batching，報 average latency。各 workload 對 SGLang 正規化。 <a class="source-ref" href="#source-e2e-p7">§6.1–6.2 · PDF pp.7–8 · Figures 5–6</a></p>
+            <p><strong>Observation。</strong><span class="evidence-kind evidence-kind--fact">實驗事實</span>作者報告最高 6.4× throughput 與最高 3.7× latency reduction；Figure 5–6 僅呈現 normalized bars，沒有絕對 programs/s／seconds，也未在圖或正文指明這兩個最大值各是哪一個 workload–baseline pair。</p>
+            <p><strong>Supported conclusion。</strong>至少在這組 7B、單 A10G、離線 suite 與所選 baselines 中，SGLang 的最佳案例具有大型端到端收益。<strong>Caveat。</strong>6.4× 不是 11 類 workload 平均、不是 production online goodput，也不能外推成相對當前 vLLM 的速度；作者刻意使用 vLLM 0.2.5，因當時最新版已把 RadixAttention 部分整合成 experimental option。 <a class="source-ref" href="#source-e2e-p7">§6.1–6.2 · PDF p.7 · footnote 3</a></p>
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-05-p07-throughput.png"><img src="assets/images/fig-05-p07-throughput.png" alt="SGLang、vLLM、Guidance 與 LMQL 在 11 類 Llama-7B LM programs 的 normalized throughput"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 5</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>每一組只可在同一 workload 內比較，SGLang 固定為 1；其他柱越低，與 SGLang 的比值越大。空白 baseline 並非零吞吐，而是部分後五項因太慢或缺功能未測；圖中也沒有標出 6.4× 對應哪一柱。</span></figcaption>
+            </figure>
+            <h4>何種結構對應何種收益</h4>
+            <div class="table-scroll wide">
+              <table>
+                <thead><tr><th>Workload</th><th>被利用的結構</th><th>預期瓶頸移動</th></tr></thead>
+                <tbody>
+                  <tr><td>MMLU／HellaSwag</td><td>5-shot prefix；HellaSwag 再共享 question prefix，形成兩層 reuse。</td><td>省 prefill 與 KV memory，後者可容納較大 saturation batch。</td></tr>
+                  <tr><td>ReAct／generative agents</td><td>agent template 與 previous calls。</td><td>每一步延伸 history 時少重算。</td></tr>
+                  <tr><td>Tree-of-Thought／Skeleton-of-Thought／LLM judge</td><td>forked generations、search history；frontend parallelism + cache。</td><td>同 program branches 一起 batch，並重用分叉前 KV。</td></tr>
+                  <tr><td>JSON decoding</td><td>regex 的 deterministic FSM paths。</td><td>少 decode rounds，而非只省 prefill。</td></tr>
+                  <tr><td>Multi-turn chat</td><td>同 session chat history。</td><td>short output 的 prefix 比例高，收益明顯；long output decode 主導、不同 sessions 又少 sharing，幾乎無 speedup。</td></tr>
+                  <tr><td>DSPy RAG</td><td>共同 context example。</td><td>跨 program instances reuse prefix。</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p><span class="evidence-kind evidence-kind--analysis">分析</span>這張對照表比單一 6.4× 更能界定適用性：收益大小取決於 shareable prefill、branch parallelism 或 forced FSM path 占總時間的比例；沒有這三者的長 decode workload，不應期待同量級加速。</p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim–test 2：RadixAttention 的收益真的是 cache hit、tree policy 與 frontend signal 造成嗎？</h3>
+            <p><strong>Test A。</strong>在 Tree-of-Thought 中部分停用 matched tokens，掃 cache hit rate，再量 batch size、throughput、first-token latency 與 total latency。<strong>Observation。</strong><span class="evidence-kind evidence-kind--fact">實驗事實</span>Figure 8(a)(b) 顯示 hit rate 上升時 batch 與 throughput 上升，兩種 latency 下降；這直接連起「少 KV memory／少 prefill」與端到端結果。 <a class="source-ref" href="#source-ablation-p9">§6.3 · PDF p.9 · Figure 8(a)(b)</a></p>
+            <p><strong>Test B。</strong>在 LLM judge、Tree-of-Thought、MMLU、short chat 依序比較 No Cache、No Tree Structure、FCFS、Random、No Frontend Parallelism、No Frontend Hint、Full。<strong>Observation。</strong>Figure 8(c) 的完整設計在代表 workloads 最佳；不同 workload 對 tree、schedule、parallelism 與 hint 的敏感度不同。<strong>Caveat。</strong>圖為 normalized throughput，作者沒有提供每個元件的獨立絕對成本，且這些 variants 不是完整 factorial combinations。</p>
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-08-p09-ablation.png"><img src="assets/images/fig-08-p09-ablation.png" alt="Tree-of-Thought cache-hit sensitivity，以及 RadixAttention cache、tree、schedule、frontend parallelism 與 hint ablations"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 8</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>先讀 (a)(b) 的共同橫軸：人為提高可用 hit rate 後，較大的 KV 餘裕轉成更大 batch 與較低 latency；再讀 (c) 每個 workload 的最高柱。各顏色是不同降級版本，不可把柱差直接相加成元件貢獻。</span></figcaption>
+            </figure>
+            <p><strong>Fairness／overhead checks。</strong>11 workloads 的 hit rate 為 50%–99%，cache-aware scheduling 平均達 offline optimal hit rate 的 96%；但來源 Figure 13 只比較 hit rate，不比較公平。無 reuse 的 ShareGPT 100 requests 共 74.3 s，其中 radix-tree management 0.2 s、低於 0.3%，支持 default-on overhead 很小。 <a class="source-ref" href="#source-e2e-p8">§6.2 · PDF p.8；Appendix C · PDF p.20 · Figure 13</a> <a class="source-ref" href="#source-ablation-p9">§6.3 · PDF p.9</a></p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim–test 3：compressed FSM 與 API speculation 是否各自打中目標成本？</h3>
+            <p><strong>FSM test。</strong>JSON decoding 比較一般與 compressed FSM，並檢查 preprocessing 是否跨 batch reuse。<span class="evidence-kind evidence-kind--fact">實驗事實</span>jump-forward 提升 throughput 1.6×；若每 request 重新 preprocess FSM，throughput 反而低 2.4×。<strong>Supported conclusion。</strong>強制路徑一次跨多 tokens 能省 rounds，但 setup cost 必須攤銷。<strong>Caveat。</strong>論文沒有報 JSON schema 複雜度、forced-path 長度分布、absolute throughput 或 output-probability fidelity。 <a class="source-ref" href="#source-ablation-p9">§6.3 · PDF p.9</a></p>
+            <p><strong>API test。</strong>用 GPT-3.5 從 Wikipedia page 擷取三個欄位，few-shot prompt 讓第一次呼叫嘗試續寫後續模板。<span class="evidence-kind evidence-kind--fact">實驗事實</span>input-token cost 約降低 3×，作者稱 accuracy「high」。<strong>Caveat。</strong>accuracy 數值、baseline token 數、API model snapshot、重複次數、miss rate、輸出費用與 latency：<strong>論文未提供</strong>；因此只能支持這個 extraction case 的 cost 方向，不能支持一般黑箱 API 加速。 <a class="source-ref" href="#source-ablation-p9">§6.2 · PDF p.9</a></p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim–test 4：更大模型、multimodal 與 production 是否維持相同趨勢？</h3>
+            <p><strong>Larger models。</strong>Mixtral-8x7B／8×A10G 與 Llama-70B／4×A100 80GB tensor parallel 的 normalized throughput 趨勢與 7B 類似；Guidance／LMQL 因沒有高效 tensor-parallel implementations 而省略。這支持機制可在受測 TP 配置運作，不是不同規模間的公平 speedup 對照。 <a class="source-ref" href="#source-e2e-p8">§6.2 · PDF p.8 · Figure 7；Appendix C · PDF p.20 · Figure 12</a></p>
+            <p><strong>Multimodal。</strong>同一 image 的多個 questions 可用 image hash 當 radix key 並 reuse image-token KV；baseline 改為各模型作者的 Hugging Face implementation，因其他 systems 不支援。 <a class="source-ref" href="#source-table2-p9">§6.2 · PDF pp.8–9 · Table 2</a></p>
+            <div class="table-scroll">
+              <table>
+                <caption>Table 2 的原始 throughput；比值為依表內數值計算。</caption>
+                <thead><tr><th>模型／資料</th><th>作者原實作</th><th>SGLang</th><th>表內比值</th><th>限制</th></tr></thead>
+                <tbody>
+                  <tr><td>LLaVA-v1.5-7B／llava-bench-in-the-wild／單 A10G</td><td>0.18 image/s</td><td>1.15 image/s</td><td>6.39×</td><td>多 questions 共享 image；不同於 vLLM baseline。</td></tr>
+                  <tr><td>LLaVA-NeXT-34B／ActivityNet／單 A100 80GB</td><td>0.02 frame/s</td><td>0.10 frame/s</td><td>5.0×</td><td>不同模型、GPU 與工作單位，不可和上一列直接比絕對值。</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p><span class="evidence-kind evidence-kind--analysis">分析</span>正文把第一列概括為「up to 6×」，表內四捨五入前比值是 1.15/0.18≈6.39；它不是 headline 6.4× 的可確認來源，因 headline 明確來自跨 open-weight LM-program systems 的 Figures 5–6，且本文沒有作此對應。</p>
+            <p><strong>Production case。</strong><span class="evidence-kind evidence-kind--fact">實驗事實</span>Chatbot Arena 以每模型單 worker 部署一個月後，LLaVA-NeXT-34B cache hit 52.4%、Vicuna-33B 74.1%；Vicuna-33B average first-token latency 改善 1.7×。作者將 hits 歸因於 common system messages、重複 example images 與 multi-turn histories。<strong>Caveat。</strong>因流量低而每模型只有一 worker；arrival rate、樣本數、latency 絕對值／分位數與對照時段未提供。 <a class="source-ref" href="#source-table2-p9">§6.2 · PDF p.8</a></p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim–test 5：compiler 能自動拉長共享 prefix，又不改變語義嗎？</h3>
+            <p><strong>Test。</strong>作者以 5 個 prompt templates 作 GPT-4 demonstrations，對 15 個未見 templates 重排 constants，再人工檢查 semantics。<span class="evidence-kind evidence-kind--fact">實驗事實</span>12/15 被判定正確，平均增加 60 個 shareable-prefix tokens。<strong>Supported conclusion。</strong>LLM-assisted code movement 能在小型樣本中發現部分 reuse。<strong>Caveat。</strong>成功率只有 80%，人工判定 protocol、reviewers、下游 performance 與錯誤嚴重度未量化；失敗可直接改變 prompt meaning。 <a class="source-ref" href="#source-compiler-eval-p21">Appendix D.2 · PDF pp.20–21 · Figure 14</a></p>
+          </div>
+          <p class="bridge">這些 claim–test pairs 支持的是一個條件式結論：當 program structure 真的對應大量 prefix、parallel branches 或 deterministic grammar path，co-design 能把它轉成少算；下一章要界定哪些推論仍超出證據。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>證據支持到哪裡，哪些部署風險仍未回答？</h2>
+          <p class="lead">本篇最值得保留的判斷，不是「SGLang 比所有 engines 快」，而是「program structure 應成為 runtime 的一等訊號」。要把這個設計原則與論文的特定 benchmark 排名分開，必須逐一檢查 exactness、公平、規模與 workload scope。</p>
+
+          <h3>最強之處：問題、訊號與機制能一一對齊</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>RadixAttention 不只提出一個 prefix lookup data structure，而是把 cache indexing、active-request protection、LRU eviction、cache-aware scheduling 與 frontend fork hint 串在一起；Figure 8 又分別移除這些訊號，提供了比單純 end-to-end speedup 更接近因果的證據。Compressed FSM 也精確瞄準「合法但不必決策」的 rounds，而非泛稱 structured decoding 比較快。</p>
+          <p>另一個優點是同時保留兩條 adoption path：自有 SRT 能取得最大跨層最佳化，黑箱 API 仍可用 speculative continuation 減少 context cost。Interpreter 為預設、compiler 為受限選項，也誠實反映 Python expressiveness 與全程 graph optimization 的張力。</p>
+
+          <h3>四種最佳化，不是四種相同的 correctness 保證</h3>
+          <div class="table-scroll wide">
+            <table>
+              <thead><tr><th>機制</th><th>能合理支持的保證</th><th>未解風險</th></tr></thead>
+              <tbody>
+                <tr><td>RadixAttention</td><td>相同 token prefix 的 KV exact reuse；active reference count 避免 in-flight eviction。</td><td>未知 output length 可讓已驅逐 KV 重算；one-token pages 與 CPU tree 在極大 cache／cluster 的 metadata、locking、NUMA 成本未測。</td></tr>
+                <tr><td>Longest-prefix scheduling</td><td>offline、cache ≥ longest request 時達最高 hit-rate；實測平均接近 96% optimal。</td><td><strong>作者明示：</strong>greedy policy 可能 starvation；定理不保證 online fairness 或 tail latency。 <a class="source-ref" href="#source-radix-p4">§3.3 · PDF p.6</a></td></tr>
+                <tr><td>Compressed FSM</td><td>輸出仍走 regex 接受路徑，固定片段可少做 forward rounds。</td><td>choice probability 可能被 tokenization／compressed transition 扭曲；把 choices／regex 放進 prompt 只是 workaround，作者稱未解根本問題。 <a class="source-ref" href="#source-fsm-risk-p19">Appendix B · PDF p.19</a></td></tr>
+                <tr><td>API speculation</td><td>suffix 與後續模板吻合時，可少一次 context submission。</td><td>命中率、錯誤行為、latency、output-token fee 與品質未量化；「high accuracy」沒有數值。</td></tr>
+                <tr><td>Compiler code movement</td><td>traceable、非 data-dependent graph 可做 scheduling／rewrite。</td><td>不支援 data-dependent control flow；GPT-4 rewrite 只有 12/15 語義正確，失敗會改變 prompt。</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>比較設計讓 6.4× 不能被當成產品排名</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>Guidance 綁 llama.cpp、LMQL 綁 Hugging Face Transformers、vLLM 走 default API server，而 SGLang 使用 PyTorch、FlashInfer／Triton custom kernels 與語言/runtime co-design；end-to-end 差異刻意包含整個 stack，適合回答「這套 framework 對應用有沒有價值」，卻不能把 6.4× 歸因於單一 RadixAttention，也不能代表相同 backend 上的語言 overhead。</p>
+          <p>vLLM 0.2.5 是作者為避免 baseline 已部分整合 RadixAttention 而選的舊版；這有助於隔離原始構想，卻削弱對使用者「當前該選哪個 engine」的答案。TGI 與 TensorRT-LLM 只在動機中出現，沒有實驗；後五個 workloads 又因 slow performance／missing functionality 省略部分 Guidance／LMQL。空白柱不能解讀為 SGLang 勝過一個實際量得的對手。</p>
+
+          <h3>系統規模與 serving SLO 的外部效度有限</h3>
+          <p>主要 headline 來自單 A10G 的 Llama-2-7B offline saturation 與 single-program latency。TP 圖支持更大模型有相似 normalized trend，但 data-parallel RadixAttention 只以四-worker MMLU 文字敘述，沒有圖、絕對 throughput、worker imbalance 或 network cost；這不足以驗證大型 cluster 上 locality router 的 tail behavior。</p>
+          <p>Production 段落提供真實 hit rate 與 Vicuna average first-token latency，但每模型只有一個 worker，且沒有 arrival distribution、p95/p99、對照期、成本或故障行為。對互動服務最重要的 queueing、fairness、preemption 與 SLO goodput 因此仍未回答；論文的 maximum programs/s 也不等於滿足 latency SLO 的最大流量。</p>
+
+          <h3>適用與不適用的 workload 邊界</h3>
+          <ul>
+            <li><strong>最適用：</strong>固定 system/few-shot prefix 很長、同一 history 有多 branches、output 短、JSON fixed spans 長，或相同 image 被多次提問。</li>
+            <li><strong>收益縮小：</strong>不同 sessions 幾乎不共享、長 output 讓 decode 主導、grammar 大多每步有多 choices、低 concurrency 無法形成 batch。</li>
+            <li><strong>尚未驗證：</strong>大規模 bursty multi-tenant traffic、跨資料中心／多層 cache、極長 context、MoE expert contention、quantized KV／weights、AMD GPU 與非 CUDA stack。</li>
+          </ul>
+          <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>因此最穩健的結論是條件式的：SGLang 證明「把 LM-program structure 暴露給 runtime」可以創造顯著機會；它沒有證明 tree cache、FSM jump-forward 與 API speculation 在所有 workload 都同時必要，更沒有證明 6.4× 能跨硬體、版本與線上 SLO 保持。</p></aside>
+          <p class="bridge">這些邊界不是否定 co-design；它們反而指出下一輪研究應把哪些隱藏變數正式納入 scheduler、correctness 與 benchmark。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>這套 co-design 還能往哪裡推？</h2>
+          <p class="lead">SGLang 留下的研究價值，是把「應用知道、runtime 不知道」的資訊差變成一套可操作方法。下一步不只要增加更多 optimizations，更要讓這些 hints 在公平、分散式與機率正確性下仍可被信任。</p>
+
+          <h3>三個可重用的系統設計原則</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span><strong>第一，把高階程式結構降成可驗證的低階 signal。</strong> <code>fork</code> 不只是語法糖，它同時告訴 scheduler 哪個 prefix 應先 materialize、哪些 children 可一起 batch。類似做法可延伸到 tool-call barriers、RAG document IDs、agent checkpoints 與 speculative branches，但 signal 必須有明確 correctness contract。</p>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span><strong>第二，cache admission、eviction 與 scheduling 應共同最佳化。</strong>只做 content-addressed cache 會忽略 queue order；只做 locality scheduling 又可能保留錯誤 working set。RadixAttention 的價值在於同一棵 tree 同時回答「能否命中、能否刪除、下一個跑誰」，而不是 radix data structure 本身神奇。</p>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span><strong>第三，先辨認真正需要模型決策的邊界。</strong>Compressed FSM 把 forced spans 與 choice points 分開；更一般地，structured generation runtime 可讓模型只在 entropy 高的節點工作，系統處理 deterministic transforms。但省運算不能以扭曲 probability 為代價。</p>
+
+          <h3>能直接檢驗因果鏈的後續實驗</h3>
+          <div class="table-scroll wide">
+            <table>
+              <thead><tr><th>待驗問題</th><th>建議實驗</th><th>關鍵指標</th><th>可能推翻的主張</th></tr></thead>
+              <tbody>
+                <tr><td>Locality 與公平如何兼得？</td><td>以相同 bursty multi-tenant trace 比較 longest-prefix、FCFS、age-aware hybrid；掃 cache 容量與 arrival skew。</td><td>SLO goodput、p50/p99 TTFT／TPOT、starvation count、hit rate。</td><td>高 hit rate 不必然帶來較好 tail SLO。</td></tr>
+                <tr><td>哪個 component 貢獻多少？</td><td>在相同 backend 做 Radix tree、eviction、scheduler、fork hint、frontend parallelism 的 factorial ablation。</td><td>absolute p/s、GPU time、memory peak、CPU metadata time。</td><td>6.4× 未必主要來自 RadixAttention。</td></tr>
+                <tr><td>FSM 是否維持 choice probability？</td><td>建立含不同 tokenizations 的多選 grammar；比較 normal FSM、compressed FSM 與 exact sequence-probability aggregation。</td><td>格式成功率、choice calibration／KL divergence、throughput。</td><td>格式合法不代表分布等價。</td></tr>
+                <tr><td>API speculation 何時划算？</td><td>掃模板穩定度、欄位數、context length 與 provider pricing；記錄 hit/miss fallback。</td><td>總 input/output tokens、p95 latency、semantic accuracy、成本。</td><td>約 3× input-token saving 未必抵過 extra output 與 misses。</td></tr>
+                <tr><td>Cluster locality router 能否擴展？</td><td>從 4 workers 擴到數十／數百，注入 hot-prefix skew 與 worker failures；比較 weak meta-tree 與全域一致方案。</td><td>scale efficiency、imbalance、routing overhead、recompute、failover latency。</td><td>單機／TP 的趨勢未必延伸至 data-parallel serving。</td></tr>
+                <tr><td>Baseline 結論是否仍成立？</td><td>鎖定同模型、precision、kernel stack 與硬體，重跑當代 vLLM／TensorRT-LLM／TGI，再分開 API 與 in-process modes。</td><td>absolute throughput、TTFT／TPOT、memory、cost。</td><td>歷史 end-to-end 排名不等於機制的當代增益。</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <aside class="statement statement--speculation" data-kind="speculation"><span class="statement__label">推測</span><p>若 future runtime 同時知道 prefix reuse probability、request age、deadline、remaining decode length 與 tenant weight，可把 RadixAttention 從「greedy locality scheduler」提升為明確的多目標控制問題；但這需要可校準的 workload predictor 與 starvation bound，不能只用更複雜的 heuristic 取代證明。</p></aside>
+
+          <h3>組會可討論的五個問題</h3>
+          <ol>
+            <li>Figure 8 已顯示 frontend hint 影響 runtime；這種跨層 hint 應被視為 optimization advisory，還是會影響 correctness 的正式 API contract？</li>
+            <li>Theorem 3.1 最大化 cache hit，但 serving 真正目標通常是 SLO goodput。什麼 workload 下兩者會衝突，最小的公平修正又是什麼？</li>
+            <li>Headline 6.4× 同時混合語言、backend 與 runtime 差異。若只能保留一個機制做同-backend ablation，哪一個最可能留下可泛化收益？</li>
+            <li>Compressed FSM 的 probability distortion 是否只是 <code>select</code> 類應用的 edge case，還是會系統性影響 structured extraction／agent action selection？應以何種品質 metric 驗證？</li>
+            <li>作者以一 token page 取得最細 prefix 粒度；在極長 context、CPU metadata 或 GPU kernel locality 成為瓶頸時，是否應改成可變 page／edge granularity？</li>
+          </ol>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>更廣泛地說，SGLang 把 inference serving 的優化單位從「request」提升為「program state」。這個轉向後來能容納 agent、structured generation 與 multimodal reuse，但也迫使系統研究同時回答語義、排程與資源管理，而不能只用單 kernel throughput 證明成功。</p>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>查核本篇時需要哪些原始座標？</h2>
+          <h3>論文資料</h3>
+          <div class="table-scroll">
+            <table>
+              <tbody>
+                <tr><th scope="row">正式標題</th><td>SGLang: Efficient Execution of Structured Language Model Programs</td></tr>
+                <tr><th scope="row">作者</th><td>Lianmin Zheng、Liangsheng Yin、Zhiqiang Xie、Chuyue Sun、Jeff Huang、Cody Hao Yu、Shiyi Cao、Christos Kozyrakis、Ion Stoica、Joseph E. Gonzalez、Clark Barrett、Ying Sheng</td></tr>
+                <tr><th scope="row">機構</th><td>Stanford University；UC Berkeley；Shanghai Jiao Tong University；Texas A&amp;M University；Independent Researcher</td></tr>
+                <tr><th scope="row">發表</th><td>Advances in Neural Information Processing Systems 37（NeurIPS 2024），Main Conference Track</td></tr>
+                <tr><th scope="row">年份</th><td>2024</td></tr>
+                <tr><th scope="row">DOI</th><td><a href="https://doi.org/10.52202/079017-2000" target="_blank" rel="noopener noreferrer">10.52202/079017-2000</a></td></tr>
+                <tr><th scope="row">頁數</th><td data-summary-field="pdf-page-count">共 27 頁</td></tr>
+                <tr><th scope="row">官方資源</th><td><a href="https://proceedings.neurips.cc/paper_files/paper/2024/hash/724be4472168f31ba1c9ac630f15dec8-Abstract-Conference.html" target="_blank" rel="noopener noreferrer">NeurIPS 論文頁</a> · <a href="https://proceedings.neurips.cc/paper_files/paper/2024/file/724be4472168f31ba1c9ac630f15dec8-Paper-Conference.pdf" target="_blank" rel="noopener noreferrer">Open-access PDF</a> · <a href="https://github.com/sgl-project/sglang" target="_blank" rel="noopener noreferrer">官方程式碼</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span><strong>分類：LLM Systems / Inference Serving。</strong>主貢獻是讓 LM-program frontend 把 reuse／parallel／grammar structure 傳給 serving runtime，並以 cache、scheduling 與 decoding 機制提升 inference 效率；DSL 是必要介面，但評估核心落在 runtime performance。</p>
+
+          <h3>術語表</h3>
+          <dl class="term-list">
+            <dt>LM program</dt><dd>多個 model calls、control flow、外部資料、parallel branches 與 structured input/output 組成的程式。</dd>
+            <dt>Prompt stream</dt><dd>保存 prompt state 並按 dependency 非同步提交 primitives 的執行序列；取值時才同步。</dd>
+            <dt>RadixAttention</dt><dd>以 radix-tree LRU cache 管理 token-prefix KV，並配合 cache-aware scheduling 與 frontend hints 的方法。</dd>
+            <dt>Radix edge</dt><dd>可標示一串 tokens 的壓縮 trie edge；shared prefix 對應 shared path。</dd>
+            <dt>KV page</dt><dd>本文實作中以一個 token 為 page 粒度的 key/value 儲存；tree node 指向可不連續 pages。</dd>
+            <dt>Reference count</dt><dd>標示 radix node 被多少 active requests 使用；非零時禁止 eviction。</dd>
+            <dt>Cache-aware scheduling</dt><dd>優先執行 matched prefix 最長的 waiting request，以近似 DFS、提高 KV hit。</dd>
+            <dt>Compressed FSM</dt><dd>把連續唯一轉移合成一條 edge 的 regex state machine。</dd>
+            <dt>Singular edge</dt><dd>source state 僅一個 successor、且只允許單一 character/string 的轉移。</dd>
+            <dt>Jump-forward</dt><dd>直接 append forced string、retokenize，再以一次 multi-token forward 跨越 deterministic path。</dd>
+            <dt>API speculative execution</dt><dd>前一次黑箱 API call 越過 stop 多生成 suffix，與後續模板匹配後重用。</dd>
+            <dt>Programs/s</dt><dd>每秒完成的 program instances；本文 throughput 用 sufficiently large offline batch 求最大值。</dd>
+            <dt>TP／DP</dt><dd>Tensor Parallelism 將模型／KV shard 到 GPUs；Data Parallelism 讓 workers 各自服務 requests、需 router 決定 locality。</dd>
+          </dl>
+
+          <h3>重點證據索引</h3>
+          <ol class="source-index">
+            <li id="source-intro-p2"><span><strong>問題、貢獻與 headline：</strong>§1，PDF pp.1–2。</span></li>
+            <li id="source-program-p3"><span><strong>LM program 範例、primitives、async interpreter 與 2.1× LOC：</strong>§2，PDF pp.3–4，Figures 1–2、Table 1。</span></li>
+            <li id="source-radix-p4"><span><strong>RadixAttention 架構、LRU、refcount 與 cache-aware scheduling：</strong>§3，PDF pp.4–6。</span></li>
+            <li id="source-radix-fig3-p5"><span><strong>lookup、split、insert、completion 與 eviction walkthrough：</strong>§3.2，PDF p.5，Figure 3。</span></li>
+            <li id="source-fsm-api-p6"><span><strong>compressed FSM 與 API speculative execution：</strong>§4–5，PDF pp.6–7，Figure 4。</span></li>
+            <li id="source-setup-p7"><span><strong>models、hardware、software、baseline versions、workloads 與 metrics：</strong>§6.1，PDF p.7。</span></li>
+            <li id="source-e2e-p7"><span><strong>最高 6.4× throughput／3.7× latency 與舊 vLLM 選擇：</strong>§6.2，PDF pp.7–8，Figures 5–6、footnote 3。</span></li>
+            <li id="source-e2e-p8"><span><strong>逐 workload 機制、50%–99% hit、96% optimal、larger models 與 production：</strong>§6.2，PDF p.8，Figure 7；Appendix C，PDF p.20，Figures 12–13。</span></li>
+            <li id="source-table2-p9"><span><strong>multimodal throughput 與 production cache-hit case：</strong>§6.2，PDF pp.8–9，Table 2。</span></li>
+            <li id="source-ablation-p9"><span><strong>Radix／FSM／API ablations、0.3% overhead、1.6× 與約 3×：</strong>§6.2–6.3，PDF p.9，Figure 8。</span></li>
+            <li id="source-related-p9"><span><strong>vLLM、ChunkedAttention、PromptCache、HydraGen、Guidance／LMQL 比較：</strong>§7，PDF pp.9–10。</span></li>
+            <li id="source-radix-background-p15"><span><strong>KV cache 與 four sharing patterns：</strong>Appendix A.1，PDF p.15，Figure 9。</span></li>
+            <li id="source-radix-theory-p16"><span><strong>offline optimal hit-rate theorem 與 DFS proof：</strong>Appendix A.3，PDF p.16，Theorem 3.1。</span></li>
+            <li id="source-radix-dist-p17"><span><strong>TP／DP、weak meta-tree router 與四-worker MMLU 敘述：</strong>Appendix A.4，PDF p.17。</span></li>
+            <li id="source-fsm-detail-p18"><span><strong>regex FSM、singular/compressed edges 與 retokenization：</strong>Appendix B，PDF pp.18–19，Figure 10。</span></li>
+            <li id="source-fsm-risk-p19"><span><strong>jump-forward walkthrough 與 probability distortion：</strong>Appendix B，PDF p.19，Figure 11。</span></li>
+            <li id="source-extra-setup-p19"><span><strong>各 figures 的 GPU count／model mapping 與每根 bar 時間：</strong>Appendix C，PDF p.19。</span></li>
+            <li id="source-compiler-p20"><span><strong>compiler IR、graph executor 與 control-flow 限制：</strong>Appendix D.1，PDF pp.19–20。</span></li>
+            <li id="source-compiler-eval-p21"><span><strong>GPT-4 code movement 的 12/15 correctness 與 +60 tokens：</strong>Appendix D.2，PDF pp.20–21，Figure 14。</span></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>SGLang: Efficient Execution of Structured Language Model Programs · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>

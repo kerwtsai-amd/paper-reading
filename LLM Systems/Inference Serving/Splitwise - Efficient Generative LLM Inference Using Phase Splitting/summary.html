@@ -1,0 +1,997 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="Splitwise 論文精讀：從 prefill／decode 資源不對稱，理解 phase splitting、KV cache 傳輸、分層排程與異質推論叢集的證據邊界。">
+  <title>Splitwise: Efficient Generative LLM Inference Using Phase Splitting｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 46rem;
+      --wide: 62rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">LLM Systems / Inference Serving</p>
+      <h1>Splitwise: Efficient Generative LLM Inference Using Phase Splitting</h1>
+      <div class="paper-dek" data-section-role="thesis">
+        <p>把 prompt 計算（prefill）與逐 token 生成（decode）留在同一台昂貴 GPU 上，會迫使同一套硬體與批次策略同時服務「偏計算」與「偏記憶體」的兩種工作。Splitwise 將兩階段拆到獨立資源池，先配對 prompt／token machine，再以逐層非同步 KV cache 傳輸和可回退的 mixed pool 守住延遲。<span class="evidence-kind evidence-kind--claim">作者主張</span>論文摘要報告最高可同時得到 1.4× 吞吐與 20% 較低成本，或在相同成本與功率預算下得到 2.35× 吞吐；但大規模 cluster 數字來自以生產 trace 驅動的模擬，而非線上部署實測。 <a class="source-ref" href="#src-headline">Abstract、§V–VI · PDF p.1、8–12</a></p>
+      </div>
+      <p class="paper-byline">Pratyush Patel、Esha Choukse、Chaojie Zhang、Aashaka Shah、Íñigo Goiri、Saeed Maleki、Ricardo Bianchini</p>
+      <p class="paper-meta">
+        <span>ISCA 2024</span>
+        <span>2024</span>
+        <span>LLM Systems / Inference Serving</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-08">2026-09-08 更新</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://www.microsoft.com/en-us/research/publication/splitwise-efficient-generative-llm-inference-using-phase-splitting/" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="Splitwise_ISCA24.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀路線：</strong>先在「同機 mixed batching 為何失衡」建立問題，再沿著「請求如何跨池完成」追 scheduler 與 KV cache，最後用三組 claim–test 核對 latency、throughput／cost／power 與 workload drift；若只想判斷可部署性，直接讀證據與邊界兩章。</p>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">要看懂 Splitwise，先抓住哪三個量？</a></li>
+            <li><a href="#problem">為何同機 mixed batching 仍同時浪費算力、拉長尾延遲？</a></li>
+            <li><a href="#insight">把一次請求視為兩站接力，分池為何近乎必然？</a></li>
+            <li><a href="#method">Splitwise 如何把請求跨池執行又守住 SLO？</a></li>
+            <li><a href="#evidence">Phase splitting 真能換到吞吐、成本與功率收益嗎？</a></li>
+            <li><a href="#critique">證據能支持哪種部署，又不能外推到哪裡？</a></li>
+            <li><a href="#extensions">從 Splitwise 還能推出哪些系統設計與驗證方向？</a></li>
+            <li><a href="#reference">如何回到原文核對 trace、模型與關鍵證據？</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>要看懂 Splitwise，先抓住哪三個量？</h2>
+          <p class="lead">閱讀障礙不是 Transformer 數學，而是容易把「一次推論」想成單一、均質的 GPU 工作。Splitwise 的全部設計建立在三個最小概念上：兩階段的資料相依、使用者看到的延遲指標，以及 batching 對兩階段截然不同的作用。</p>
+
+          <h3>一個 request 其實是 prefill 與 decode 的串聯</h3>
+          <p><strong>Prompt 計算／預填充（prompt processing／prefill）</strong>一次平行處理全部輸入 token，產生第一個輸出 token，也為每一層建立鍵值快取（key–value cache, KV cache）。之後的<strong>逐 token 生成（token generation／decode）</strong>每輪只接收最後一個 token，卻必須讀取既有上下文的 KV cache，直到結束符號；因此前者有大量同輪平行工作，後者具有序列相依。 <a class="source-ref" href="#src-phases">§II-B · PDF p.2 · Fig. 1</a></p>
+
+          <div class="table-scroll">
+            <table>
+              <caption>後文反覆使用的 phase、狀態與使用者指標</caption>
+              <thead><tr><th>階段</th><th>本輪輸入與輸出</th><th>主要資源傾向</th><th>直接影響</th></tr></thead>
+              <tbody>
+                <tr><td>Prefill</td><td>整段 prompt → 第一個 token ＋ 全層 KV cache</td><td>大量矩陣運算，偏 compute-bound</td><td>首 token 時間（time to first token, TTFT）</td></tr>
+                <tr><td>Decode</td><td>上一個 token ＋ 全上下文 KV cache → 下一個 token</td><td>逐步生成，偏 HBM 頻寬／容量</td><td>token 間時間（time between tokens, TBT）與多數端到端時間</td></tr>
+                <tr><td>整體服務</td><td>request 到達、排隊、兩階段、回傳</td><td>GPU、記憶體、網路與 scheduler</td><td>端到端（end-to-end, E2E）延遲與 requests/s 吞吐</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>這張對照不是把 prefill 永遠定義成純計算、decode 永遠定義成純記憶體；它是本文兩個 trace、兩個大模型與 A100／H100 上觀察到的主導瓶頸。後文所有 hardware placement、batch policy 與 power cap，都只在這個「主導瓶頸不同」的條件下成立。 <a class="source-ref" href="#src-characterization">§III-C–G · PDF p.4–5 · Figs. 5–9、Table IV</a></p>
+
+          <h3>Batching 能提高吞吐，卻不保證兩階段彼此不干擾</h3>
+          <p>Request-level batching 要整批完成才換批；continuous batching 每次 forward pass 都能重新組批，但一批通常只跑 prompt 或只跑 token；mixed continuous batching 則允許 prompt 與 token 同批。論文以 mixed batching 作為最近的 state-of-the-art baseline，因為它降低 prompt 插隊造成的 TBT 尾延遲，卻仍讓 decode 和較長的 prompt iteration 共用一次迭代時間。 <a class="source-ref" href="#src-batching">§II-D · PDF p.2–3 · Fig. 2</a></p>
+
+          <h3>讀數字前先分清 trace、硬體量測與 cluster 模擬</h3>
+          <p>文中的「production trace」只提供 Azure 服務中的到達時間、輸入 token 數與輸出 token 數；作者再依這些長度建立請求，在真實 GPU 上做 characterization。兩機 KV transfer 是實作量測，但數十台機器的 pool 配置、吞吐、成本與 provisioned power 則由事件驅動模擬器產生。 <span class="evidence-kind evidence-kind--analysis">分析</span>這三層證據在後文會分開評價，避免把「使用生產 trace」誤讀成「Splitwise 已在生產叢集部署」。 <a class="source-ref" href="#src-evidence-layers">§III、§V · PDF p.3、8–9 · Fig. 13</a></p>
+
+          <p class="bridge">有了這三個支點，下一步才能精確問：同機 mixed batching 到底在哪裡失衡，失衡又導出哪些設計要求？</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>為何同機 mixed batching 仍同時浪費算力、拉長尾延遲？</h2>
+          <p class="lead">本章要排除的直覺錯誤是：「更強的 GPU 加上更積極的 mixed batching，自然會同時改善 TTFT、TBT 與吞吐。」論文的 characterization 顯示，真正的問題不是單一 kernel 太慢，而是兩種資源曲線被綁在同一台機器、同一個 batch 與同一個功率配置。</p>
+
+          <h3>兩個 production trace 先揭露工作量比例並不固定</h3>
+          <p>作者取用 2023-11-11 兩個 Azure LLM 服務各 20 分鐘的 trace。Coding trace 的 prompt／output 中位數分別是 1,500／13 tokens；conversation trace 則是 1,020／129 tokens，後者的 output 分布近似雙峰。 <span class="evidence-kind evidence-kind--fact">實驗事實</span>同一份 cluster 可能面對「長輸入、短輸出」或「輸出長、decode 佔比高」兩種需求，固定的 prompt/token 機器比例不會永遠合適。 <a class="source-ref" href="#src-traces">§III、§III-A · PDF p.3 · Fig. 3</a></p>
+          <p>這些 trace 不含文字內容；作者只保留 arrival time 與 token 長度，生成同長度的輸入並強制模型輸出指定 token 數。Characterization 不跨 request 重用 KV cache，模型為 BLOOM-176B 與 Llama-2-70B，通常在一台 8×H100 機器上以 vLLM 和 tensor parallelism 8 執行。 <a class="source-ref" href="#src-traces">§II-E、§III · PDF p.3 · Table III</a></p>
+
+          <h3>同一個 batch 上限不可能同時對 prefill 與 decode 最佳</h3>
+          <p>在 prompt phase，吞吐約在 2,048 batched tokens 後下降；以 trace 的中位 prompt 長度換算，等價於不到兩個 request 就可能跨過甜蜜點。Decode 的吞吐則隨 batch 增加一路上升，到 batch 64 才因記憶體用盡停止。 <span class="evidence-kind evidence-kind--fact">實驗事實</span>這導出第一個要求：prompt pool 應限制總 prompt tokens，而 token pool 應盡可能填滿 KV capacity，不能共享一個折衷 batch policy。 <a class="source-ref" href="#src-batch-throughput">§III-D–E · PDF p.4 · Figs. 6–7</a></p>
+
+          <figure class="wide" data-figure-role="result">
+            <a href="assets/images/fig-06-p04-batching-throughput.png"><img src="assets/images/fig-06-p04-batching-throughput.png" loading="lazy" alt="BLOOM 與 Llama 在 prefill 與 decode 階段隨 batched token 數變化的吞吐曲線；prefill 先上升後下降，decode 持續上升到記憶體上限。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 6</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：左圖的 prefill 在小批量後失去收益，右圖的 decode 則仍能以更多並行 request 攤薄權重讀取；兩條曲線正是分開 machine-level batching 的直接依據。</span></figcaption>
+          </figure>
+
+          <h3>更高 FLOPs 的新 GPU 對 decode 並沒有等比例價值</h3>
+          <p>論文表列 H100 相對 A100 有 3.43× 理論計算、1.64× HBM bandwidth、同樣 80 GB 容量，卻有 1.75× 額定功率與約 2.16× 每機器租用成本。Llama-70B 無 batching 的 P50 中，H100 相對 A100 的 TTFT 約為 0.51–0.54×，TBT 只降至 0.70×；這是第二個要求：prefill 可以吃到新 GPU 的 compute，decode 應允許較舊或降功率硬體。 <a class="source-ref" href="#src-hardware">§I、§III-G · PDF p.1、5 · Tables I、IV</a></p>
+          <p>功率微基準更直接：GPU power cap 從 700 W 降到 350 W 時，prompt 的 TTFT 已開始明顯惡化，token phase 的 TBT 幾乎不變。 <span class="evidence-kind evidence-kind--analysis">分析</span>這不是說 decode 不耗能，而是說提高 compute power 對當時的 memory-bound decode 回報很低，故可把 token H100 限功率、或把 token 放到 A100。 <a class="source-ref" href="#src-power-cap">§III-F · PDF p.5 · Figs. 8–9</a></p>
+
+          <figure class="wide" data-figure-role="result">
+            <a href="assets/images/fig-09-p05-power-cap-latency.png"><img src="assets/images/fig-09-p05-power-cap-latency.png" loading="lazy" alt="H100 功率上限由 700 W 降至 200 W 時，prefill TTFT 與 decode TBT 的延遲變化柱狀圖。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 9</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：由左到右降低 power cap；TTFT 在低功率區快速上升，TBT 到 350 W 左右仍近乎平坦。HHcap 設計利用的正是這段 decode 餘裕，而不是假設所有 phase 都能安全限功率。</span></figcaption>
+          </figure>
+
+          <h3>Mixed batching 解了排程粒度，沒有解資源耦合</h3>
+          <p>在縮小到 2 requests/s、可放進單機的 trace 中，conversation 工作 60–70% 的時間只有不超過 20 個 active tokens；coding 更有超過 20% 的時間只跑 1 token。Prompt 優先可以縮短 TTFT，卻會 preempt decode；把 prompt 與 token 混合，又會讓 decode 陪著較長的 prompt iteration 等待。 <a class="source-ref" href="#src-utilization">§III-B–C · PDF p.4 · Figs. 4–5</a></p>
+          <p>因此完整需求不是單純「分兩個 queue」，而是：<strong>R1</strong> phase-specific batching、<strong>R2</strong> phase-specific hardware／power placement、<strong>R3</strong> 在第二個 token 前低成本搬完 KV state、<strong>R4</strong> 在 input/output 比例漂移時避免固定分池碎片化、<strong>R5</strong> 所有 TTFT／TBT／E2E percentile SLO 都要同時滿足。下一章用一個 request 接力例子，把這五項要求變成可執行的系統。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>把一次請求視為兩站接力，分池為何近乎必然？</h2>
+          <p class="lead">最難直覺化的不是「拆成兩台機器」，而是為什麼多一次網路搬移仍可能更快、更便宜。把一次 request 想成兩站接力：第一站快速讀完整題目並寫出一份可續算的狀態，第二站反覆讀這份狀態、每次只寫一個 token；接力棒就是 KV cache。</p>
+
+          <h3>走一次 conversation request：先配對，再開跑</h3>
+          <p>假設一個 request 有約 1,020 個 input tokens、預計生成約 129 個 output tokens，對應論文 conversation trace 的中位數。Cluster-level scheduler（CLS）在 request 到達時<strong>同時</strong>選一台 prompt machine 與一台 token machine；前者完成一次 prefill、產生第一個 token 與各層 KV blocks，後者接手其餘約 128 次 decode iteration。 <a class="source-ref" href="#src-traces">§III-A、§IV-A · PDF p.3、6</a></p>
+          <p>若兩站共用同一台 H100，128 次低 active-token 的 decode 仍佔著昂貴 compute；新 prompt 抵達時，又必須在「讓 prompt 等」和「中斷／拖慢 decode」之間折衷。若分站，prompt machine 可把不同 request 的 prompt 控制在有效 batch 範圍內，token machine 則跨更多 request 聚合單-token iteration，直到 KV memory 接近滿載。</p>
+
+          <h3>KV cache 不是搬家費，而是決定接力是否可行的臨界路徑</h3>
+          <p>最天真的接力是 prefill 完成後才整包傳 KV，傳輸直接落在第一與第二個 token 之間。Splitwise 改成每算完一層就以非同步 put 傳那一層的 KV，下一層計算與上一層傳輸重疊；最後只留下尚未被計算遮蔽的 residual transfer。對短 prompt，細粒度同步本身反而可能干擾 TTFT，所以 scheduler 會選回 serialized transfer。 <a class="source-ref" href="#src-kv-method">§IV-C · PDF p.6–7 · Fig. 11</a></p>
+
+          <div class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>Splitwise 的核心並不是「所有 request 都必須永久跨兩種 GPU」，而是把 phase 邊界變成可排程、可配置的資源接口：狀態傳得夠快時，compute、memory、power 與 batch policy 才能獨立最佳化。</p></div>
+
+          <h3>分池會碎片化，所以第三個 mixed pool 是安全閥</h3>
+          <p>如果 request 突然從 coding 轉成 conversation，固定 prompt/token pool 會一邊排長隊、一邊閒置。Splitwise 讓原屬某 pool 的機器暫時進入 mixed pool，以既有 mixed batching 執行相反 phase；反向工作清空後回原 pool，若失衡持續才做較粗粒度 repurposing。 <a class="source-ref" href="#src-cls">§IV-A · PDF p.6</a></p>
+          <p>接力比喻的邊界也在這裡：真實 request 的 prompt/output 長度事前不完全可知，KV 大小隨模型層數、context 與表示格式改變，而且兩個 pool 共享網路與故障域。這些不確定性不能靠比喻消失，必須交給 CLS、machine-level scheduler（MLS）、transfer path 與 provisioning model 一起處理。</p>
+
+          <p class="bridge">直覺已經指出四個零件：兩層 scheduler、三個 pool、phase-specific batching，以及可重疊的 KV data path。下一章按一個 request 的執行順序逐一落地。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>Splitwise 如何把請求跨池執行又守住 SLO？</h2>
+          <p class="lead">本章解決的是「知道要分 phase，卻不知道狀態、queue 與 machine role 如何在每一步改變」。Splitwise 的控制面先決定 request 去哪裡，資料面再把 KV cache 交接；當專用 pool 失衡時，mixed pool 把系統退回相容於 baseline 的執行方式。</p>
+
+          <h3>End-to-end：一個 request 的六步生命週期</h3>
+          <ol>
+            <li><strong>配對。</strong>CLS 收到 request，依 pending-token queue 長度以 Join-the-Shortest-Queue（JSQ）同時挑選 prompt 與 token machine；兩端預先載入相同模型。同步指定兩端，讓傳輸可以在 prefill 尚未完成時開始。</li>
+            <li><strong>Prompt 排程。</strong>Prompt MLS 以 first-come-first-serve（FCFS）取工作，總 batched prompt tokens 預設上限為 2,048；此值來自 Figure 6 的 throughput peak，可依模型／硬體調整。</li>
+            <li><strong>計算與傳輸交錯。</strong>每一層產生 KV blocks 後，prompt machine 立刻透過 InfiniBand 發出非同步 one-sided put，並繼續算下一層；小 prompt 則走 serialized path，避免細粒度同步成本。</li>
+            <li><strong>Token 排程。</strong>Token MLS 以 FCFS 接入 request，盡可能把多個 request 的單-token iteration 組批；它追蹤 GPU memory，接近 KV capacity 時才讓新 token request 排隊。</li>
+            <li><strong>過載回退。</strong>若專用 queue 超過 threshold，CLS 先找 mixed pool，再借用相反 pool 的 machine。Mixed MLS 優先 prompt 以守 TTFT，必要時 preempt token，再用 aging 與每-request preemption 次數上限避免 token starvation。</li>
+            <li><strong>回收與重平衡。</strong>借用 machine 清空相反 phase 後回原 pool；只有長時間停留 mixed pool 才觸發 prompt/token role 的 coarse-grained repurposing。</li>
+          </ol>
+          <p><a class="source-ref" href="#src-system-flow">§IV、§IV-A–B · PDF p.5–6 · Fig. 10</a></p>
+
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-10-p06-system-overview.png"><img src="assets/images/fig-10-p06-system-overview.png" loading="lazy" alt="Splitwise 系統架構：CLS 管理 prompt、token 與 mixed pools，兩端 MLS 管理 GPU、pending queue，KV cache 經 InfiniBand 傳輸。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 10</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：由上往下讀控制面，再沿中間箭頭讀資料面。CLS 決定兩端與 pool 彈性；MLS 決定每次 batch；KV cache 是唯一必須跨 machine 的 request state。</span></figcaption>
+          </figure>
+
+          <h3>兩層 scheduler 分別回答「去哪裡」與「這一輪跑誰」</h3>
+          <p>CLS 的 queue length 以 pending tokens 計算，machine 週期性回報 queue 或 memory 變化，但不是每個 iteration boundary 都通報。這降低中央控制頻率，代價是 CLS 看到的狀態可能有延遲；論文未提供 stale information 對 JSQ placement 的敏感度。 <a class="source-ref" href="#src-cls">§IV-A · PDF p.6</a></p>
+          <p>MLS 把 R1 具體化為三套 policy：prompt 控制 aggregate tokens、token 追到 memory limit、mixed 在 TTFT 優先與 token starvation 之間加 aging。 <span class="evidence-kind evidence-kind--analysis">分析</span>這種分層讓 cluster policy 不必知道每個 GPU iteration 細節，也讓 phase splitting 能疊加在既有 continuous／mixed batching 上；但 threshold、aging 速度與 preemption 上限的數值，論文未提供。 <a class="source-ref" href="#src-mls">§IV-B · PDF p.6</a></p>
+
+          <h3>逐層 KV pipeline 把網路延遲移出 critical path</h3>
+          <p>Serialized path 要等完整 prefill 才傳，transfer 全落在第二個 token 前；per-layer path 則把第 <var>l</var> 層 KV 傳輸與第 <var>l+1</var> 層 prompt computation 重疊。作者在 vLLM 上以 MSCCL++ 實作 zero-copy one-sided put：每個 request 配自己的 semaphore，KV 以 blocks 傳，若連續 blocks 使用同一 semaphore 就合併傳輸，所有 layer put 發出後才 signal token machine。 <a class="source-ref" href="#src-kv-implementation">§IV-C、§V-A · PDF p.6–8 · Figs. 11、13</a></p>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>可見 overhead 不是 KV 總傳輸時間，而是不能被後續 layer compute 遮蔽的尾端，加上同步干擾。論文沒有提出閉式 communication／compute overlap 公式，而是依 batch token 數在 serialized 與 per-layer 實測路徑間選擇。 <a class="source-ref" href="#src-kv-method">§IV-C、§VI-A · PDF p.7、9 · Fig. 14</a></p>
+
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-11-p06-kv-transfer.png"><img src="assets/images/fig-11-p06-kv-transfer.png" loading="lazy" alt="序列化 KV cache 傳輸與逐層重疊傳輸的時間線比較。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 11</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：左圖的綠色 transfer 完整卡在 prefill 與 decode 之間；右圖把各 layer 的綠色傳輸片段塞進 prefill 期間，只讓最後未重疊部分影響第二個 token。</span></figcaption>
+          </figure>
+
+          <h3>Placement 不是固定答案，而是由目標與 workload 搜出來</h3>
+          <div class="table-scroll">
+            <table>
+              <caption>四個 Splitwise provisioning 變體；字母依序代表 prompt／token machine</caption>
+              <thead><tr><th>變體</th><th>Prompt pool</th><th>Token pool</th><th>要測的假設</th></tr></thead>
+              <tbody>
+                <tr><td>AA</td><td>DGX-A100</td><td>DGX-A100</td><td>舊 GPU、同質 cluster 是否有較佳 Perf/$</td></tr>
+                <tr><td>HH</td><td>DGX-H100</td><td>DGX-H100</td><td>只分 phase、不引入硬體世代差異</td></tr>
+                <tr><td>HA</td><td>DGX-H100</td><td>DGX-A100</td><td>高 compute 給 prefill、較高 memory/compute 比給 decode</td></tr>
+                <tr><td>HHcap</td><td>DGX-H100</td><td>降功率 DGX-H100</td><td>保留同質硬體，同時收回 decode 的 power headroom</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>HHcap 把 token machine 的每張 H100 限到額定功率 50%，換算整機 provisioned power 約為未限功率 H100 機器的 70%。HA 則假設 H100 與 A100 token/prompt machine 間可用高速 InfiniBand；作者稍後承認這種跨世代直連在現有部署未必容易取得。 <a class="source-ref" href="#src-variants">§IV-D、§VII · PDF p.7–8、12 · Table V</a></p>
+
+          <h3>Simulator 把 phase profile 轉成 machine counts</h3>
+          <p>Provisioning 流程輸入：cluster 變體、模型在各 input/output/batch size 的效能 profile、短 workload trace、九個 percentile SLO、吞吐等 constraint 與成本／功率／吞吐目標。Piece-wise linear model 預測 TTFT、TBT 與 E2E；event-driven simulator 實作三個 pool、queue、memory、KV transfer 與兩層 scheduler，再搜尋滿足全部 SLO 的 prompt/token machine 數。 <a class="source-ref" href="#src-simulator">§IV-D、§V-B · PDF p.7–9 · Figs. 12–13、Table VI</a></p>
+          <p>例如 coding workload、Splitwise-HH、70 requests/s 的 cost-minimization 搜尋得到 27 prompt ＋ 3 token machines。這個例子顯示 pool ratio 由 token distribution 與目標函數推導，而不是架構常數；至於搜尋演算法、空間剪枝與 runtime，論文未提供。 <a class="source-ref" href="#src-design-space">§IV-D · PDF p.7 · Fig. 12</a></p>
+
+          <p class="bridge">方法本身現在可以逐步重建；真正的判斷點是：哪些環節在真實 GPU 上量過，哪些 cluster 收益只在模型與模擬器中成立？</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>Phase splitting 真能換到吞吐、成本與功率收益嗎？</h2>
+          <p class="lead">本章要解決的判讀障礙，是論文同時使用 production trace、真實 GPU 與 simulator，容易讓不同證據層級看起來像同一場實驗。以下每個結論都明列 setup、control、metric、observation 與 caveat；其中只有 characterization 與 KV transfer 是硬體量測，cluster-scale Pareto 點是模擬結果。</p>
+
+          <h3>先固定比較條件：模型、SLO、baseline 與模擬可信度</h3>
+          <div class="table-scroll wide">
+            <table>
+              <caption>評估設定與證據性質</caption>
+              <thead><tr><th>項目</th><th>論文設定</th><th>判讀時不可忽略之處</th></tr></thead>
+              <tbody>
+                <tr><td>Workload</td><td>兩個 Azure 服務、各 20 分鐘的 coding／conversation token-length trace；cluster simulation 依分布，以 Poisson arrival rate 調負載</td><td>保留真實長度分布，但不是原 arrival sequence 的完整線上 replay</td></tr>
+                <tr><td>Model</td><td>BLOOM-176B（70 layers）與 Llama-2-70B（80 layers），tensor parallelism 8</td><td>只涵蓋兩個 dense autoregressive model</td></tr>
+                <tr><td>硬體實作</td><td>Azure 上 2×DGX-A100 VM 與 2×DGX-H100 VM；vLLM ＋ MSCCL++；H100 inter-machine link 為 400 Gbps、A100 為 200 Gbps</td><td>真實硬體只驗證 characterization 與兩機 transfer path</td></tr>
+                <tr><td>Baseline</td><td>全 A100 或全 H100 cluster；與 mixed pool 相同的 mixed continuous batching</td><td>同一 batching mechanism，降低把 batching 改良誤算成 phase splitting 收益的風險</td></tr>
+                <tr><td>SLO</td><td>相對「DGX-A100、無 contention」：TTFT P50/P90/P99 ≤2×/3×/6×；TBT 與 E2E ≤1.25×/1.5×/5×，九項都須通過</td><td>結果取決於這組相對 SLO；換成絕對 latency 或更嚴格 TBT，最佳配置可能改變</td></tr>
+                <tr><td>Simulator</td><td>Piece-wise linear performance model；80:20 train/test 的 MAPE &lt;3%；另以 production load 驗證超過 50K iterations</td><td>論文未提供 end-to-end validation 的誤差分布、tail error 或 cluster-scale 實機對照</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><a class="source-ref" href="#src-setup">§V-A–B · PDF p.8–9 · Fig. 13、Tables III、VI</a></p>
+          <p>影響重現性的細節中，GPU precision／quantization、CPU 與 host memory、CUDA／driver、vLLM 版本、warm-up、重複次數、統計信賴區間與 error bars 均為<strong>論文未提供</strong>。成本來自當時引用的每機器雲端價格，功率優化評估使用 provisioned peak power，而不是整段 trace 的實測動態能耗。 <a class="source-ref" href="#src-missing-setup">§I、§IV-D、§V · PDF p.1、8–9 · Tables I、V</a></p>
+
+          <div class="claim-test">
+            <h3>Claim–test 1：phase 資源差異是否大到值得拆池？</h3>
+            <p><strong>Test。</strong>作者用上述兩個 trace 驅動 BLOOM／Llama，在 H100 上量 batch utilization、TTFT/TBT/E2E、throughput、memory 與 power，並以 A100/H100 無 batching P50 做世代比較。 <strong>Metric。</strong>Active batched tokens、tokens/s、latency、memory 與 power cap 敏感度。</p>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>Conversation 有 60–70% 執行時間不超過 20 active tokens；prompt throughput 在 2,048 tokens 後下降，decode 吞吐到 batch 64 仍增加；H100 相對 A100 的 TTFT 約減半，TBT 只到 0.70×。這組結果同時支持「不同 batching policy」與「不同 hardware/power placement」，而不只是把 request 拆開。 <a class="source-ref" href="#src-characterization">§III-B–G · PDF p.4–5 · Figs. 4–9、Table IV</a></p>
+            <p><strong>Caveat。</strong>Batch-utilization 圖使用縮小到 2 requests/s 的 trace 才能放進單機；硬體結果只有 A100/H100、兩個 dense models，不能直接證明其他 GPU、MoE、量化或 speculative decoding 仍有相同 phase gap。</p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim–test 2：KV handoff 是否真的沒有吃掉 TTFT／TBT 收益？</h3>
+            <p><strong>Test。</strong>在 A100 與 H100 兩機 InfiniBand setup 上，作者比較 serialized 與 per-layer KV transfer 隨 batched prompt tokens 增長的 visible latency；再以 coding trace、無 batching的 2-machine Splitwise 對照 1-machine baseline。 <strong>Metric。</strong>Transfer latency、TTFT、E2E 與第二個 token latency。</p>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>Per-layer path 的不可重疊部分約維持 A100 8 ms、H100 5 ms，總 overhead 小於 prompt computation 的 7%。在無 batching coding test 中，Splitwise 對 E2E 增加 0.8%；第二個 token 增加 16.5%，而 serialized path 增加 64%。H100 小於 512 batched prompt tokens 時，系統選 serialized path，較大才逐層傳。 <a class="source-ref" href="#src-transfer-results">§VI-A · PDF p.9 · Figs. 14–15</a></p>
+            <p><strong>Supported conclusion。</strong>高速、GPU-driven interconnect 上，逐層 overlap 足以讓 KV handoff 在這兩台機器與所測 prompt range 中不成為主要 critical path。 <strong>Caveat。</strong>End-to-end microbenchmark 明確採無 batching；它沒有量多租戶 transfer 競爭、跨 rack congestion、故障重傳或 Ethernet tail latency。</p>
+          </div>
+
+          <figure class="wide" data-figure-role="result">
+            <a href="assets/images/fig-14-p09-kv-transfer-overhead.png"><img src="assets/images/fig-14-p09-kv-transfer-overhead.png" loading="lazy" alt="A100 與 H100 上 serialized 與 per-layer KV cache 傳輸的可見延遲，橫軸為 batched prompt token 數。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 14</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：深色 serialized 線隨 KV 大小近線性上升；淺色 per-layer 線被 prefill compute 遮蔽後近乎平坦。A100／H100 的殘餘差距也反映 200／400 Gbps link bandwidth。</span></figcaption>
+          </figure>
+
+          <div class="claim-test">
+            <h3>Claim–test 3：吞吐、cost 與 provisioned power 各自換到了什麼？</h3>
+            <p><strong>Test。</strong>Simulator 對 conversation workload 搜尋通過九項 SLO 的 cluster，分別固定 power 最大化 throughput、固定 cost 最大化 throughput，或固定 throughput 最小化 power/cost。Control 是相同 mixed batching 的 Baseline-A100／H100。下列數字是不同 constraint 下的 Pareto 點，不能相加成單一配置。</p>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span><strong>Iso-power：</strong>相對 Baseline-A100，Splitwise-AA 在相同 power 與 cost 下給出 2.15× throughput；Splitwise-HA 在相同 power 下給出 1.18× throughput，cost 低 10%。 <a class="source-ref" href="#src-throughput-bars">§VI-B · PDF p.10–11 · Fig. 18a</a></p>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span><strong>Iso-cost：</strong>相對 Baseline-H100，Splitwise-AA 在相同 cost 下提供 1.4× throughput，但需要 25% 更多 provisioned power 與約 2× server space；它對租用者可能划算，對受 power/space 約束的 cloud provider 未必。 <a class="source-ref" href="#src-throughput-bars">§VI-C · PDF p.10–11 · Fig. 18b</a></p>
+
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-18-p11-throughput-optimized-clusters.png"><img src="assets/images/fig-18-p11-throughput-optimized-clusters.png" loading="lazy" alt="Conversation workload 下 iso-power 與 iso-cost throughput-optimized cluster 的 server、throughput、cost 或 power 正規化柱狀比較。"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 18</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：左圖固定 power，比 throughput 與 cost；右圖固定 cost，比 throughput 與 power。AA 的吞吐高，但 server 數與 power trade-off 不能從圖中抹去。</span></figcaption>
+            </figure>
+
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span><strong>Iso-throughput：</strong>相對 Baseline-H100，Splitwise-HHcap 在同 cost／space 下將 provisioned power 降 25%；若改以 cost 為目標，Splitwise-AA 以相同 throughput 將 cost 降 25%。 <a class="source-ref" href="#src-efficiency-bars">§VI-C · PDF p.10–11 · Fig. 19</a></p>
+
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-19-p11-iso-throughput-clusters.png"><img src="assets/images/fig-19-p11-iso-throughput-clusters.png" loading="lazy" alt="固定吞吐時，power-optimized 與 cost-optimized cluster 的 server、cost、power 正規化柱狀比較。"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 19</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：同一 throughput 下，最佳解隨目標改變；HHcap 收回 token pool 的 power headroom，AA 用更多較便宜機器換成本，但沒有同時最小化 server 數、cost 與 power。</span></figcaption>
+            </figure>
+
+            <p><strong>Caveat。</strong>摘要的「1.4× throughput 且 cost 低 20%」與「同 cost/power 下 2.35× throughput」是作者對設計空間的 headline summary。正文的 Figure 18–19 則展示多個不同 workload／constraint 的點；因此本紀錄把 headline 標為作者主張，不把最大 throughput、最低 cost 與最低 power 拼成一台不存在的 cluster。 <a class="source-ref" href="#src-headline">Abstract、§IX · PDF p.1、12</a></p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim–test 4：workload 或模型改變時，mixed pool 能補多少錯配？</h3>
+            <p><strong>Test。</strong>作者把 conversation trace 放到為 coding 配置的 iso-power cluster，再把 Llama-70B 放到為 BLOOM-176B 配置的 cluster，檢查 P90 TTFT/TBT/E2E 與最大 sustainable load。 <span class="evidence-kind evidence-kind--fact">實驗事實</span>同質 AA／HH 依靠 mixed pool，對 trace 轉換未見 throughput 或 latency setback；異質 HA／HHcap 相對專為 conversation 配置的 cluster 有 7% throughput setback。換模型時，各 Splitwise 變體在高負載仍超過兩個 baseline。 <a class="source-ref" href="#src-robustness">§VI-D · PDF p.11 · Fig. 20</a></p>
+            <p><strong>Caveat。</strong>這只測兩個 trace 與兩個模型之間的交換，不能證明任意 drift 都能被 mixed pool 吸收；尤其長 context、prefix reuse 或 output-length predictor 誤差可能同時改變 pool ratio 與 KV transfer。</p>
+          </div>
+
+          <figure class="wide" data-figure-role="result">
+            <a href="assets/images/fig-20-p11-workload-change.png"><img src="assets/images/fig-20-p11-workload-change.png" loading="lazy" alt="把 conversation workload 放到 coding cluster，以及把 Llama-70B 放到 BLOOM-176B cluster 時，P90 TTFT、TBT、E2E 隨 request rate 的曲線。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 20</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：紅色虛線是 SLO；上排測 token 分布錯配，下排測模型錯配。曲線證明的是這兩個 swap 的容忍度，不是對所有 production drift 的一般保證。</span></figcaption>
+          </figure>
+
+          <p class="bridge">證據確實閉合了「phase 差異 → 專用 pool → KV overlap → Pareto 改善」這條鏈，但它閉合在特定 trace、硬體與 simulator 內。下一章把這個有效範圍畫清楚。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>證據能支持哪種部署，又不能外推到哪裡？</h2>
+          <p class="lead">本章要回答的不是「Splitwise 好不好」，而是它的因果論證在哪裡扎實、在哪裡仍靠假設。最重要的界線是：論文證明了兩機 KV handoff 與 trace-driven cluster design 的可行性，沒有證明一個完整 Splitwise scheduler 已在大型生產 cluster 長期運作。</p>
+
+          <h3>最強之處：設計決策都有相鄰的量測依據</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>Figure 6 對應 prompt/decode batch policy、Figure 9 對應 HHcap、Table IV 對應 HA、Figure 14–15 對應 transfer path，Figure 18–19 才做 cluster objective。這種「characterization → mechanism → microbenchmark → validated performance model → design-space search」比只展示 end-to-end speedup 更能檢查因果；baseline 也使用同一 mixed batching，避免最明顯的軟體公平性問題。 <a class="source-ref" href="#src-causal-chain">§III–VI · PDF p.3–11</a></p>
+          <p>Artifact 釋出 production traces、vLLM transfer prototype 與 SplitwiseSim，並封存於 Zenodo。這提高 workload 與 simulator 的可追溯性；但 appendix 明確說 artifact functionality 因硬體有限，只測試 traces 與 SplitwiseSim，因此不能把「公開 prototype」等同「transfer implementation 已由 artifact evaluation 完整重現」。 <a class="source-ref" href="#src-artifact">Appendix A–E · PDF p.14–15</a></p>
+
+          <h3>Production trace 是輸入證據，不是 deployment 證據</h3>
+          <p>Trace 來自真實 Azure 服務，但只覆蓋單日的兩段 20 分鐘，且保留 length/arrival metadata；cluster 負載再由 Poisson arrival rate 產生。 <span class="evidence-kind evidence-kind--analysis">分析</span>這足以研究 input/output ratio，卻較難代表日夜週期、burst correlation、tenant mix、admission control 與長時間 drift。 <a class="source-ref" href="#src-traces">§III、§V-B · PDF p.3、9</a></p>
+          <p>真實硬體實作集中在 KV transfer；CLS/MLS、elastic mixed pool、數十台機器配置和成本／功率 trade-off 主要存在 simulator。Performance model 的 &lt;3% MAPE 是有力局部驗證，但 paper 沒報 P99 prediction error，也沒有把一個同規模實機 cluster 與 simulator 逐點對齊。 <a class="source-ref" href="#src-setup">§V · PDF p.8–9 · Fig. 13</a></p>
+
+          <h3>網路與硬體可用性是 HA／KV overlap 的硬前提</h3>
+          <p>所有設計假設 prompt/token machines 有 InfiniBand；作者也承認 H100 與 A100 直接互連的 Splitwise-HA 在現有環境不一定 readily available。論文推測頻寬低 10× 的 interconnect 仍可能受益，也提出 RoCE 或 KV compression，但沒有做該敏感度實驗。 <a class="source-ref" href="#src-interconnect-limit">§VII · PDF p.12</a></p>
+          <p>研究只量 A100／H100。作者建議 AMD MI250、Intel Sapphire Rapids HBM、CPU／FPGA／ASIC 也可能作 token machine，但因沒有對應硬體或最佳化 implementation 而留給 future work。 <span class="evidence-kind evidence-kind--claim">作者主張</span>「方法可套用任何合適硬體」是架構層論點，不是跨平台實驗事實。 <a class="source-ref" href="#src-alt-hardware">§VII · PDF p.12</a></p>
+
+          <h3> workload 演化可能同時改寫 compute、memory 與 transfer 比例</h3>
+          <p>論文不跨 request 重用 KV cache，並假設 chat API 每輪重送完整 context。若服務保留 prefix/context，prefill 的記憶體行為會改變，下一輪還可能需要把 KV 從 token machine 傳回 prompt machine；作者明列此情境。 <a class="source-ref" href="#src-conversation-cache">§III、§VII · PDF p.3、12</a></p>
+          <p>兩個模型都是 dense decoder-only。MoE、grouped/multi-query attention、KV quantization、speculative decoding、prefix sharing 與極長 context 會改變 compute-to-memory ratio 或 state size；論文概括 Splitwise 適用所有具有兩階段的 autoregressive model，卻沒有逐項測試。對這些模型，應重新 profile，而不是沿用 2,048-token batch threshold、512-token transfer switch 或既有 pool ratio。</p>
+
+          <h3>有三種結論不該從圖中外推</h3>
+          <ul>
+            <li><strong>不是所有負載都更快。</strong>對純 batch job 壓到高 load 時，所有 machine 進 mixed pool，Splitwise 退化成同 machine-count baseline；A100/AA 都是 0.89 RPS/$，H100/HH 都是 0.75 RPS/$。 <a class="source-ref" href="#src-batch-limit">§VI-E · PDF p.11</a></li>
+            <li><strong>Provisioned power 不是 energy。</strong>25% power reduction 是 cluster provisioned peak power 的模型化結果，沒有包含 utilization-dependent dynamic energy、網路、CPU、冷卻或 PUE。 <a class="source-ref" href="#src-power-boundary">§IV-D · PDF p.8</a></li>
+            <li><strong>Hourly price 不是完整 TCO。</strong>A100/H100 cost 取自論文當時的外部雲價；server space、異質 inventory、operational complexity 與跨世代 networking 可能改變 provider 結論。</li>
+          </ul>
+
+          <h3>可靠性與 scheduler scalability 尚未進入主要實驗</h3>
+          <p>Prompt 或 token machine 故障時，現行設計從頭重跑 request；作者提出把 KV checkpoint 到 in-memory database，但安全且高效率 recovery 超出範圍。CLS 也可能成為大 cluster bottleneck，論文只指向 partitioned／replicated scheduling，未給 message rate、failover 或一致性分析。 <a class="source-ref" href="#src-practical-limits">§IV-E · PDF p.8</a></p>
+          <p>綜合而言，證據足以支持：「在所測 A100/H100、dense LLM、快速 InfiniBand 與指定 SLO 下，phase-aware placement 是有潛力的 Pareto improvement。」它不足以支持：「任意 production workload 都能得到 1.4×／2.35×、低速網路仍無 overhead，或 heterogeneous pool 必然降低 provider TCO。」</p>
+
+          <p class="bridge">這些限制並沒有抹去貢獻；反而指出 Splitwise 最值得延伸的地方，是把離線 phase profiling 變成可在線驗證、可恢復、可跨硬體調整的控制迴路。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>從 Splitwise 還能推出哪些系統設計與驗證方向？</h2>
+          <p class="lead">本章把貢獻抽象成可重用的系統原則，再提出能推翻或加強論文因果鏈的實驗。重點不是再列更多 GPU 型號，而是讓「phase 邊界」從一次性離線假設，升級為可觀測、可適應、可失敗恢復的服務接口。</p>
+
+          <h3>三個可移植的設計原則</h3>
+          <div class="takeaway-list">
+            <div class="takeaway-item"><p class="takeaway-label">Phase is a placement boundary</p><p><span class="evidence-kind evidence-kind--analysis">分析</span>當一個 request 的不同 phase 有穩定且可觀察的 roofline 差異，先拆 state boundary，再各自選 batch、hardware 與 power，可能比在同一 worker 上增加更複雜的局部 heuristic 更有效。</p></div>
+            <div class="takeaway-item"><p class="takeaway-label">Control plane needs a reversible escape hatch</p><p><span class="evidence-kind evidence-kind--analysis">分析</span>專用 pool 提供效率，mixed pool 提供可逆回退；這個「fast path 專用化、slow path 相容 baseline」模式可用於任何會因 workload drift 產生 fragmentation 的 serving pipeline。</p></div>
+            <div class="takeaway-item"><p class="takeaway-label">State transfer must be co-designed with compute</p><p><span class="evidence-kind evidence-kind--analysis">分析</span>KV cache 不是事後搬運，而是在 layer boundary 就被 data-plane pipeline 消化。若把 transfer optimization 與 scheduler 分開評估，很容易在單流 bandwidth 很漂亮時忽略第二 token tail latency。</p></div>
+          </div>
+
+          <h3>優先做的五組 follow-up experiments</h3>
+          <ol>
+            <li><strong>現代 decode stack 的 phase map。</strong>在 GQA/MQA、FP8/INT8 KV、speculative decoding、chunked prefill、prefix caching 與 MoE 上重畫 Figure 6–9，量 TTFT/TBT、HBM、network bytes 與 power；檢驗 phase gap 是否仍足以抵銷 handoff。</li>
+            <li><strong>真實 multi-rack 壓力測試。</strong>以至少一個可飽和 leaf/spine 或 RoCE fabric 的 cluster，同時注入多 tenant request，量 KV flow 的 P50/P99、incast、retransmission 與對 tensor-parallel traffic 的干擾。</li>
+            <li><strong>在線 pool controller。</strong><span class="evidence-kind evidence-kind--speculation">推測</span>用近期 prompt/output 分布與 queue age 預測短期 phase demand，和現有 threshold/mixed-pool policy 做 ablation；觀察 throughput、SLO violation、role churn 與 stale telemetry sensitivity。</li>
+            <li><strong>Failure-injection。</strong>在 prefill、layer-wise transfer、decode 不同時間點殺掉 machine 或 CLS，對比從頭重跑、prefill-end checkpoint 與增量 KV checkpoint 的 recovery latency、額外 memory／network 與一致性。</li>
+            <li><strong>完整 provider objective。</strong>把 provisioned GPU power 擴成 IT energy、network、CPU、cooling/PUE、server space、capex 與 inventory risk，對 AA/HH/HA/HHcap 重新畫 Pareto frontier。</li>
+          </ol>
+
+          <h3>值得研究組討論的五個問題</h3>
+          <ol>
+            <li>Splitwise 的收益究竟主要來自 phase isolation、不同 batching，還是 hardware/power heterogeneity？最小的 component ablation 應如何設計？</li>
+            <li>Output length 不可知時，CLS 一開始同時綁定 token machine 是否過早？能否延後 placement，或用可撤銷 reservation 降低錯配？</li>
+            <li>逐層 KV transfer 與 tensor-parallel collective 共用 fabric 時，哪一種 traffic 應優先，才能同時守 TTFT 與 TBT tail？</li>
+            <li>Mixed pool 的「退化為 baseline」是健全保護，還是掩蓋 pool sizing 失準？應用什麼 observability 指標區分暫時 burst 與結構性 drift？</li>
+            <li>若 prefix cache 已跨 request 共享，phase boundary 應仍在 prefill/decode，還是改成 cache-hit/miss、shared/private KV 或 attention/MLP boundary？</li>
+          </ol>
+
+          <h3>較長期的推論</h3>
+          <p><span class="evidence-kind evidence-kind--speculation">推測</span>未來 inference cluster 的基本調度單位可能不再是「一個 model replica」，而是帶有 state contract 的 phase service：prefill、decode、draft model、verification、retrieval 與 KV store 各自 scale。Splitwise 提供了其中最乾淨的兩階段原型，也同時提醒我們：每拆一個 phase，就新增一條 state-transfer critical path 與一個 capacity-coupling 問題。</p>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>因此這篇論文最持久的價值未必是某個 A100/H100 machine count，而是提出一套可檢驗的設計程序：先用 production-shaped workload 找出 phase resource asymmetry，再以真實 data path 驗證 state handoff，最後在明確 SLO 與 objective 下做 cluster search。</p>
+
+          <p class="bridge">要重做這些判斷，最後需要一份可直接回到頁碼、圖表與 artifact 的索引。</p>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>如何回到原文核對 trace、模型與關鍵證據？</h2>
+          <p class="lead">本章收束引用資訊與證據位置，讓讀者能從任何結論直接回到原文。頁碼採本地 PDF 的 1-based 頁碼；Figure、Table 與 section 名稱沿用論文。</p>
+
+          <h3>書目與分類</h3>
+          <dl class="term-list">
+            <dt>正式標題</dt><dd>Splitwise: Efficient Generative LLM Inference Using Phase Splitting</dd>
+            <dt>作者</dt><dd>Pratyush Patel、Esha Choukse、Chaojie Zhang、Aashaka Shah、Íñigo Goiri、Saeed Maleki、Ricardo Bianchini</dd>
+            <dt>機構</dt><dd>University of Washington；Microsoft</dd>
+            <dt>會議與年份</dt><dd>ISCA 2024，June 2024</dd>
+            <dt>版本</dt><dd>arXiv:2311.18677v2（2024-05-20）</dd>
+            <dt>Canonical</dt><dd><a href="https://www.microsoft.com/en-us/research/publication/splitwise-efficient-generative-llm-inference-using-phase-splitting/" target="_blank" rel="noopener noreferrer">Microsoft Research publication page</a></dd>
+            <dt>ArXiv</dt><dd><a href="https://arxiv.org/abs/2311.18677" target="_blank" rel="noopener noreferrer">arXiv:2311.18677</a></dd>
+            <dt>本地全文</dt><dd><a href="Splitwise_ISCA24.pdf">開啟本地 PDF</a></dd>
+            <dt>篇幅</dt><dd><span data-summary-field="pdf-page-count">共 15 頁</span></dd>
+            <dt>分類</dt><dd>LLM Systems / Inference Serving</dd>
+          </dl>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>分類依主要技術貢獻判定：Splitwise 的核心是跨機分離 prefill/decode、以兩層 scheduler 與 mixed pool 服務 request，KV transfer 與硬體異質性是支撐此 serving architecture 的機制，因此歸於 Inference Serving，而非 KV Cache Management 或 Cluster Networking。</p>
+
+          <h3>Artifact 與公開資料</h3>
+          <ul>
+            <li><a href="https://github.com/Azure/AzurePublicDataset/blob/master/AzureLLMInferenceDataset2023.md" target="_blank" rel="noopener noreferrer">Azure LLM Inference Trace 2023</a></li>
+            <li><a href="https://github.com/vllm-project/vllm/pull/2809" target="_blank" rel="noopener noreferrer">vLLM KV-transfer prototype pull request</a></li>
+            <li><a href="https://github.com/Mutinifni/splitwise-sim" target="_blank" rel="noopener noreferrer">SplitwiseSim</a></li>
+            <li><a href="https://doi.org/10.5281/zenodo.11003049" target="_blank" rel="noopener noreferrer">Archived artifact（Zenodo）</a></li>
+          </ul>
+          <p><a class="source-ref" href="#src-artifact">References [1]、[4]、[20]；Appendix · PDF p.13–15</a></p>
+
+          <h3>術語表</h3>
+          <dl class="term-list">
+            <dt>Prefill / prompt phase</dt><dd>平行處理全部輸入 token、產生第一 token 與初始 KV cache 的階段。</dd>
+            <dt>Decode / token phase</dt><dd>使用前一 token 與既有 KV cache，自回歸地一次生成一 token 的階段。</dd>
+            <dt>KV cache</dt><dd>Attention 各層保存的 key/value state；Splitwise 在 phase boundary 把它從 prompt machine 傳到 token machine。</dd>
+            <dt>TTFT</dt><dd>Time to first token；包含 queue 與 prefill，代表使用者多久看到第一個回應 token。</dd>
+            <dt>TBT</dt><dd>Time between tokens；token 串流間隔，本文用它捕捉 prompt interference 與 decode 流暢度。</dd>
+            <dt>E2E</dt><dd>End-to-end latency；request 從到達到完成的總時間。</dd>
+            <dt>CLS / MLS</dt><dd>Cluster-level scheduler 決定 pool 與 machine pair；machine-level scheduler 決定 local queue 與 batch。</dd>
+            <dt>Mixed pool</dt><dd>暫時承接相反 phase、以 mixed continuous batching 吸收 pool imbalance 的彈性機器集合。</dd>
+            <dt>Iso-power / iso-cost / iso-throughput</dt><dd>固定其中一項 constraint，再比較或最佳化其他目標；不同圖的最大收益不可直接合併。</dd>
+            <dt>Provisioned power</dt><dd>依機器額定／power-cap 計入的 peak capacity，不等於 workload 執行期間的實測 energy。</dd>
+          </dl>
+
+          <h3>關鍵證據索引</h3>
+          <ol class="source-index">
+            <li id="src-headline"><span><strong>Headline 效率主張：</strong>Abstract 與 Conclusion，PDF p.1、12；1.4×／20%、2.35× 與 1.76×／15% 為作者摘要式比較。</span></li>
+            <li id="src-phases"><span><strong>Prefill/decode 與 KV state：</strong>§II-B，PDF p.2，Figure 1。</span></li>
+            <li id="src-batching"><span><strong>Request-level、continuous、mixed batching：</strong>§II-D，PDF p.2–3，Figure 2。</span></li>
+            <li id="src-traces"><span><strong>Production trace 與 token 分布：</strong>§III、§III-A，PDF p.3，Figure 3、Table III。</span></li>
+            <li id="src-evidence-layers"><span><strong>Trace、硬體、simulator 三層證據：</strong>§III、§V，PDF p.3、8–9，Figure 13。</span></li>
+            <li id="src-utilization"><span><strong>低 active-token utilization 與 latency：</strong>§III-B–C，PDF p.4，Figures 4–5。</span></li>
+            <li id="src-batch-throughput"><span><strong>兩 phase 的 batching throughput/memory：</strong>§III-D–E，PDF p.4，Figures 6–7。</span></li>
+            <li id="src-power-cap"><span><strong>Power utilization 與 cap sensitivity：</strong>§III-F，PDF p.5，Figures 8–9。</span></li>
+            <li id="src-hardware"><span><strong>A100/H100 規格與 request P50：</strong>§I、§III-G，PDF p.1、5，Tables I、IV。</span></li>
+            <li id="src-characterization"><span><strong>完整 phase characterization：</strong>§III-B–G，PDF p.4–5，Figures 4–9、Table IV。</span></li>
+            <li id="src-system-flow"><span><strong>三個 pool 與兩層 scheduler：</strong>§IV、§IV-A–B，PDF p.5–6，Figure 10。</span></li>
+            <li id="src-cls"><span><strong>CLS、JSQ、mixed-pool transition：</strong>§IV-A，PDF p.6。</span></li>
+            <li id="src-mls"><span><strong>Prompt/token/mixed MLS policy：</strong>§IV-B，PDF p.6。</span></li>
+            <li id="src-kv-method"><span><strong>Serialized 與 per-layer KV transfer：</strong>§IV-C，PDF p.6–7，Figure 11。</span></li>
+            <li id="src-kv-implementation"><span><strong>MSCCL++ one-sided put 與 semaphore：</strong>§V-A，PDF p.8。</span></li>
+            <li id="src-variants"><span><strong>AA/HH/HA/HHcap：</strong>§IV-D，PDF p.7–8，Table V。</span></li>
+            <li id="src-design-space"><span><strong>27P/3T provisioning 例子：</strong>§IV-D，PDF p.7，Figure 12。</span></li>
+            <li id="src-simulator"><span><strong>Simulator input、flow 與 SLO：</strong>§V-B，PDF p.8–9，Figure 13、Table VI。</span></li>
+            <li id="src-setup"><span><strong>實作、baseline、model validation：</strong>§V-A–B，PDF p.8–9。</span></li>
+            <li id="src-missing-setup"><span><strong>未報設定與 power 邊界：</strong>§I、§IV-D、§V，PDF p.1、8–9。</span></li>
+            <li id="src-transfer-results"><span><strong>KV transfer latency 與 E2E impact：</strong>§VI-A，PDF p.9，Figures 14–15。</span></li>
+            <li id="src-throughput-bars"><span><strong>Iso-power／iso-cost throughput：</strong>§VI-B–C，PDF p.10–11，Figure 18。</span></li>
+            <li id="src-efficiency-bars"><span><strong>Iso-throughput power/cost：</strong>§VI-C，PDF p.10–11，Figure 19。</span></li>
+            <li id="src-robustness"><span><strong>Trace/model swap：</strong>§VI-D，PDF p.11，Figure 20。</span></li>
+            <li id="src-batch-limit"><span><strong>Batch-job 退化為 baseline：</strong>§VI-E，PDF p.11。</span></li>
+            <li id="src-causal-chain"><span><strong>Characterization 到 design-space evaluation：</strong>§III–VI，PDF p.3–11。</span></li>
+            <li id="src-interconnect-limit"><span><strong>InfiniBand/heterogeneous interconnect 假設：</strong>§VII，PDF p.12。</span></li>
+            <li id="src-alt-hardware"><span><strong>其他 accelerator 僅為 future work：</strong>§VII，PDF p.12。</span></li>
+            <li id="src-conversation-cache"><span><strong>跨 request context caching 可能改變 pattern：</strong>§VII，PDF p.12。</span></li>
+            <li id="src-power-boundary"><span><strong>只評估 provisioned power：</strong>§IV-D，PDF p.8。</span></li>
+            <li id="src-practical-limits"><span><strong>CLS scalability 與 failure recovery：</strong>§IV-E，PDF p.8。</span></li>
+            <li id="src-artifact"><span><strong>Artifact 內容與測試範圍：</strong>Appendix A–E，PDF p.14–15。</span></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>Splitwise: Efficient Generative LLM Inference Using Phase Splitting · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>

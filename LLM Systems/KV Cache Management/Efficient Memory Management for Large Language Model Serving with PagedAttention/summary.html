@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="vLLM 與 PagedAttention 論文閱讀紀錄：從 KV cache 碎片、分頁式配置到吞吐量證據與系統邊界。">
+  <title>Efficient Memory Management for Large Language Model Serving with PagedAttention｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 46rem;
+      --wide: 62rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">LLM Systems / KV Cache Management</p>
+      <h1>Efficient Memory Management for Large Language Model Serving with PagedAttention</h1>
+      <div class="paper-dek" data-section-role="thesis"><p class="lead">vLLM 以 PagedAttention 讓每條序列的 KV cache 可按固定大小 block、非連續地存放與分享，把未知輸出長度造成的預留與碎片浪費壓到至多一個尾端 block，因而能在相近延遲下批次更多請求；論文在 OPT／LLaMA、A100 與合成到達 traces 上報告相對既有系統約 2–4× 的整體吞吐量提升。<a class="source-ref" href="#source-conclusion-p14">§10 · PDF p.14</a></p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 在 ShareGPT basic sampling 中，vLLM 可承受的 request rate 比不可實現、已知真實輸出長度的 Orca (Oracle) 高 1.7–2.7×，但這是論文特定模型、硬體、trace 與作者重作 baseline 下的結果，不應解讀為所有線上服務的固定倍率。<a class="source-ref" href="#source-results-p11">§6.2 · PDF p.11 · Figure 12</a></p></div>
+      <p class="paper-byline">Woosuk Kwon、Zhuohan Li、Siyuan Zhuang、Ying Sheng、Lianmin Zheng、Cody Hao Yu、Joseph E. Gonzalez、Hao Zhang、Ion Stoica</p>
+      <p class="paper-meta">
+        <span>SOSP ’23（Proceedings of the 29th Symposium on Operating Systems Principles，頁 611–626）</span>
+        <span>2023</span>
+        <span>LLM Systems / KV Cache Management</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-08">2026-09-08</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://doi.org/10.1145/3600006.3613165" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="2309.06180.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀路線：</strong>先用〈<a href="#problem">GPU 明明還有空間，為何連續配置仍拒絕新請求</a>〉抓住根因，再讀〈<a href="#method">Logical Block、Physical Block、Block Table 與共享機制</a>〉走完整流程，最後用〈<a href="#evidence">記憶體利用率何時轉成吞吐，何時被 Compute Bound 截住</a>〉逐項驗證。熟悉背景的讀者可直接從問題章開始。</p>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">自迴歸 KV、Reservation、Fragmentation 與 Copy-on-Write</a></li>
+            <li><a href="#problem">GPU 明明還有空間，為何連續配置仍拒絕新請求</a></li>
+            <li><a href="#insight">把 KV Cache 當虛擬記憶體：PagedAttention 如何放大 Batch</a></li>
+            <li><a href="#method">Logical Block、Physical Block、Block Table 與共享機制</a></li>
+            <li><a href="#evidence">記憶體利用率何時轉成吞吐，何時被 Compute Bound 截住</a></li>
+            <li><a href="#critique">Indirection、Block Size 與 Swap／Recompute 的代價</a></li>
+            <li><a href="#extensions">PagedAttention 之後，記憶體管理還能怎麼演進</a></li>
+            <li><a href="#reference">PagedAttention 公式、容量邊界與證據索引</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>自迴歸 KV、Reservation、Fragmentation 與 Copy-on-Write</h2>
+          <h3>只需要四個前置概念</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>前置概念，以及後文實際使用的位置</caption>
+            <thead><tr><th>概念</th><th>最小理解</th><th>後文用途</th></tr></thead>
+            <tbody>
+              <tr><td>Prefill 與 decode</td><td>Prefill 同時處理已知 prompt token，可用矩陣–矩陣運算；decode 受資料相依限制，每輪只產生一個新 token，常呈 memory-bound。</td><td>解釋為何方法章在 prompt 建 cache 後逐輪追加 block，也解釋為何證據章中增加 batch size 能提高利用率。</td></tr>
+              <tr><td>KV cache</td><td>每層 attention 將既有 token 的 key／value 保存，後續 token 不必重算；cache 隨序列長度線性成長，且結束時間未知。</td><td>連到容量瓶頸與後文的 block 生命週期。</td></tr>
+              <tr><td>Iteration-level scheduling</td><td>每輪 decode 後移除完成請求、加入新請求，避免 request-level batching 的 padding 與長請求阻塞；但同時存活的 cache 仍須塞進 GPU。</td><td>說明 Orca 與 vLLM 的互補關係：排程解決「何時進 batch」，paging 解決「working set 是否放得下」。</td></tr>
+              <tr><td>Paging 與 copy-on-write</td><td>邏輯連續位址可映射到非連續實體頁；多個邏輯擁有者可先讀同一實體頁，直到寫入時才複製。</td><td>連到方法章的 block table、共享 prompt／beam prefix 與 reference count。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>論文把生成序列定義為 prompt 與輸出 token 的串接。Prefill 產生 prompt 的 KV cache；每個 decode iteration 讀取全部既有 cache、計算下一 token，並再追加一份新 cache。這個「讀全部、每輪增加一格、何時停止未知」的狀態形狀，是 PagedAttention 能成立的核心，而不是一般張量分頁都必然有效。<a class="source-ref" href="#source-background-p3">§2.2 · PDF p.3</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 因果橋接如下：iteration-level scheduling 已把計算 padding 降低，但每多容納一條 active sequence 就要同時持有其 KV cache；因此下一個問題不是「GPU 是否還有 FLOPS」，而是「動態 working set 是否被配置方式浪費」。這正導向下一章的容量與碎片問題。<a class="source-ref" href="#source-background-p3">§2.3 · PDF p.3</a></p>
+<p class="bridge">有了這些背景，下一個問題是：GPU 明明還有空間，為何連續配置仍拒絕新請求</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>GPU 明明還有空間，為何連續配置仍拒絕新請求</h2>
+          <h3>可觀察症狀：GPU 還能算，batch 卻放不下</h3>
+        <p>以 OPT-13B 為例，一個 token 的 KV cache 需要 (2\times5120\times40\times2=819{,}200) bytes，約 800 KB；若序列長到 2048 token，單一 request 最多約 1.6 GB。論文的 A100 40 GB 範例中，模型參數約占 65%，KV cache 占近 30%，所以服務容量主要由 cache 管理決定。<a class="source-ref" href="#source-memory-p4">§3 · PDF p.4</a><a class="source-ref" href="#source-title-p1">§1 · PDF p.1 · Figure 1</a></p>
+
+        <h3>根因：把未知長度的動態物件塞進預先保留的連續 chunk</h3>
+        <ol>
+          <li><strong>Reservation：</strong>尚未生成的 token slot 已被某 request 長期占住，其他 request 不能借用。</li>
+          <li><strong>Internal fragmentation：</strong>實際輸出比最大長度短，request 結束後才確知有一大段永不使用。</li>
+          <li><strong>External fragmentation：</strong>不同大小的連續 chunk 在 allocator 中留下無法滿足新配置的孔洞。</li>
+          <li><strong>Duplication：</strong>parallel sampling、beam search 或共同 prefix 本可分享 cache，連續私有 tensor 卻迫使複製。</li>
+        </ol>
+        <p>在作者的 profile 中，既有 Orca 配置只有 20.4–38.2% KV-cache 空間真正存 token states；vLLM 的對應比例為 96.3%。<a class="source-ref" href="#source-intro-p2">§1 · PDF p.2 · Figure 2</a></p>
+
+        <h3>最近的替代方案為何不夠</h3>
+        <p>Orca 的 iteration-level scheduling 能細粒度交錯請求，卻仍假定一條序列的 cache 是連續配置；compaction 可處理外部碎片，但移動龐大 cache 會落在延遲敏感路徑，也不能自然表達 decoding-specific sharing。即使預知最終長度，reservation 在 request 尚未結束時仍會暫時鎖住未用空間。<a class="source-ref" href="#source-memory-p4">§3.1 · PDF p.4</a><a class="source-ref" href="#source-method-p5">§3.1–4 · PDF p.5</a></p>
+
+        <h3>由限制推導出的需求</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>需求</th><th>成功條件</th><th>對應機制</th></tr></thead>
+            <tbody>
+              <tr><td>R1：按需成長</td><td>不以最大 sequence length 預留；每條序列未用空間有明確上界。</td><td>固定大小 logical／physical KV blocks。</td></tr>
+              <tr><td>R2：保留邏輯順序、解除實體連續</td><td>attention 仍得到正確 token 次序，不需 compaction。</td><td>block table 與 PagedAttention kernel。</td></tr>
+              <tr><td>R3：支援動態分享</td><td>parallel samples、beam candidates 與 shared prefix 可共用只讀 cache，寫入時才分離。</td><td>reference count 與 block-level copy-on-write。</td></tr>
+              <tr><td>R4：長度未知時仍能前進</td><td>GPU block 耗盡可成組搶占，之後可恢復。</td><td>FCFS、all-or-nothing sequence-group eviction、swap 或 recompute。</td></tr>
+              <tr><td>R5：可跨 GPU</td><td>模型 shard 對同一請求使用一致映射，而每輪控制同步不淹沒執行。</td><td>中央 scheduler／KV cache manager 廣播 token IDs 與 block tables。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 因為 blocks 固定大小且只在前一 block 填滿時再配置，external fragmentation 被消除，而單一序列的 internal waste 被限制在最後一個 block。<a class="source-ref" href="#source-flow-p6">§4.3 · PDF p.6</a></p>
+<div class="table-scroll">
+          <table>
+            <thead><tr><th>工作／系統</th><th>主要機制</th><th>和 vLLM 的差異</th><th>適用或失效條件</th></tr></thead>
+            <tbody>
+              <tr><td>Orca</td><td>Iteration-level scheduling 與 selective batching。</td><td>改善 requests 交錯與 padding，但 KV cache 仍以連續空間管理；與 PagedAttention 是互補層。</td><td>排程能增加並行候選，卻會讓同時存活 cache 更多，反而放大 memory management 重要性。</td></tr>
+              <tr><td>FasterTransformer</td><td>高度最佳化 Transformer GPU kernels 與 model parallel inference。</td><td>偏重單步 latency；本文加上 dynamic scheduler 後仍缺細粒度 scheduling 與 paged cache。</td><td>compute-bound／小 batch 時 kernel 直接效率有利；memory-bound 線上服務受容量限制。</td></tr>
+              <tr><td>FlashAttention</td><td>以 tiling 降低 attention 計算期間 HBM I/O 與中間張量。</td><td>處理單次 attention operator 的 I/O；vLLM 處理跨 iterations 長期存在、動態成長的 KV state。</td><td>兩者可並存；前者不直接消除 online request 的 cache reservation／fragmentation。</td></tr>
+              <tr><td>FlexGen</td><td>在 GPU／CPU／disk 間 offload weights 與 token states。</td><td>目標是有限 GPU 上的高吞吐 generation，不以 latency-sensitive online serving 為核心。</td><td>容量極小時可用資料搬移換可執行性；本文則優先提高 resident working-set 利用率。</td></tr>
+              <tr><td>OLLA</td><td>依 tensor lifetime 與位置做配置最佳化以減少 fragmentation。</td><td>不做 online serving 的 fine-grained KV blocks，也不表達 decoding-specific sharing。</td><td>shape／lifetime 可較早知道時適合；未知輸出長度削弱離線規劃。</td></tr>
+              <tr><td>一般 model serving</td><td>Batching、placement、provisioning、multi-model scheduling。</td><td>通常不利用 autoregressive token state 的特殊生命週期。</td><td>非自迴歸或主要 compute-bound 的 DNN 不一定能從 PagedAttention 受益。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> Orca 的 iteration-level scheduling 與 vLLM 的 PagedAttention 互補：前者決定哪些 requests 能交錯執行，後者提高 working sets 真正放進 GPU memory 的數量。<a class="source-ref" href="#source-related-p13">§9 · PDF p.13–14</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 比較的正確抽象層是「operator I/O、persistent state capacity、request scheduling」三層，而非把所有系統排成單一快慢榜。PagedAttention 的新意位於 persistent state 的地址轉譯，但要靠 scheduler 與 kernels 才能把空間收益兌現成端到端吞吐量。</p>
+<figure data-figure-role="method">
+          <a href="assets/images/fig-02-p02-kv-cache-utilization.png"><img src="assets/images/fig-02-p02-kv-cache-utilization.png" alt="Orca 三種配置與 vLLM 的 KV cache 使用比例堆疊長條圖"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 2</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>先比較綠色 token states；Orca 即使知道真實輸出長度仍只有 38.2%，vLLM 為 96.3%，顯示真正槓桿是減少 reservation 與碎片，而非只改善長度預測。</span></figcaption>
+        </figure>
+<p class="bridge">問題的限制已經清楚；接著要抓住作者最關鍵的轉念。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>把 KV Cache 當虛擬記憶體：PagedAttention 如何放大 Batch</h2>
+          <div class="takeaway-list">
+          <div class="takeaway-item"><p class="takeaway-label">Problem</p><p>自迴歸解碼逐 token 產生 KV cache，長度與生命週期事前未知；既有系統卻為每條序列預留一段最大長度的連續空間。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">Root cause</p><p>保留未來 slots、內部碎片、外部碎片與重複副本吃掉可用 GPU 記憶體，使 iteration-level batching 仍受 batch working set 限制。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">Key insight</p><p>注意力的邏輯 token 順序不必等同 KV cache 的實體位址連續性；用 block table 可把兩者解耦。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">Mechanism</p><p>固定 block、按需配置、PagedAttention kernel、reference count／copy-on-write，以及缺塊時的 recomputation 或 CPU swapping。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">Evidence</p><p>Figure 2 的 token-state 利用率由 Orca variants 的 20.4–38.2% 提高到 vLLM 的 96.3%；Figure 12 顯示可維持低 normalized latency 的 request-rate 區間向右移。<a class="source-ref" href="#source-intro-p2">§1 · PDF p.2 · Figure 2</a><a class="source-ref" href="#source-results-p11">§6.2 · PDF p.11 · Figure 12</a></p></div>
+          <div class="takeaway-item"><p class="takeaway-label">Boundary</p><p>主要結果使用 A100、OPT／LLaMA 與 2048-token 級情境；Orca 是作者重作版本，且延遲主指標是平均 normalized latency，未呈現 production tail SLO、能耗或完整成本。</p></div>
+        </div>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> PagedAttention 與 block-level memory management 近乎消除 KV cache 浪費，並可在 request 內與 request 間彈性分享 cache。<a class="source-ref" href="#source-intro-p2">§1 · PDF p.2</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 這篇工作的真正可重用設計不是「把作業系統 paging 搬到 GPU」的表面類比，而是先辨認應用語意：所有 block 會共同被 attention 讀取、序列成組搶占、已生成 token 可重算；再用這些語意限制配置、分享與恢復策略。<a class="source-ref" href="#source-discussion-p13">§8 · PDF p.13</a></p>
+<p class="bridge">直覺成立後，再沿著一次完整執行看它如何落成系統。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>Logical Block、Physical Block、Block Table 與共享機制</h2>
+          <h3>端到端：一條 request 如何走過 vLLM</h3>
+        <ol>
+          <li><strong>Admission：</strong>中央 scheduler 以 first-come-first-serve（FCFS）選本輪 sequence groups；KV cache manager 從 GPU block allocator 取出容納 prompt 所需的 physical blocks。</li>
+          <li><strong>Prefill：</strong>系統以一般 self-attention 計算 prompt 與第一個輸出 token 的 KV cache，依序寫入 logical blocks；block table 記錄每個 logical block 對應的 physical block 與已填 token 數。<a class="source-ref" href="#source-flow-p6">§4.3 · PDF p.6 · Figure 6</a></li>
+          <li><strong>Decode iteration：</strong>若尾端 block 還有空位，直接追加；若已滿，才配置下一個 physical block。scheduler 將本輪 token IDs 與各 sequence 的 block table 廣播給 workers。</li>
+          <li><strong>PagedAttention：</strong>每個 worker 按 block table 分段抓取本 shard／attention heads 的 keys 與 values，在 kernel 內完成 attention；workers 之間照 Megatron-LM tensor parallelism 做 all-reduce，不需彼此協調 cache 配置。<a class="source-ref" href="#source-distributed-p9">§4.6 · PDF p.9</a></li>
+          <li><strong>Commit／release：</strong>新 token 的 cache 寫入指定 block、filled count 更新；request 結束後 reference count 歸零的 physical blocks 回到 allocator。</li>
+          <li><strong>Pressure path：</strong>若無足夠 GPU blocks，最新到達的 sequence group 被整組搶占；其 cache 可搬到 CPU，或於恢復時把已有 token 合併成新的 prompt 重算。<a class="source-ref" href="#source-preempt-p8">§4.5 · PDF p.8</a></li>
+        </ol>
+        <figure data-figure-role="method">
+          <a href="assets/images/fig-04-p05-system-overview.png"><img src="assets/images/fig-04-p05-system-overview.png" alt="vLLM 中央排程器、KV cache manager、CPU與GPU allocator及多個 worker 的架構圖"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>沿控制路徑看 scheduler 同時驅動 KV cache manager 與各 worker；mapping 集中管理，但模型 shard 與 cache engine 分散執行。</span></figcaption>
+        </figure>
+
+        <h3>機制拆解：每一項都回答一個需求</h3>
+        <h4>Block table：回答 R1 與 R2</h4>
+        <p>連續 logical blocks 保留序列語意；表中 physical block number 解除實體連續限制，<code>#filled</code> 指示尾端有效 token。新 cache 只在 block 滿時再擴張，因此其他 requests 可立即使用尚未配置的 GPU 空間。<a class="source-ref" href="#source-method-p5">§4.2 · PDF p.5</a><a class="source-ref" href="#source-flow-p6">§4.3 · PDF p.6 · Figure 6</a></p>
+        <figure data-figure-role="method">
+          <a href="assets/images/fig-06-p06-block-table-translation.png"><img src="assets/images/fig-06-p06-block-table-translation.png" alt="一條請求的 logical KV blocks 經 block table 映射到非連續 physical KV blocks"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 6</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>依 ①②③ 比對 logical block、physical block number 與 filled count；同一序列在邏輯上連續，實體上可落在 7、1、3，且只有上一 block 填滿才新增配置。</span></figcaption>
+        </figure>
+
+        <h4>PagedAttention kernel：回答 R2</h4>
+        <p>kernel 不假設 (K,V) 是一整段連續 tensor，而是逐一辨識與讀取 physical KV blocks，再把各 block 的 attention contribution 聚合。vLLM 另外融合 reshape＋block write、block read＋attention，以及多個 discontinuous block copies，以降低 indirection 與 kernel-launch 成本。<a class="source-ref" href="#source-method-p5">§4.1 · PDF p.5 · Figure 5</a><a class="source-ref" href="#source-distributed-p9">§5.1 · PDF p.9</a></p>
+
+        <h4>Reference count 與 copy-on-write：回答 R3</h4>
+        <p>parallel sampling 的多條輸出起初讓各自的 logical prompt blocks 指向同一組 physical blocks。若某 sample 要寫入仍被多人引用的尾端 block，manager 只複製該 block、更新 mapping 並遞減舊 block 的 reference count；beam search 也以同一機制隨候選分岔與淘汰動態分享 prefix。<a class="source-ref" href="#source-share-p7">§4.4 · PDF p.7 · Figures 8–9</a></p>
+
+        <h4>Sequence-group preemption：回答 R4</h4>
+        <p>一條 sequence 的 attention 同時需要其全部 blocks，多條共享 block 的 sequences 又不能獨立驅逐，所以 vLLM 使用 all-or-nothing eviction 並 gang-schedule 整個 sequence group。Swapping 保留計算、支付 CPU–GPU 傳輸；recomputation 丟棄 cache、利用 prefill 的平行性重建。<a class="source-ref" href="#source-preempt-p8">§4.5 · PDF p.8</a></p>
+
+        <h4>集中控制、分散執行：回答 R5</h4>
+        <p>所有 tensor-parallel workers 接收相同 physical block IDs，但只保存自己 attention heads 的那份 KV；每輪一次控制廣播之後，workers 自行執行並 all-reduce，最後只把 sampled tokens 回傳 scheduler。<a class="source-ref" href="#source-distributed-p9">§4.6 · PDF p.9</a></p>
+
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 正確性邊界在 mapping 而非資料搬移：只要 block table 對 logical token order 的映射正確，physical blocks 的位置、共享關係與生命週期即可獨立變動。這讓 memory policy 成為 control-plane 決策，而 PagedAttention 把 data-plane 的 gather 代價包進 kernel。</p>
+<h3>自迴歸相依：為何 cache 會一直累積</h3>
+        <div class="formula-block">
+          \[
+            P(x_1,\ldots,x_n)=P(x_1)\prod_{i=2}^{n}P(x_i\mid x_1,\ldots,x_{i-1})
+          \]
+          <p class="formula-block__meaning">(x_i) 是第 (i) 個 token。第 (i) 個輸出的機率依賴所有先前 token，因此 decode 無法跨時間步平行；保留先前 token 的 keys／values 可避免每輪重算。此式是工作負載與 cache 生命週期的起點。<a class="source-ref" href="#source-background-p3">§2.1–2.2 · PDF p.3 · Equation 1</a></p>
+        </div>
+
+        <h3>一般 causal self-attention</h3>
+        <div class="formula-block">
+          \[
+          q_i=W_qx_i,\quad k_i=W_kx_i,\quad v_i=W_vx_i,
+          \qquad
+          a_{ij}=\frac{\exp(q_i^\top k_j/\sqrt d)}{\sum_{t=1}^{i}\exp(q_i^\top k_t/\sqrt d)},
+          \quad o_i=\sum_{j=1}^{i}a_{ij}v_j.
+          \]
+          <p class="formula-block__meaning">(q_i,k_i,v_i\in\mathbb{R}^{d}) 分別是 query、key、value；(d) 是向量維度，(a_{ij}) 是 query (i) 對先前位置 (j) 的權重，(o_i) 是輸出。PagedAttention 不改變這個數學結果，只改變 (k_j,v_j) 的實體佈局與讀取方式。<a class="source-ref" href="#source-background-p3">§2.1 · PDF p.3 · Equations 2–3</a></p>
+        </div>
+
+        <h3>Block-wise PagedAttention</h3>
+        <div class="formula-block">
+          \[
+          K_j=(k_{(j-1)B+1},\ldots,k_{jB}),\qquad
+          V_j=(v_{(j-1)B+1},\ldots,v_{jB}),
+          \]
+          \[
+          A_{ij}=\frac{\exp(q_i^\top K_j/\sqrt d)}
+          {\sum_{t=1}^{\lceil i/B\rceil}\exp(q_i^\top K_t/\sqrt d)\mathbf{1}},
+          \qquad
+          o_i=\sum_{j=1}^{\lceil i/B\rceil}V_jA_{ij}^{\top}.
+          \]
+          <p class="formula-block__meaning">(B) 是每個 KV block 的 token 數；(K_j,V_j) 是第 (j) 個 logical block，(A_{ij}) 是 query (i) 對該 block 內各 token 的 attention-score row vector，(mathbf{1}) 表示把 block 內元素也納入 softmax 分母。當 (B) 變小，尾端浪費上界下降、sharing 粒度更細，但 block-table 存取與小型操作增加；當 (B) 變大，GPU 平行度可能較好，卻提高 internal fragmentation。此式進入 decode attention kernel。<a class="source-ref" href="#source-method-p5">§4.1 · PDF p.5 · Equation 4</a></p>
+        </div>
+
+        <h3>容量直覺與邊界</h3>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 由論文 OPT-13B 範例可整理出每序列 KV 容量 (M_{KV}=2LHbn)：2 代表 key＋value，(L) 是層數、(H) 是 hidden-state size、(b) 是每元素 bytes、(n) 是 token 數。它說明 cache 與 sequence length 線性成長，但不是論文另立的最佳化目標式。固定 block 配置使每條 active sequence 的尾端浪費小於 (B) 個 token slots；總浪費仍會隨同時 active sequences 數量成長。<a class="source-ref" href="#source-memory-p4">§3 · PDF p.4</a></p>
+        <p>論文沒有給出 block-table metadata 的封閉式空間複雜度、kernel gather 的正式 I/O 複雜度，或 scheduler 穩定性證明；Equation 4 主要證明語意可等價地按 blocks 計算，效能與 overhead 仍靠 Sections 6–7 實驗驗證。</p>
+<p class="bridge">方法看似合理，真正的問題是：實驗有沒有把這條因果鏈撐起來？</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>記憶體利用率何時轉成吞吐，何時被 Compute Bound 截住</h2>
+          <h3>共通設定</h3>
+        <ul>
+          <li><strong>模型／硬體：</strong>OPT-13B（1×A100 40 GB）、OPT-66B（4×A100，總 160 GB）、OPT-175B（8×A100-80GB，總 640 GB）；shared-prefix 實驗另用 LLaMA-13B。所有主要實驗在 Google Cloud A2 instances。<a class="source-ref" href="#source-eval-p10">§6.1 · PDF p.9–10 · Table 1</a></li>
+          <li><strong>工作負載：</strong>從 ShareGPT 與 Alpaca 的 input／output token lengths 合成 requests；ShareGPT 平均 161.31 input、337.99 output tokens，Alpaca 為 19.31／58.45。資料無 timestamp，因此到達時間按不同 rate 的 Poisson distribution 生成。<a class="source-ref" href="#source-eval-p10">§6.1 · PDF p.9–10 · Figure 11</a></li>
+          <li><strong>時間範圍：</strong>多數為 1 小時 trace；OPT-175B 因成本只跑 15 分鐘。</li>
+          <li><strong>指標：</strong>normalized latency 是每請求 end-to-end latency 除以 output length 後再取 mean，單位 s/token；作者藉請求率升高時 latency 開始爆炸的位置判斷可持續 throughput。</li>
+        </ul>
+
+        <h3>Baselines 與公平性</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>系統</th><th>配置</th><th>它測試的問題</th><th>比較限制</th></tr></thead>
+            <tbody>
+              <tr><td>FasterTransformer</td><td>作者加上類 Triton dynamic batching scheduler，batch 上限依顯存設到最大。</td><td>高最佳化 kernel 但缺 iteration-level scheduling／paged memory 時的容量。</td><td>不是原生端到端 serving stack；scheduler 為作者實作。</td></tr>
+              <tr><td>Orca (Max)</td><td>每條 request 預留到 2048 tokens。</td><td>最保守連續配置的 fragmentation／reservation。</td><td>作者重作，假定 buddy allocator。</td></tr>
+              <tr><td>Orca (Pow2)</td><td>輸出配置向上取 2 的冪，最多過度預留 2×。</td><td>有較佳長度估計但仍需連續 chunk。</td><td>需要由真實輸出長度構造配置，不是完整線上預測器。</td></tr>
+              <tr><td>Orca (Oracle)</td><td>事先知道實際輸出長度。</td><td>連續配置的不可實現 upper bound。</td><td>不是可部署 baseline；結果只能證明 paging 超過「完美長度資訊下的連續配置」。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Claim–test map</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>待測主張</th><th>測試與控制</th><th>主要物件</th></tr></thead>
+            <tbody>
+              <tr><td>Paging 能以相近 latency 提高 basic-sampling throughput。</td><td>三種 OPT 規模 × ShareGPT／Alpaca；同一 workload 比 request-rate sweep 與 normalized latency。</td><td>Figures 12–13</td></tr>
+              <tr><td>Block sharing 對多輸出 decoding 有額外收益。</td><td>OPT-13B＋Alpaca，parallel size 或 beam width 分別為 2、4、6；比較 Orca variants。</td><td>Figures 14–15</td></tr>
+              <tr><td>跨 request shared prefix 可避免重複 prefill 與 cache。</td><td>LLaMA-13B＋WMT16 English-to-German；80-token one-shot 與 341-token five-shot prefix。</td><td>Figure 16</td></tr>
+              <tr><td>Indirection overhead 可被系統收益抵銷，且 block size 有折衷。</td><td>對 FasterTransformer attention kernel 做 microbenchmark；固定 request rate 掃 block size。</td><td>Figure 18</td></tr>
+              <tr><td>壓力下的恢復策略依 block size 而異。</td><td>掃 block size，比 recomputation、swap-in、swap-out 與端到端結果。</td><td>Figure 19</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><strong>論文未提供：</strong>CUDA、PyTorch、Transformers 與 NCCL 版本，GPU driver，重複次數、warmup、error bars／confidence intervals、功耗與服務成本；因此不能從圖中判斷 run-to-run variance 或成本效率。<a class="source-ref" href="#source-distributed-p9">§5–6.1 · PDF p.9–10</a></p>
+<h3>Claim 1：更高 memory utilization 會轉成更大的可持續 batch</h3>
+        <p><strong>測試：</strong>作者把 KV cache 分成 token states、reservation、internal fragmentation 與 external fragmentation／others，並在 OPT-13B trace 比較平均 batch size。</p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> Figure 2 中 vLLM 的 KV-cache 空間有 96.3% 存放 token states，Orca (Max／Pow2／Oracle) 分別為 20.4%、26.8%、38.2%。在 OPT-13B，ShareGPT 2 req/s 下平均 batch 為 30.42，對 Orca (Oracle) 的 13.62 與 Orca (Max) 的 7.00；Alpaca 30 req/s 下為 132.44，對 72.75 與 7.00。<a class="source-ref" href="#source-intro-p2">§1 · PDF p.2 · Figure 2</a><a class="source-ref" href="#source-eval-p10">§6.1 · PDF p.10 · Figure 13</a></p>
+        <p><strong>可支持的結論：</strong>在這兩個 workload 中，分頁式配置確實讓更多 working sets 同時駐留，形成從 memory utilization 到 batch size 的中介證據。<strong>不能支持：</strong>Figure 2 的「Others」與 external fragmentation 合併，不能據此量化兩者各自殘留多少。</p>
+
+        <h3>Claim 2：basic sampling 可在相近 normalized latency 下承受更高 request rate</h3>
+        <p><strong>測試：</strong>Figure 12 對三種 OPT 規模、兩種長度分布掃 request rate；曲線進入陡升前的區域代表系統尚未無界累積 queue。</p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> ShareGPT 上，vLLM 相對 Orca (Oracle) 可承受 1.7–2.7× request rate，相對 Orca (Max) 為 2.7–8×，相對 FasterTransformer 最高達 22×。<a class="source-ref" href="#source-results-p11">§6.2 · PDF p.11 · Figure 12</a></p>
+        <p><strong>邊界：</strong>OPT-175B＋Alpaca 的優勢較小；作者將其歸因於總 KV-cache 空間 264 GB 且序列短，使系統轉為 compute-bound。這個反例很重要：PagedAttention 只在記憶體容量是主要瓶頸時能把節省轉成吞吐量。<a class="source-ref" href="#source-results-p11">§6.2 · PDF p.11 · Figure 12f</a></p>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-12-p10-basic-sampling-throughput.png"><img src="assets/images/fig-12-p10-basic-sampling-throughput.png" alt="六組 OPT 模型與 ShareGPT或Alpaca workload 的 normalized latency 對 request rate 曲線"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 12</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>不要只看單點 latency；找每條曲線開始陡升的 request rate。藍色 vLLM 多數情況最晚進入排隊爆炸區，但 OPT-175B＋Alpaca 的優勢縮小，揭示工作負載轉為 compute-bound 的邊界。</span></figcaption>
+        </figure>
+
+        <h3>Claim 3：sharing 對分岔式 decoding 的收益更大</h3>
+        <p><strong>測試：</strong>OPT-13B＋Alpaca 固定模型與 trace，將 parallel size／beam width 從 2 提升到 6；Figure 15 直接以 saved blocks／unshared total blocks 計算節省。</p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 相對 Orca (Oracle)，vLLM 的改善由 basic sampling 的 1.3× 增至 beam width 6 的 2.3×。Alpaca 上 parallel sampling 節省 6.1–9.8% 記憶體，beam search 節省 37.6–55.2%；ShareGPT 對應為 16.2–30.5% 與 44.3–66.3%。<a class="source-ref" href="#source-results-p11">§6.3 · PDF p.11 · Figures 14–15</a></p>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-15-p11-sharing-memory-savings.png"><img src="assets/images/fig-15-p11-sharing-memory-savings.png" alt="parallel sampling 與 beam search 在不同輸出數或 beam width 下的 KV block sharing 記憶體節省長條圖"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 15</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>比較兩面板的量級；beam search 因候選可共享 prompt 之外的中間 prefix，節省 37.56–55.16%，遠高於 parallel sampling 的 6.09–9.79%。</span></figcaption>
+        </figure>
+        <p><strong>可支持的結論：</strong>sharing pattern 愈長、分岔愈晚，block-level mapping 愈有價值。<strong>限制：</strong>論文只測 parallel sampling 與 beam search，不能推定所有 tree decoding 或 speculative decoding 都有同樣比例。</p>
+
+        <h3>Claim 4：跨 request prefix reuse 可同時省 cache 與 prefill</h3>
+        <p><strong>測試：</strong>LLaMA-13B、WMT16 English-to-German，所有 requests 共用含範例的 prefix；只和 Orca (Oracle) 比。</p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 80-token one-shot prefix 時，vLLM throughput 為 Orca (Oracle) 的 1.67×；341-token five-shot prefix 時為 3.58×。chatbot trace 則可承受約 2× Orca variants 的 request rate。<a class="source-ref" href="#source-prefix-p12">§6.4–6.5 · PDF p.12 · Figures 16–17</a></p>
+        <p><strong>邊界：</strong>chatbot 實驗明確不跨對話輪次保存 KV cache，且 prompt 截到最後 1024 tokens，因此未驗證長期 session cache 的 eviction、隔離與命中率。</p>
+
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 整體而言，vLLM 在不影響模型 accuracy 的前提下可比 FasterTransformer 與 Orca 提升 2–4× serving throughput，且長序列、大模型與複雜 decoding 的改善更明顯。<a class="source-ref" href="#source-intro-p2">§1 · PDF p.2</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 「不影響 accuracy」主要來自 PagedAttention 保持 exact attention 語意，而不是本文另做模型品質評估；可把它視為設計正確性主張，不應誤讀為 accuracy benchmark 的實驗結果。</p>
+<h3>Kernel indirection overhead</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 相較高度最佳化的 FasterTransformer attention kernel，PagedAttention 因 block table、額外 branch 與 variable-length handling，kernel latency 高 20–26%。作者指出這只影響 attention 而非 linear layers，端到端仍由較大 batch 抵銷。<a class="source-ref" href="#source-ablation-p12">§7.1 · PDF p.12 · Figure 18a</a></p>
+        <p>這項 microbenchmark 是重要負證據：non-contiguous access 本身不是加速 kernel 的技巧，其價值要透過容量與 batching 的系統效果兌現。</p>
+
+        <h3>Block size 敏感度</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> ShareGPT 中 block size 16–128 表現最佳；Alpaca 中 16、32 較佳，64 以上隨短序列落入 block 內部而快速惡化。vLLM 因而採 16 為預設。<a class="source-ref" href="#source-ablation-p12">§7.2 · PDF p.12 · Figure 18b</a></p>
+        <p><strong>因果解讀：</strong>小 block 降低尾端 waste、增加 sharing 機會，卻降低每次讀取可運用的 GPU 平行度；大 block 方向相反。不同 sequence-length distribution 會改變最佳點，所以 16 是本文 workload 下的工程預設，而不是普遍常數。</p>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-18-p12-kernel-blocksize-ablation.png"><img src="assets/images/fig-18-p12-kernel-blocksize-ablation.png" alt="PagedAttention 與 FasterTransformer kernel latency，以及 block size 對端到端 normalized latency 的敏感度圖"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 18</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>左圖顯示分頁存取不是免費的；右圖再看 block size 的 U 型折衷，短序列 Alpaca 在 64 以上急遽惡化，支持預設 16 而非愈大愈好。</span></figcaption>
+        </figure>
+
+        <h3>Recomputation 與 swapping</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 小 block 會造成許多小型 CPU–GPU transfers，使 swapping 無法用滿 PCIe；recomputation 對 block size 不敏感。中等 block size 16–64 時，兩者端到端 normalized latency 相近。<a class="source-ref" href="#source-preempt-ablation-p13">§7.3 · PDF p.13 · Figure 19</a></p>
+
+        <h3>仍缺少的拆解</h3>
+        <p><strong>論文未提供：</strong>移除 centralized scheduler、block sharing、copy-on-write 或 fused kernels 的完整 component-by-component ablation；也沒有 block-table metadata／reference-count overhead、不同 prefix hit rate、不同 PCIe／NVLink 拓撲、或多租戶 interference 的敏感度。現有 ablation 能驗證 block size 與 recovery policy 的局部折衷，不能精確分攤 2–4× 整體收益到每個元件。</p>
+<p class="bridge">數據回答了部分問題；剩下的是適用邊界與仍未被證明的部分。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>Indirection、Block Size 與 Swap／Recompute 的代價</h2>
+          <h3>優點</h3>
+        <ul>
+          <li><strong>問題—機制—證據閉環：</strong>Figure 2 量化浪費、Figure 6 展示 mapping、Figures 12–15 連到 batch／throughput，並以 Figure 18 揭露 kernel 代價。</li>
+          <li><strong>跨層 co-design：</strong>演算法、allocator、scheduler、decoding semantics、CUDA kernels 與 tensor parallel execution 使用同一 block abstraction。</li>
+          <li><strong>利用應用語意：</strong>all-or-nothing eviction、recompute 與 COW 不是照搬 OS，而是根據 attention 會共同讀取 cache、prefill 可平行重算、候選 prefix 可共享而調整。</li>
+          <li><strong>保留 exactness：</strong>改變實體佈局而非 attention 定義，使 memory optimization 不必交換模型輸出品質。</li>
+        </ul>
+
+        <h3>限制與部署假設</h3>
+        <ul>
+          <li><strong>Baseline fidelity：</strong>Orca 未公開，作者自行重作並假定 buddy allocation；倍率同時反映這個實作選擇，不能等同官方 Orca 的直接實測。<a class="source-ref" href="#source-eval-p10">§6.1 · PDF p.10</a></li>
+          <li><strong>Workload realism：</strong>token lengths 來自真實文本，但 arrival timestamps 是 Poisson 合成；burst、diurnal pattern、priority class 與取消請求未測。</li>
+          <li><strong>Latency coverage：</strong>主指標是 mean normalized latency，沒有 TTFT、inter-token latency、p95／p99 或 deadline attainment，對 interactive SLO 的可判讀性有限。</li>
+          <li><strong>Scale boundary：</strong>分散式結果涵蓋至 8×A100 的單模型 tensor parallelism；中央 scheduler 的多節點控制擴展、故障恢復與跨 replica load balancing 未評估。</li>
+          <li><strong>Context／model boundary：</strong>核心設定以 OPT／LLaMA、2048-token 級 context 與 2023 年 A100 為主；更長 context、不同 attention variants、量化 cache 或其他 accelerator 上的最佳 block size 未證明。</li>
+          <li><strong>Shared-prefix operations：</strong>論文假定服務者預先保留 predefined prefixes，未測 prefix catalog 的 eviction、更新一致性、權限隔離與命中率。</li>
+          <li><strong>Resource metrics：</strong>未報能耗、成本、CPU memory pressure、網路 bytes 或完整運算資源利用率。</li>
+        </ul>
+
+        <h3>風險</h3>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 在短序列或顯存充足的 compute-bound regime，PagedAttention 的 20–26% attention-kernel overhead 可能無法由 batching 收益抵銷；Figure 12f 已給出方向性跡象。系統若把 block size 固定為 16，而 production workload 的長度與 sharing pattern 長期漂移，也可能偏離最佳點。</p>
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> 若 serving 平台同時使用多種 KV precision、稀疏 attention 或異質 GPU，固定-size block 的「同質可交換」假設可能破裂；可能需要 size classes 或分層 allocator，但本文沒有驗證。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>PagedAttention 之後，記憶體管理還能怎麼演進</h2>
+          <h3>可重用設計原則</h3>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> <strong>以 indirection 保留語意、鬆綁配置。</strong>只要把 logical order、ownership 與 physical placement 分開，allocator 就能改變位置、分享與生命週期，而 execution kernel 只消費 mapping。這個模式可泛化到任何「狀態動態成長、可部分分享、但算子仍需邏輯連續視圖」的服務。</p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> <strong>用 end-to-end regime 判斷局部 overhead 是否值得。</strong>Figure 18 顯示 kernel 本身較慢，Figure 12f 則顯示 memory 不再稀缺時收益縮小；因此部署決策應先量測 cache residency、batch saturation 與 operator time breakdown，而不是把 paging 視為無條件最佳化。<a class="source-ref" href="#source-ablation-p12">§7.1–7.2 · PDF p.12 · Figure 18</a></p>
+
+        <h3>可驗證的延伸方向</h3>
+        <ol>
+          <li><strong>Workload-adaptive block policy：</strong>依 input/output length distribution、branching 與 prefix hit rate，在少數 size classes 或模型層級選 block size；用 fragmentation、kernel time、batch size 與 tail latency做多目標評估。</li>
+          <li><strong>SLO-aware scheduling：</strong>把 FCFS 擴充為同時約束 Time to First Token（TTFT）、inter-token latency 與 deadline；比較 eviction 對 prefill-heavy 與 decode-heavy request 的不同傷害。</li>
+          <li><strong>Recovery cost model：</strong>根據 prompt length、已生成長度、PCIe／NVLink bandwidth 與即時 GPU occupancy，逐 sequence group 選 recompute 或 swap，而非採靜態策略。</li>
+          <li><strong>Prefix cache lifecycle：</strong>加入 popularity-aware admission／eviction、tenant-aware accounting 與 cache invalidation；實驗需報命中率、節省 prefill FLOPs、顯存占用與跨租戶隔離。</li>
+          <li><strong>分散式控制擴展：</strong>測試超過單一 8-GPU tensor-parallel group 時，block-table broadcast、central scheduler CPU load 與 failover 是否成為新瓶頸。</li>
+        </ol>
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> 若 prefill 與 decode 放在不同 GPU pools，block table 可成為跨階段 handoff 的一致抽象，但 KV transfer 的拓撲、版本與背壓會新增成本；這需要另做 cluster-level 實驗，本文並未驗證。</p>
+<ol>
+          <li>Figure 12 的容量拐點是由 memory utilization、kernel speed 還是 scheduler queue dynamics 主導？要加入哪些 counters 或 controlled ablations 才能把三者拆開？</li>
+          <li>Orca (Oracle) 仍被 vLLM 超越，究竟有多少來自 external fragmentation、reservation lifetime 與 sharing？現有 Figure 2 是否足以支持這個因果分攤？</li>
+          <li>固定 block size 16 在 workload drift、長 context 與多種 KV precision 共存時是否仍合理？應以哪一組線上信號調整而不造成 allocator 抖動？</li>
+          <li>Recomputation 與 swapping 的選擇若改為逐 request／逐 layer 動態決策，會如何影響 FCFS fairness、tail latency 與 CPU memory pressure？</li>
+          <li>Shared-prefix cache 跨租戶重用可能帶來哪些 side channel、accounting 或 invalidation 問題？怎樣的實驗可同時衡量效益與隔離風險？</li>
+        </ol>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>PagedAttention 公式、容量邊界與證據索引</h2>
+          <div class="table-scroll">
+          <table>
+            <tbody>
+              <tr><th scope="row">正式題名</th><td>Efficient Memory Management for Large Language Model Serving with PagedAttention</td></tr>
+              <tr><th scope="row">作者</th><td>Woosuk Kwon、Zhuohan Li、Siyuan Zhuang、Ying Sheng、Lianmin Zheng、Cody Hao Yu、Joseph E. Gonzalez、Hao Zhang、Ion Stoica</td></tr>
+              <tr><th scope="row">發表</th><td>SOSP ’23，2023，頁 611–626；DOI：<a href="https://doi.org/10.1145/3600006.3613165" target="_blank" rel="noopener noreferrer">10.1145/3600006.3613165</a></td></tr>
+              <tr><th scope="row">公開版本</th><td><a href="https://arxiv.org/abs/2309.06180" target="_blank" rel="noopener noreferrer">arXiv:2309.06180v1</a>（2023-09-12）</td></tr>
+              <tr><th scope="row">本地全文</th><td><a href="2309.06180.pdf">開啟本地 PDF</a></td></tr>
+              <tr><th scope="row">頁數</th><td data-summary-field="pdf-page-count">共 16 頁</td></tr>
+              <tr><th scope="row">分類</th><td>LLM Systems / KV Cache Management</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 此文雖同時包含 scheduler、GPU kernel 與分散式執行，但主因果槓桿是把動態成長的鍵值快取（Key–Value cache，KV cache）從連續 tensor 改為固定大小、可非連續映射的 blocks；吞吐量提升主要由記憶體利用率與可批次請求數上升而來，因此歸入 KV Cache Management，而不是一般排程或模型平行分類。<a class="source-ref" href="#source-intro-p2">§1 · PDF p.2</a></p>
+<h3>術語表</h3>
+        <dl class="term-list">
+          <dt>Sequence</dt><dd>一條 request 的 prompt tokens 與已生成 output tokens 的串接。</dd>
+          <dt>KV cache</dt><dd>每層 attention 保存既有 tokens 的 key／value vectors，讓後續 decode 不需重算過去狀態。</dd>
+          <dt>Logical KV block</dt><dd>依 token 邏輯順序切分、每塊容納 (B) 個 tokens 的 cache 區段。</dd>
+          <dt>Physical KV block</dt><dd>GPU 或 CPU 記憶體中的固定大小實體區塊；相鄰 logical blocks 不必實體相鄰。</dd>
+          <dt>Block table</dt><dd>每條 sequence 的 logical-to-physical mapping，並記錄尾端 block 的 filled positions。</dd>
+          <dt>PagedAttention</dt><dd>按 block table 分段讀取非連續 (K,V)，但保持 exact attention 結果的 kernel／演算法。</dd>
+          <dt>Copy-on-write</dt><dd>多條 sequences 先共享 physical block；其中一條寫入時才複製該 block。</dd>
+          <dt>Sequence group</dt><dd>同一 request 內可能共享 cache 的 sequences；vLLM 對它們 gang-schedule 與整組搶占。</dd>
+          <dt>Normalized latency</dt><dd>每請求 end-to-end latency 除以 output token 數後取平均，單位 s/token。</dd>
+          <dt>Reservation</dt><dd>為未來可能生成的 tokens 預先保留、當下不能供其他 request 使用的空間。</dd>
+        </dl>
+
+        <h3>重點證據索引</h3>
+        <ol class="source-index">
+          <li id="source-title-p1"><span><strong>服務成本與 GPU memory layout：</strong>13B／A100 40 GB 範例、參數與 KV cache 比例。§1，PDF p.1，Figure 1。</span></li>
+          <li id="source-intro-p2"><span><strong>浪費分類與核心貢獻：</strong>Orca variants／vLLM 的 token-state utilization，以及 PagedAttention 動機。§1，PDF p.2，Figure 2。</span></li>
+          <li id="source-background-p3"><span><strong>最小前置知識：</strong>自迴歸分解、attention、prefill／decode、KV cache 與 iteration-level scheduling。§2，PDF p.3，Equations 1–3。</span></li>
+          <li id="source-memory-p4"><span><strong>容量根因：</strong>OPT-13B 每 token 約 800 KB、每 request 最多約 1.6 GB；reservation、internal／external fragmentation。§3–3.1，PDF p.4，Figure 3。</span></li>
+          <li id="source-method-p5"><span><strong>架構與 block-wise attention：</strong>scheduler、KV cache manager、workers 與 Equation 4。§4–4.2，PDF p.5，Figures 4–5，Equation 4。</span></li>
+          <li id="source-flow-p6"><span><strong>單序列端到端 mapping：</strong>prompt 配置、decode append、physical block 新增與釋放。§4.3，PDF p.6，Figures 6–7。</span></li>
+          <li id="source-share-p7"><span><strong>動態分享：</strong>parallel sampling 的 reference count／copy-on-write，以及 beam candidate 分岔。§4.4，PDF p.7，Figures 8–9。</span></li>
+          <li id="source-preempt-p8"><span><strong>壓力下的恢復：</strong>FCFS、sequence-group all-or-nothing eviction、CPU swapping 與 recomputation。§4.5，PDF p.8。</span></li>
+          <li id="source-distributed-p9"><span><strong>分散式與實作：</strong>tensor-parallel workers 的共同 block mapping、8.5K Python／2K C++/CUDA、fused kernels。§4.6–5.2，PDF p.9，Table 1。</span></li>
+          <li id="source-eval-p10"><span><strong>實驗設定：</strong>OPT 規模、A100 配置、ShareGPT／Alpaca、Poisson arrivals、baseline variants 與 normalized latency。§6.1，PDF p.9–10，Table 1、Figures 11–13。</span></li>
+          <li id="source-results-p11"><span><strong>主要 throughput／sharing 結果：</strong>basic sampling、parallel sampling、beam search 與 memory saving。§6.2–6.3，PDF p.11，Figures 12、14–15。</span></li>
+          <li id="source-prefix-p12"><span><strong>應用工作負載：</strong>shared prefix 與 chatbot throughput。§6.4–6.5，PDF p.12，Figures 16–17。</span></li>
+          <li id="source-ablation-p12"><span><strong>局部 overhead 與 block size：</strong>20–26% kernel latency overhead、不同 traces 的 block-size 敏感度。§7.1–7.2，PDF p.12，Figure 18。</span></li>
+          <li id="source-preempt-ablation-p13"><span><strong>恢復策略：</strong>recomputation／swapping 對 block size 的 microbenchmark 與端到端比較。§7.3，PDF p.13，Figure 19。</span></li>
+          <li id="source-discussion-p13"><span><strong>適用邊界：</strong>為何 paging 適合動態、memory-bound KV cache，以及 LLM-specific eviction／recompute。§8，PDF p.13。</span></li>
+          <li id="source-related-p13"><span><strong>相鄰工作：</strong>一般 serving、Orca、FlexGen、OLLA、FlashAttention 的機制差異。§9，PDF p.13–14。</span></li>
+          <li id="source-conclusion-p14"><span><strong>總結主張：</strong>PagedAttention、virtual-memory-inspired sharing 與 2–4× throughput。§10，PDF p.14。</span></li>
+        </ol>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>Efficient Memory Management for Large Language Model Serving with PagedAttention · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>

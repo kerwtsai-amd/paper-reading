@@ -1,0 +1,1052 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="Mooncake 論文深度閱讀：以全域分散式 KVCache、prefill/decode 分離、快取感知排程與高頻寬傳輸，在長上下文聊天服務中以更多儲存換取更少計算。">
+  <title>Mooncake: Trading More Storage for Less Computation — A KVCache-centric Architecture for Serving LLM Chatbot｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 46rem;
+      --wide: 62rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">LLM Systems / KV Cache Management</p>
+      <h1>Mooncake: Trading More Storage for Less Computation — A KVCache-centric Architecture for Serving LLM Chatbot</h1>
+      <div class="paper-dek" data-section-role="thesis"><p class="lead">Mooncake 把長上下文的既有 KVCache 從「單機附屬資料」提升為可跨 prefill／decode 節點搬移、複製與排程的全域儲存層，利用閒置 DRAM／SSD 與高頻寬 RDMA 省掉重算，並以 TTFT/TBT SLO 約束來換取更高有效請求容量。</p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 在論文測試的真實長上下文對話 trace 中，相較 vLLM，Mooncake 於 TBT 閾值 100／200／300 ms 下將有效請求容量分別提高 498%／157%／59%；這是特定模型、硬體、trace 與 SLO 下的結果，不應外推成所有 LLM 工作負載的固定增益。<a class="source-ref" href="#source-abstract-p2">Abstract &amp; Fig. 1 · PDF p.2（論文標示 p.155）</a></p></div>
+      <p class="paper-byline">Ruoyu Qin、Zheming Li、Weiran He、Jialei Cui、Feng Ren、Mingxing Zhang、Yongwei Wu、Weimin Zheng、Xinran Xu</p>
+      <p class="paper-meta">
+        <span>23rd USENIX Conference on File and Storage Technologies（FAST 2025，Best Paper）</span>
+        <span>2025</span>
+        <span>LLM Systems / KV Cache Management</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-08">2026 年 9 月 8 日</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://www.usenix.org/conference/fast25/presentation/qin" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="mooncake-fast25.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀路線：</strong>先用〈<a href="#problem">本機 Cache 與 Compute-centric Scheduling 為何錯失全域重用</a>〉抓住根因，再讀〈<a href="#method">Mooncake Store、CPP 與 KVCache-centric Conductor</a>〉走完整流程，最後用〈<a href="#evidence">有效容量、命中／重算、傳輸與 P:D 比例</a>〉逐項驗證。熟悉背景的讀者可直接從問題章開始。</p>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">P/D 分離、Prefix Cache、TTFT/TBT 與 RDMA 拓撲</a></li>
+            <li><a href="#problem">本機 Cache 與 Compute-centric Scheduling 為何錯失全域重用</a></li>
+            <li><a href="#insight">多存 KV、少做 Prefill：Mooncake 的全域資源交換</a></li>
+            <li><a href="#method">Mooncake Store、CPP 與 KVCache-centric Conductor</a></li>
+            <li><a href="#evidence">有效容量、命中／重算、傳輸與 P:D 比例</a></li>
+            <li><a href="#critique">Trace 依賴、網路成本、故障語意與 Production Claim 邊界</a></li>
+            <li><a href="#extensions">KVCache-centric 架構還能交換哪些資源</a></li>
+            <li><a href="#reference">重算–傳輸損益、排程目標與證據索引</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>P/D 分離、Prefix Cache、TTFT/TBT 與 RDMA 拓撲</h2>
+          <h3>最小先備知識</h3>
+        <dl class="term-list">
+          <dt>Prefill</dt><dd>一次平行處理 prompt token，建立每層 key/value；長 prompt 會增加計算量，直接影響 time to first token（TTFT）。</dd>
+          <dt>Decode</dt><dd>自回歸地每輪產生一個 token，反覆讀取既有 KVCache；通常受記憶體頻寬限制，time between tokens（TBT）是互動流暢度指標。</dd>
+          <dt>KVCache</dt><dd>Transformer 每層已算出的 key/value。後續 decode 或共享前綴可直接重用，避免再次計算相同 token。</dd>
+          <dt>Prefix reuse</dt><dd>兩個請求開頭 token 相同時，後者可取用前者的 KVCache，只 prefill 未命中的尾段。</dd>
+          <dt>Effective request</dt><dd>同時滿足 TTFT 與 TBT 閾值的請求；有效請求容量是系統在 SLO 內能承受的最大負載，而非單純 tokens/s。</dd>
+          <dt>P/D disaggregation</dt><dd>把計算密集的 prefill 與頻寬敏感的 decode 放在不同節點池，使兩者各自批次化與擴縮，但必須搬移 KVCache。</dd>
+        </dl>
+        <p><a class="source-ref" href="#source-background-p4">§2.1–2.2 · PDF p.4（論文標示 p.157）</a></p>
+        <p>作者先以計算—通訊不等式說明何時「搬 KVCache」值得：重用前綴越長，避免的 Transformer 計算成長很快；傳輸量則大致與前綴長度線性成長。因此長上下文、高命中與高頻寬網路是 Mooncake 的天然甜蜜點。<a class="source-ref" href="#source-equations-p5">§2.2 · PDF p.5（論文標示 p.158）</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 後文所有設計都在處理同一個交換：<strong>多花記憶體與網路，把重算換掉</strong>。快取池解容量、傳輸引擎解搬移成本、全域排程解「該搬哪份／在哪裡算」、P/D 分離與 CPP 則解不同計算階段互相干擾。</p>
+<p class="bridge">有了這些背景，下一個問題是：本機 Cache 與 Compute-centric Scheduling 為何錯失全域重用</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>本機 Cache 與 Compute-centric Scheduling 為何錯失全域重用</h2>
+          <h3>從症狀到根因</h3>
+        <ol>
+          <li><strong>症狀：</strong>長對話與 agent prompt 帶有大量重複前綴；本機系統仍可能重算，prefill 時間拉長。</li>
+          <li><strong>直接根因：</strong>一個 LLaMA3-70B token 的 KVCache 約 320 KB；1 TB 本機 DRAM 約只能放 300 萬 token，真實 trace 下的命中率仍離理論上限很遠。<a class="source-ref" href="#source-global-cache-p12">§5.3.1 · PDF p.12（論文標示 p.165）</a></li>
+          <li><strong>系統根因：</strong>把快取擴成跨節點資源會新增搬移、拓撲、熱點、失效與排程問題；若網路太慢，傳輸延遲會吃掉省下的計算。</li>
+          <li><strong>既有缺口：</strong>local prefix caching 容量被單機限制；只做 chunked prefill 仍難同時維持 prefill MFU 與 decode TBT；只做 P/D 分離則沒有解決全域快取放置與熱點。</li>
+        </ol>
+        <h3>因此系統必須同時滿足</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>需求與對應設計</caption>
+            <thead><tr><th>需求</th><th>若缺少會發生什麼</th><th>Mooncake 對應</th></tr></thead>
+            <tbody>
+              <tr><td>R1：跨節點擴大快取容量</td><td>熱門或長尾前綴被本機 LRU 淘汰，命中率受單機限制</td><td>CPU/DRAM/SSD 組成分散式 paged KVCache pool</td></tr>
+              <tr><td>R2：搬移成本低於重算</td><td>命中反而增加 TTFT</td><td>GPUDirect RDMA、多 NIC、16 KB slicing、拓撲感知路徑</td></tr>
+              <tr><td>R3：聯合快取與負載決策</td><td>追最大命中可能排到塞車節點；只均衡負載又浪費快取</td><td>預估 transfer + queue + prefill，並受 TTFT/TBT SLO 約束</td></tr>
+              <tr><td>R4：隔離 prefill 與 decode</td><td>長 prefill 阻塞 decode，TBT 尾延遲惡化</td><td>獨立 P/D pools；CPP 跨 prefill 節點處理長輸入</td></tr>
+              <tr><td>R5：過載時保持 SLO 語意</td><td>所有請求都接收，卻大量超時，原始吞吐量失真</td><td>預測違反任一 SLO 時回 HTTP 429</td></tr>
+              <tr><td>R6：在多 NIC 拓撲與暫時故障下工作</td><td>單一路徑熱點或 NIC 故障拖垮整體傳輸</td><td>preferred/secondary paths、endpoint pooling、失敗重試與繞路</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 作者將目標表述為：在 TTFT、TBT、prefill MFU、DRAM/VRAM 容量等限制下，提高整體有效吞吐；這使「快取放哪裡」成為服務排程的核心，而非離線儲存問題。<a class="source-ref" href="#source-architecture-p3">Fig. 2 · PDF p.3（論文標示 p.156）</a></p>
+<div class="table-scroll">
+          <table>
+            <caption>依論文 Related Work 的定位；不以外部資料補充未測特性</caption>
+            <thead><tr><th>方向／系統</th><th>主要處理</th><th>與 Mooncake 的差別</th></tr></thead>
+            <tbody>
+              <tr><td>vLLM / PagedAttention</td><td>以分頁管理 GPU KVCache、支援高效 batching</td><td>Mooncake 延伸為跨節點 CPU/DRAM/SSD pool，排程也感知全域 cache 與傳輸</td></tr>
+              <tr><td>Prompt Cache</td><td>預先計算並儲存常用文字的 KVCache</td><td>Mooncake 面向動態請求，自動以 prefix hash 重用、複製與淘汰</td></tr>
+              <tr><td>SGLang / RadixAttention</td><td>以 radix tree 與 LRU 自動共享前綴</td><td>Mooncake 的焦點是高容量分散式 cache、P/D 資料路徑與全域 SLO 排程</td></tr>
+              <tr><td>CachedAttention</td><td>與 Mooncake 同期的階層式 KV caching，使用成本較低的記憶體／儲存</td><td>作者指出 Mooncake 另整合高頻寬傳輸與 KVCache-centric global scheduling</td></tr>
+              <tr><td>既有 P/D disaggregation</td><td>把 prefill 與 decode 資源池分開最佳化</td><td>Mooncake 把分離後必須傳的 KVCache 變成核心儲存服務，並加入 CPP prefill</td></tr>
+              <tr><td>Sarathi-Serve / chunked prefill</td><td>切分 prefill 以降低對 decode 的干擾</td><td>Mooncake 認為嚴格 SLO 與長上下文下仍需獨立 P/D pool，並以跨節點 CPP 處理長輸入</td></tr>
+              <tr><td>KV compression / cache-friendly attention</td><td>減少每 token cache 大小或改善 cache 存取</td><td>作者視為正交：可進一步提高固定容量下的命中與降低傳輸量</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-pd-p14">§6 · PDF p.14（論文標示 p.167）</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> Mooncake 的學術辨識度來自「把 KVCache 當分散式 storage object 並納入 serving control loop」，而不是任何單項技術首次出現。它連接了推論排程、記憶體階層、網路傳輸與生產 SLO 四個原本常被分開討論的領域。</p>
+<p class="bridge">問題的限制已經清楚；接著要抓住作者最關鍵的轉念。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>多存 KV、少做 Prefill：Mooncake 的全域資源交換</h2>
+          <div class="takeaway-list">
+          <div class="takeaway-item"><p class="takeaway-label">症狀</p><p>長對話的輸入遠長於輸出；若每輪都重算共享前綴，prefill GPU 時間與 TTFT 上升，且會干擾 decode 的 TBT。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">根因</p><p>可重用 KVCache 很大、散落於本機記憶體；單節點 DRAM 容量有限，而跨節點搬移若過慢，會比重算更差。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">機制</p><p>全域分頁 KVCache + P/D 分離 + 快取感知全域排程 + 多 NIC RDMA 傳輸 + CPP 長輸入 prefill。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">判定標準</p><p>不是原始吞吐量，而是同時滿足 TTFT 與 TBT 閾值的有效請求容量。</p></div>
+        </div>
+        <p>端到端上，Conductor 先找出每個 prefill instance 的最長前綴命中並估計傳輸、排隊、prefill 時間；它再選出符合 TBT 預測的 decode instance。選定後，系統把前綴 KVCache 拉到 prefill GPU，只計算增量 token，並在逐層 prefill 時把新 KVCache 非同步送往 decode 端。最後 decode GPU 載入完整快取，加入 continuous batching。<a class="source-ref" href="#source-architecture-p3">§1 · PDF p.3（論文標示 p.156）</a><a class="source-ref" href="#source-scheduler-p9">Algorithm 1 · PDF p.9（論文標示 p.162）</a></p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 論文的可重現實驗使用模擬 LLaMA3-70B 架構的 dummy model、每節點 8×NVIDIA A800 80 GB 與 4×200 Gbps RDMA NIC。三組工作負載中，Mooncake 相對 vLLM 的平均 prefill GPU 時間降低 36%／53%／64%；端到端有效容量則隨 workload 與 TBT 閾值而變。<a class="source-ref" href="#source-workloads-p10">§5.1 · PDF p.10（論文標示 p.163）</a><a class="source-ref" href="#source-results-p11">§5.2.3 · PDF p.11（論文標示 p.164）</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> Mooncake 的關鍵不是單獨發明某個快取或 P/D 技巧，而是把「快取命中、節點負載、網路搬移與兩種 latency SLO」放進同一個決策迴路。證據支持這套整合在高前綴重用、長輸入與至少約 100 Gbps 的環境有效；對低重用、低頻寬或不同模型／生成長度，效益仍需重新量測。</p>
+<p class="bridge">直覺成立後，再沿著一次完整執行看它如何落成系統。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>Mooncake Store、CPP 與 KVCache-centric Conductor</h2>
+          <figure data-figure-role="method">
+            <a href="assets/images/fig-2-p3.png"><img src="assets/images/fig-2-p3.png" alt="Mooncake 整體架構：Conductor、prefill pool、decode pool 與分散式 KVCache store"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 2</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>從左到右讀三個 Conductor 決策，再看藍色 prefill、橘色 decode 與綠色 Store。右側兩組最佳化目標揭示：prefill 追快取重用但受 TTFT/MFU/DRAM 約束；decode 追吞吐但受 TBT/VRAM 約束。</span></figcaption>
+          </figure>
+          <h3>先看完整請求路徑</h3>
+        <ol>
+          <li><strong>全域選點：</strong>Conductor 對每個 prefill instance 查最長 prefix match，估計快取傳輸、排隊與增量 prefill 時間；同時挑選能守住 TBT 的 decode instance。</li>
+          <li><strong>取回舊快取：</strong>若最佳前綴在遠端，Mooncake Store 將對應 block 從 CPU/DRAM 搬到選定 prefill GPU；若本地已有足夠長前綴，就避免不必要的跨節點搬移。</li>
+          <li><strong>增量 prefill：</strong>只計算未命中的 token。長輸入可切成不超過 <code>prefill_chunk</code> 的片段，交由 CPP group 的不同節點流水執行。</li>
+          <li><strong>逐層串流：</strong>新產生的 KVCache 一面存回 CPU，一面按 layer 非同步傳到 decode 節點，讓網路與 GPU prefill 重疊。</li>
+          <li><strong>decode：</strong>decode 端把完整 KVCache 從 DRAM 載入 GPU，將請求加入 continuous batch，逐 token 產生輸出。</li>
+          <li><strong>後續重用：</strong>新 block 進入全域 pool；熱門 block 可因排程需求自然複製，冷資料依 LRU 淘汰，正在存取的 block 不被回收。</li>
+        </ol>
+        <p><a class="source-ref" href="#source-architecture-p3">§1 · PDF p.3（論文標示 p.156）</a><a class="source-ref" href="#source-equations-p5">Fig. 3 · PDF p.5（論文標示 p.158）</a><a class="source-ref" href="#source-store-p6">§3.2 · PDF p.6（論文標示 p.159）</a></p>
+        <figure data-figure-role="method">
+          <a href="assets/images/fig-3-p5.png"><img src="assets/images/fig-3-p5.png" alt="Mooncake 一個請求的 KVCache 重用、增量 prefill、跨節點傳輸與 decode 流程"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 3</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>依 s1→s4 追蹤：先載入 prefix cache，只計算 incremental cache，再逐層傳到 decode CPU，最後非同步載入 GPU 並解碼。藍、橘箭頭是可與運算重疊的資料搬移。</span></figcaption>
+        </figure>
+
+        <h3>元件 A：分散式 paged KVCache</h3>
+        <p>每份 KVCache 被切成固定 token block，block key 由自身 token 與前綴 hash 鏈結而成，可支援 prefix match 與跨節點副本。系統暴露 <code>put</code>、<code>get</code>、<code>change_replica</code> 與批次記憶體傳輸介面；資料可位於 GPU VRAM、CPU DRAM 或 SSD。評估採 256-token block，而文中說明一般粒度約 16–512 token。<a class="source-ref" href="#source-store-p6">§3.2.1 · PDF p.6（論文標示 p.159）</a></p>
+
+        <h3>元件 B：Mooncake Store 傳輸引擎</h3>
+        <p>傳輸引擎以 GPUDirect RDMA/RoCEv2 搬資料，將大請求切成 16 KB slices，分散到多條 NIC path。它先依 CPU socket、PCIe switch、GPU 與 NIC 關係建立 topology matrix，優先走本地性較好的 NIC；連線端點按需建立並放入有上限的 pool，以 SIEVE 淘汰。若某條路徑、RDMA context 或 completion queue 暫時失效，系統改走 secondary path 並重試。<a class="source-ref" href="#source-transfer-design-p7">§3.2.2 · PDF p.7（論文標示 p.160）</a></p>
+        <figure data-figure-role="method">
+          <a href="assets/images/fig-4-p7.png"><img src="assets/images/fig-4-p7.png" alt="Mooncake Store 批次傳輸介面與 NUMA PCIe 拓撲感知路徑選擇"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>左圖說明單次 batch 可跨 DRAM/VRAM buffer；右圖把 CPU socket、PCIe switch、GPU、NIC 關係編成 topology matrix，為每個 buffer 排 preferred 與 secondary NIC。</span></figcaption>
+        </figure>
+
+        <h3>元件 C：Chunked Pipeline Parallelism（CPP）</h3>
+        <p>Mooncake 將每 \(X\) 個 prefill 節點組成 pipeline group，把一個 prompt 切成多個 chunk，讓不同節點同時處理相鄰 chunk。相較跨節點 tensor parallelism 每層要做昂貴 all-reduce，CPP 只在 stage 邊界傳資料並可與計算重疊；相較 sequence parallelism，它不需因短／長輸入頻繁重組平行群組。論文把這視為維持獨立 prefill pool、處理動態長度分布的工程折衷。<a class="source-ref" href="#source-prefill-p8">§3.3 · PDF p.8（論文標示 p.161）</a></p>
+
+        <h3>元件 D：KVCache-centric Conductor</h3>
+        <p>排程不是「選命中最多的節點」而已。Conductor 以離線 profiling 擬合多項式模型，對每個 prefill candidate 預估 \(T_{\text{transfer}}+T_{\text{queue}}+T_{\text{prefill}}\)，選預測 TTFT 最小者；decode 端另依負載預測 TBT。任一預測超過 SLO，請求即被拒絕。當全域最佳 match 相對目的節點本地 match 的比值超過 <code>kvcache_balancing_threshold</code>，才把 cache 搬到目的節點；搬移也產生副本，逐步消除熱點。門檻在論文實作中是人工調整。<a class="source-ref" href="#source-scheduler-p9">§4 &amp; Algorithm 1 · PDF p.9（論文標示 p.162）</a></p>
+        <figure data-figure-role="method">
+          <a href="assets/images/alg-1-p9.png"><img src="assets/images/alg-1-p9.png" alt="KVCache-centric scheduling algorithm pseudocode"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Algorithm 1</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>第 3 行找全域最佳 prefix；第 4–16 行對每個 prefill instance 比較 transfer、queue、prefill；第 17–19 行用 TTFT/TBT 拒絕過載；第 20–21 行才真正搬移並複製快取。</span></figcaption>
+        </figure>
+
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 這四個元件形成閉環：全域快取增加「可重用量」，傳輸引擎降低「取用成本」，Conductor 決定「重用是否值得且在哪裡做」，CPP/P-D 分離則保護兩種 latency SLO。任何一環缺失，都可能讓更多 storage 無法真正轉成更少 computation。</p>
+<h3>重算成本與傳輸成本</h3>
+        <div class="formula-block">
+          \[
+            \operatorname{flops}(n)=l\left(a n^2 d+b n d^2\right)
+          \]
+          <p class="formula-block__meaning">\(n\)：prompt token 數；\(l\)：Transformer layer 數；\(d\)：hidden dimension；\(a,b\)：由 attention/MLP 結構決定的常數。二次項來自 attention，線性乘上 \(d^2\) 的項在所分析模型中占很大比重。</p>
+        </div>
+        <div class="formula-block">
+          \[
+            \Delta C(p)\approx l\left(a p^2 d+b p d^2\right),\qquad
+            S_{\mathrm{KV}}(p)=p\,l\,\frac{2d}{g_{\mathrm{qa}}}\,s
+          \]
+          <p class="formula-block__meaning">重用長度 \(p\) 的 prefix 可省下約 \(\Delta C\) 的計算；需搬移的 KVCache 大小 \(S_{\mathrm{KV}}\) 對 \(p\) 呈線性。\(g_{\mathrm{qa}}\) 是 grouped-query attention 比率，\(s\) 是每元素 bytes。</p>
+        </div>
+        <div class="formula-block">
+          \[
+            \frac{B}{G} &gt; \frac{2ds}{g_{\mathrm{qa}}\left(apd+bd^2\right)}
+          \]
+          <p class="formula-block__meaning">若網路頻寬 \(B\) 相對 GPU 算力 \(G\) 高於右式，搬快取的理論時間才低於重算。此式是必要的量級判斷，不包含排隊、協定開銷與網路壅塞。</p>
+        </div>
+        <p>以文中 LLaMA3-70B 參數（80 layers、\(d=8192\)、GQA=8、BF16）和 8192-token prefix 計算，8×A800 節點的理論最低頻寬約 6 GB/s，8×H800 約 19 GB/s；作者也明說實際需要更高頻寬，後續實驗觀察到約 100 Gbps 以上才進入穩定區。<a class="source-ref" href="#source-equations-p5">§2.2 · PDF p.5（論文標示 p.158）</a><a class="source-ref" href="#source-transfer-eval-p13">§5.4.2 · PDF p.13（論文標示 p.166）</a></p>
+
+        <h3>排程目標</h3>
+        <div class="formula-block">
+          \[
+            \hat T_{\mathrm{TTFT}}(i)=
+            \hat T_{\mathrm{transfer}}(i)+
+            \hat T_{\mathrm{queue}}(i)+
+            \hat T_{\mathrm{prefill}}(i)
+          \]
+          \[
+            i^\star=\arg\min_i \hat T_{\mathrm{TTFT}}(i)
+            \quad\text{s.t.}\quad
+            \hat T_{\mathrm{TTFT}}\leq S_{\mathrm{TTFT}},
+            \ \hat T_{\mathrm{TBT}}\leq S_{\mathrm{TBT}}
+          \]
+          <p class="formula-block__meaning">每個 candidate 的 prefix match 會同時改變 transfer 與 prefill 項；queue 項則代表負載。若連最佳 pair 都無法滿足兩個 SLO，Algorithm 1 回傳 reject，而不是讓過載請求稀釋 goodput。</p>
+        </div>
+        <h3>實驗的有效容量定義</h3>
+        <div class="formula-block">
+          \[
+            \mathrm{effective}(r)=
+            \mathbf{1}\!\left[
+              \mathrm{TTFT}_r\leq S_{\mathrm{TTFT}}
+              \land
+              \mathrm{TBT}_r\leq S_{\mathrm{TBT}}
+            \right]
+          \]
+          <p class="formula-block__meaning">TBT 取該請求最長 10% token-arrival intervals 的平均；有效請求容量是仍能讓請求滿足上述條件的最大輸入負載比例。這個定義把吞吐與互動 latency 綁在一起。</p>
+        </div>
+        <p><a class="source-ref" href="#source-scheduler-p9">Algorithm 1 · PDF p.9（論文標示 p.162）</a><a class="source-ref" href="#source-workloads-p10">§5.1 · PDF p.10（論文標示 p.163）</a></p>
+<p class="bridge">方法看似合理，真正的問題是：實驗有沒有把這條因果鏈撐起來？</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>有效容量、命中／重算、傳輸與 P:D 比例</h2>
+          <h3>平台、模型與比較組</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>主要實驗控制條件</caption>
+            <tbody>
+              <tr><th scope="row">模型</th><td>模擬 LLaMA3-70B 架構與運算特性的 dummy model；不是 Kimi 的實際 proprietary checkpoint。</td></tr>
+              <tr><th scope="row">節點</th><td>每節點 8×NVIDIA A800 SXM4 80 GB、4×200 Gbps RDMA NIC；Mooncake 節點各自指定為 prefill 或 decode。</td></tr>
+              <tr><th scope="row">KV block</th><td>256 tokens。</td></tr>
+              <tr><th scope="row">基線</th><td>vLLM 0.5.1、vLLM Prefix Caching、vLLM Chunked Prefill；受當時實作限制，prefix caching 與 chunked prefill 是分開測，不是合併配置。</td></tr>
+              <tr><th scope="row">SLO</th><td>主要實驗 TTFT ≤30 s；TBT ≤100／200／300 ms。TBT 為每個請求最長 10% token intervals 的平均。</td></tr>
+              <tr><th scope="row">輸出</th><td>於預先指定長度停止生成；因此測的是 serving path，不測文字品質或模型語意。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-workloads-p10">§5.1 · PDF p.10（論文標示 p.163）</a></p>
+
+        <h3>三組工作負載</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>Table 2 所列 trace 特性</caption>
+            <thead><tr><th>Workload</th><th>平均 input / output</th><th>Prefix cache ratio</th><th>到達與規模</th></tr></thead>
+            <tbody>
+              <tr><td>Conversation</td><td>12,035 / 343 tokens</td><td>40%</td><td>Kimi 一小時真實 timestamp，12,031 requests；context 最長 128k</td></tr>
+              <tr><td>Tool &amp; Agent</td><td>8,596 / 182</td><td>59%</td><td>Kimi 一小時真實 timestamp，23,608 requests</td></tr>
+              <tr><td>Synthetic</td><td>15,325 / 149</td><td>66%</td><td>Poisson arrival，3,993 requests；ShareGPT／LEval／LooGLE 以 1:1:1 混合</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-workloads-p10">Table 2 · PDF p.10（論文標示 p.163）</a></p>
+
+        <h3>Claim–test 配對</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>每個核心主張如何被測試，以及能排除到哪裡</caption>
+            <thead><tr><th>主張</th><th>測試／對照</th><th>觀測量</th><th>仍未排除</th></tr></thead>
+            <tbody>
+              <tr><td>C1：整體架構提升 SLO 內容量</td><td>16 個 8×A800 節點；Mooncake 對 vLLM 三變體；三個 TBT 閾值</td><td>effective request capacity CDF</td><td>Mooncake 同時整合多個機制，無法歸因到單一元件</td></tr>
+              <tr><td>C2：全域池優於本機 DRAM cache</td><td>10 個 prefill 節點、每節點 300 萬 token；local vs global</td><td>hit rate、prefill GPU time</td><td>固定 cache budget／拓撲以外的泛化</td></tr>
+              <tr><td>C3：快取感知且兼顧負載的排程有效</td><td>Global Cache Aware 對 local-aware、load balancing、random</td><td>平均 TTFT</td><td>未報 tail TTFT、預測誤差與門檻敏感度</td></tr>
+              <tr><td>C4：傳輸引擎降低搬移成本</td><td>Transfer Engine 對 TCP、Gloo；4×200／8×400 Gbps</td><td>cache size–latency、40 GB 有效頻寬</td><td>跨機架、故障期間、混合背景流量</td></tr>
+              <tr><td>C5：網路可快到讓搬移勝過重算</td><td>模擬 24–400 Gbps，synthetic workload</td><td>平均 TTFT、理論／實際 transfer time</td><td>100 Gbps 轉折是該模型與 trace 的經驗值</td></tr>
+              <tr><td>C6：P/D 需要配平</td><td>固定 16 節點改變 P/D 數量；TTFT 10 s、TBT 100 ms</td><td>effective capacity、平均 TTFT/TBT</td><td>只是一組 workload/SLO；未測動態重配置成本</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 最強證據是「受控的 local/global、scheduler 或 transfer 對照」；端到端大幅增益則證明整套系統可工作，卻不能單獨證明某一元件貢獻多少。生產叢集規模與歷史增益只由作者敘述，應另列為 operational claim。</p>
+<h3>端到端：有效請求容量</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>Figure 1、6、7 標示的容量增益；所有數字都受該列 workload 與 TBT 閾值限定</caption>
+            <thead><tr><th>Workload</th><th>TBT 100 ms</th><th>TBT 200 ms</th><th>TBT 300 ms</th><th>比較解讀</th></tr></thead>
+            <tbody>
+              <tr><td>Conversation</td><td>+498%</td><td>+157%</td><td>+59%</td><td>16 個 8×A800 節點；Figure 1 對 vLLM 系列 baseline 的容量曲線</td></tr>
+              <tr><td>Tool &amp; Agent</td><td>+64%</td><td>+42%</td><td>+22%</td><td>Figure 6 的標示；正文對 200 ms 明確以 vLLM Prefix Caching 為比較</td></tr>
+              <tr><td>Synthetic</td><td>+62%</td><td>+40%</td><td>+28%</td><td>Figure 7 的標示；正文對 200 ms 明確以 vLLM 為比較</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 增益不是一個固定倍率：TBT 閾值越寬鬆，baseline 也能讓更多請求過關，所以相對差距縮小。Mooncake 在嚴格 TBT 下的優勢，與隔離長 prefill、減少重算及保護 decode latency 的設計一致。<a class="source-ref" href="#source-abstract-p2">Fig. 1 · PDF p.2（論文標示 p.155）</a><a class="source-ref" href="#source-results-p11">§5.2 · PDF p.11（論文標示 p.164）</a></p>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-1-p2.png"><img src="assets/images/fig-1-p2.png" alt="Conversation 工作負載下各系統的有效請求容量與 TBT 閾值曲線"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 1</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>橫軸是 TBT，縱軸是累積有效容量比例；在 100、200、300 ms 三條門檻線上，讀 Mooncake 藍線與 vLLM 橘線的垂直差距，才得到 498%／157%／59%，而非任意延遲下都成立。</span></figcaption>
+        </figure>
+
+        <h3>「更少 computation」是否真的發生</h3>
+        <p>平均每請求 prefill GPU time 相對 vLLM 分別降低：Conversation <strong>36%</strong>、Tool &amp; Agent <strong>53%</strong>、Synthetic <strong>64%</strong>。換成倍數看，vLLM Prefix Caching 在三組 workload 分別是 Mooncake 的 1.43×、1.40×、2.59×；vLLM Chunked Prefill 則是 1.90×、2.68×、3.33×。這直接支援「共享前綴從全域池取回後，GPU 少做 prefill」的主張。<a class="source-ref" href="#source-results-p11">§5.2.3 &amp; Fig. 8 · PDF p.11（論文標示 p.164）</a></p>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-8-p11.png"><img src="assets/images/fig-8-p11.png" alt="三種工作負載下 Mooncake 與 vLLM 變體的平均 prefill GPU 時間"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 8</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>先比較每組藍柱與其他柱，再看柱上相對倍數。Mooncake 在三個 workload 都最低；synthetic 的分散式熱點讓全域快取相對本機 prefix cache 的優勢最大。</span></figcaption>
+        </figure>
+
+        <h3>全域容量是否轉成命中與計算節省</h3>
+        <p>local/global 對照使用 10 個 prefill 節點、每節點可放約 300 萬 token，並限制輸出來隔離 decode 影響。Global cache 對 Local cache 的 hit rate 倍數為 2.22×／1.38×／2.36×；對應 prefill GPU time 降為 0.76×／0.74×／0.52×。最大命中提升即 136%，最大 prefill 時間下降即 48%。<a class="source-ref" href="#source-global-cache-p12">§5.3.2 &amp; Fig. 10 · PDF p.12（論文標示 p.165）</a></p>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-10-p12.png"><img src="assets/images/fig-10-p12.png" alt="Local cache 與 global cache 的命中率和 prefill GPU 時間比較"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 10</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>左半驗證容量擴大提高命中率，右半驗證命中真的轉成較少 GPU 時間；synthetic 分別呈 2.36× 命中率與 0.52× prefill 時間。</span></figcaption>
+        </figure>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 同一張圖同時量「命中」與「GPU time」很重要：前者驗證儲存層，後者驗證命中沒有被傳輸成本抵銷。Synthetic 的熱點較分散，本機快取最吃虧，因此 global/local 差距最大；集中熱點則容易在單機也命中。</p>
+
+        <h3>排程器：命中與負載必須聯合</h3>
+        <p>16 個 8×A800 節點、conversation trace 下，平均 TTFT 為 Global Cache Aware <strong>3.07 s</strong>、Local Cache Aware <strong>3.58 s</strong>、Load Balancing <strong>5.27 s</strong>、Random <strong>19.65 s</strong>。全域快取感知相對只看本機 cache 再降約 14%，顯示跨節點借用 cache 仍有額外價值；而僅看 cache、不考慮 queue，也不是安全策略。<a class="source-ref" href="#source-scheduler-p9">§4 &amp; Fig. 5 · PDF p.9（論文標示 p.162）</a></p>
+
+        <h3>傳輸路徑：能否跟上計算</h3>
+        <ul>
+          <li>Concurrency 64、最小傳輸粒度 128 KB、搬 40 GB cache 時，Transfer Engine 在 4×200 Gbps 與 8×400 Gbps 配置分別達 <strong>87 GB/s</strong> 與 <strong>190 GB/s</strong>，相對 TCP 為 2.4×、4.6×。<a class="source-ref" href="#source-transfer-eval-p13">§5.4.1 · PDF p.13（論文標示 p.166）</a>
+            <figure data-figure-role="result">
+              <a href="assets/images/fig-12-p13.png"><img src="assets/images/fig-12-p13.png" alt="Mooncake Transfer Engine、TCP 與 Gloo 在兩種 NIC 配置下的快取傳輸延遲"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 12</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>固定 concurrency 64 後隨 cache size 增長比較斜率；40 GB 處的箭頭顯示 Transfer Engine 相對 TCP 在 4×200 與 8×400 Gbps 分別快 2.4×、4.6×。</span></figcaption>
+            </figure>
+          </li>
+          <li>將總頻寬模擬為 24–400 Gbps 時，超過約 <strong>100 Gbps</strong> 後平均 TTFT 低於 2 s 且小於重算；低於此點，實際傳輸時間偏離理論值並快速惡化。這是作者在該 synthetic workload 的經驗建議，不是通用常數。<a class="source-ref" href="#source-transfer-eval-p13">§5.4.2 &amp; Fig. 13 · PDF p.13（論文標示 p.166）</a>
+            <figure data-figure-role="result">
+              <a href="assets/images/fig-13-p13.png"><img src="assets/images/fig-13-p13.png" alt="不同網路頻寬下平均 TTFT 與 KVCache 實際理論傳輸時間"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 13</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>左圖看 100 Gbps 附近的轉折：再低會迅速接近或超過重算 TTFT；右圖看低頻寬時實際值偏離理論值，顯示壅塞與協定開銷不能只靠公式估計。</span></figcaption>
+            </figure>
+          </li>
+          <li>128k prompt、95% prefix cache ratio 時，prefill time 降 92%，包含 schedule／transfer／load-cache overhead 後 TTFT 仍降 86%；圖中標斜線的工作可與 inference 非同步。<a class="source-ref" href="#source-transfer-eval-p13">§5.4.3 &amp; Fig. 14 · PDF p.13（論文標示 p.166）</a>
+            <figure data-figure-role="result">
+              <a href="assets/images/fig-14-p13.png"><img src="assets/images/fig-14-p13.png" alt="0% 與 95% prefix cache ratio 的端到端 latency breakdown"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 14</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>比較同一 prompt length 的左右柱：95% 命中時 prefill 大幅縮短，transfer/load cache 占比增加但部分可非同步；128k prompt 的 prefill 與 TTFT 分別降低 92% 與 86%。</span></figcaption>
+            </figure>
+          </li>
+        </ul>
+
+        <h3>生產部署：另列為作者報告</h3>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 作者報告 Mooncake 已在 Kimi 的數千節點服務、每日處理超過 1000 億 token；依內部歷史統計，相對先前系統，A800 與 H800 叢集分別多處理 115% 與 107% 請求。論文未提供這組生產比較的完整 trace、控制變因或原始資料，因此它證明實務採用與規模，但證據強度低於後文具控制條件的可重現實驗。<a class="source-ref" href="#source-architecture-p3">§1 · PDF p.3（論文標示 p.156）</a></p>
+<h3>已提供的元件對照／敏感度</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>可用來定位因果的實驗</caption>
+            <thead><tr><th>變因</th><th>控制方式</th><th>觀察</th><th>可支持的結論</th></tr></thead>
+            <tbody>
+              <tr><td>Global vs Local cache</td><td>相同 10-node prefill budget、三個 workload</td><td>hit rate 最高 2.36×；prefill GPU time 最低 0.52×</td><td>跨節點容量確實轉成命中與計算節省</td></tr>
+              <tr><td>Scheduler policy</td><td>global-aware、local-aware、load balancing、random</td><td>平均 TTFT 3.07／3.58／5.27／19.65 s</td><td>必須聯合 cache locality 與 queue</td></tr>
+              <tr><td>Transfer implementation</td><td>自有引擎、TCP、Gloo；兩種 NIC 配置</td><td>40 GB 時相對 TCP 快 2.4×／4.6×</td><td>多 NIC/RDMA 工程能大幅降低搬移時間</td></tr>
+              <tr><td>Network bandwidth</td><td>24–400 Gbps</td><td>約 100 Gbps 出現 TTFT 穩定轉折</td><td>架構有明確網路前提</td></tr>
+              <tr><td>Prefix ratio</td><td>0% vs 95%，8k–128k prompt</td><td>128k 的 prefill −92%、TTFT −86%</td><td>長前綴命中可覆蓋非同步搬移開銷</td></tr>
+              <tr><td>P/D node ratio</td><td>固定 16 節點，從 5P11D 到 11P5D</td><td>約 1:1 effective capacity 最高</td><td>prefill/decode 資源存在 workload-specific 平衡</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <figure data-figure-role="result">
+          <a href="assets/images/fig-15-p14.png"><img src="assets/images/fig-15-p14.png" alt="16 節點中不同 prefill decode 節點比例的有效容量、TTFT 與 TBT"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 15</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>增加 prefill 節點會降低 TTFT、卻把 decode 資源拿走而提高 TBT；在此 synthetic workload 與 SLO 下，約 1:1 的 P/D 比例形成容量最高的平衡點。</span></figcaption>
+        </figure>
+        <p><a class="source-ref" href="#source-scheduler-p9">Fig. 5 · PDF p.9（論文標示 p.162）</a><a class="source-ref" href="#source-global-cache-p12">Fig. 10 · PDF p.12（論文標示 p.165）</a><a class="source-ref" href="#source-transfer-eval-p13">Figs. 12–14 · PDF p.13（論文標示 p.166）</a><a class="source-ref" href="#source-pd-p14">Fig. 15 · PDF p.14（論文標示 p.167）</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 論文沒有把 Mooncake 拆成「只 P/D」「+CPP」「+global cache」「+global scheduler」「+optimized transfer」的完整 factorial ablation，因此不能把端到端 +498% 精確分配給各元件。也沒有呈現 block size、cache-balancing threshold、模型預測誤差、重複次數／誤差棒、動態 P/D 轉換成本的敏感度。</p>
+<p class="bridge">數據回答了部分問題；剩下的是適用邊界與仍未被證明的部分。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>Trace 依賴、網路成本、故障語意與 Production Claim 邊界</h2>
+          <h3>優點</h3>
+        <ul>
+          <li><strong>問題—機制對齊清楚：</strong>把長上下文的重複計算具體化成儲存—計算交換，且用式子與頻寬實驗閉環。</li>
+          <li><strong>SLO-aware 指標：</strong>用同時滿足 TTFT/TBT 的 effective capacity，避免只報 tokens/s 掩蓋互動延遲。</li>
+          <li><strong>系統完整：</strong>包含快取 key/block、副本／淘汰、多 NIC topology、故障繞路、P/D 調度與 overload rejection，不只是一個抽象演算法。</li>
+          <li><strong>多層證據：</strong>端到端、局部元件、頻寬敏感度、latency breakdown 與真實 trace 互相補強。</li>
+        </ul>
+
+        <h3>限制</h3>
+        <ul>
+          <li><strong>模型替身：</strong>可重現評估是仿 LLaMA3-70B 的 dummy model；Kimi checkpoint、模型語意與真實 token 產生路徑不可得。</li>
+          <li><strong>輸出長度預設：</strong>請求在預定 token 數停止，沒有測 sampling、不同 decoding policy 或輸出品質。</li>
+          <li><strong>基線組合不對稱：</strong>vLLM 0.5.1 的 prefix caching 與 chunked prefill 因實作限制分開測；Mooncake 卻整合快取、P/D、排程與傳輸，端到端歸因需保守。</li>
+          <li><strong>統計報告不足：</strong>未見 error bars、重複次數、warm-up、模型預測誤差、硬體／driver／CUDA 軟體棧細節。</li>
+          <li><strong>範圍集中：</strong>主要在 A800、70B 架構、長上下文與高 prefix reuse；短 prompt、低重用、不同 KV-head 配置與跨機架網路不充分。</li>
+          <li><strong>策略仍人工：</strong><code>kvcache_balancing_threshold</code> 手調；生產 P/D ratio 通常固定，只在顯著負載變化時切換。</li>
+        </ul>
+
+        <h3>部署風險與適用邊界</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>風險</th><th>何時放大</th><th>論文覆蓋程度</th></tr></thead>
+            <tbody>
+              <tr><td>網路成為瓶頸</td><td>每 accelerator 可用頻寬低、背景 RDMA 流量高、prefix 很短</td><td>有 24–400 Gbps 敏感度；跨機架與背景流量不足</td></tr>
+              <tr><td>快取投資不回本</td><td>共享前綴少、工作集超大且不重複</td><td>有三個 40–66% trace；低重用區未系統測</td></tr>
+              <tr><td>全域 metadata／一致性壓力</td><td>節點數與 block 數大、頻繁失效或模型版本切換</td><td>描述副本、LRU 與路徑失效；控制面擴充與恢復未完整量測</td></tr>
+              <tr><td>多租戶隔離與資料殘留</td><td>不同使用者／模型共享記憶體與 storage</td><td>論文未討論 authorization、清除、加密或 side channel</td></tr>
+              <tr><td>成本與能耗轉移</td><td>DRAM/SSD/NIC 擴容抵銷 GPU 節省</td><td>沒有 TCO、能耗或 storage wear 評估</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 最適合 Mooncake 的場景是：長 prompt、對話／agent 共享前綴高、GPU prefill 昂貴、叢集有可池化 DRAM/SSD 與每節點多條高速 NIC。若工作負載幾乎無共享前綴，或網路不足以越過計算—通訊 break-even，這套架構的複雜度未必值得。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>KVCache-centric 架構還能交換哪些資源</h2>
+          <h3>真正的最佳化目標是一個線上價值函數</h3>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 可以把每次重用理解為：<strong>省下的 GPU prefill 時間 −（網路搬移 + 排隊 + cache 占用機會成本）</strong>。Algorithm 1 已估前三項中的大部分，但 eviction 導致未來 miss 的機會成本只靠啟發式與 LRU 間接處理。這解釋了為何最大 prefix match 不一定是最優選點。</p>
+
+        <h3>排程同時在做隱式 cache placement</h3>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 當請求被送往一個本來沒有最佳前綴的較空閒 instance，cache transfer 會留下新副本；未來請求因此更可能在多個節點命中。換言之，load balancing 的結果反過來改變 cache topology，cache topology 又改變下一輪排程成本，形成回授系統。穩定性與振盪應是大型部署的重要議題，但論文未量化。</p>
+
+        <h3>可延伸的實驗與設計</h3>
+        <ul>
+          <li><strong>自適應門檻：</strong>讓 balancing threshold 依 NIC queue、cache pressure、prefix length、SLO slack 自動更新，並比較固定門檻的 tail latency。</li>
+          <li><strong>預測校準：</strong>報告 \(\hat T_{\mathrm{TTFT}}\)／\(\hat T_{\mathrm{TBT}}\) 的誤差分布與 HTTP 429 的 false reject／false admit，否則 admission control 難以審核。</li>
+          <li><strong>完整消融：</strong>在相同 runtime 上逐項加入 P/D、CPP、global store、global scheduler、多 NIC engine，量出各自與交互作用。</li>
+          <li><strong>成本曲線：</strong>以每百萬有效 token 的 GPU-hours、NIC bytes、DRAM/SSD footprint、能耗為共同單位，才能檢驗「多 storage」在經濟上是否划算。</li>
+          <li><strong>異質硬體：</strong>重新代入不同 \(G\)、HBM/DRAM 帶寬、KV-head 數與 NIC 拓撲，實測 break-even；不要直接沿用 A800 上的 100 Gbps 經驗值。</li>
+          <li><strong>安全生命週期：</strong>加入 tenant-aware cache key、模型版本隔離、加密／擦除與故障恢復測試，確保重用不跨越資料邊界。</li>
+        </ul>
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> 若未來模型採更強的 GQA/MQA、量化 KVCache 或稀疏／分頁注意力，每 token cache bytes 下降會讓相同 DRAM 容量涵蓋更多前綴，也降低搬移成本；但更快的 GPU 同時提高「重算」速度，兩股力量會共同移動 break-even，方向不能只憑直覺判斷，必須重新測量。</p>
+<ol>
+          <li><strong>如果把 vLLM 的 prefix caching 與 chunked prefill 在同一版本真正合併，端到端差距還剩多少？</strong><br><span class="muted">這決定 +498% 有多少來自架構本身、多少來自基線功能組合限制。</span></li>
+          <li><strong>Conductor 的 latency model 在突發流量、cache miss 與故障期間誤差多大？</strong><br><span class="muted">Admission control 依賴預測；平均準確不代表尾端不會錯誤接受或拒絕。</span></li>
+          <li><strong>100 Gbps 的轉折如何隨模型大小、GQA 比率、prefix length 與 GPU 算力改變？</strong><br><span class="muted">這是把論文設計移植到其他 accelerator／叢集前最直接的 capacity-planning 問題。</span></li>
+          <li><strong>全域副本與 LRU 在非平穩 workload 下會不會振盪或污染 cache？</strong><br><span class="muted">排程會改變副本分布；如果熱門集合快速切換，搬移與淘汰可能互相放大。</span></li>
+          <li><strong>把 DRAM/SSD/NIC 的成本、能耗與故障面算進去後，哪些 reuse ratio 才有正 ROI？</strong><br><span class="muted">論文證明「算得比較少」，但尚未證明每個部署都「花得比較少」。</span></li>
+        </ol>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>重算–傳輸損益、排程目標與證據索引</h2>
+          <div class="table-scroll">
+          <table>
+            <caption>正式出版與本地檔案資訊</caption>
+            <tbody>
+              <tr><th scope="row">正式標題</th><td>Mooncake: Trading More Storage for Less Computation — A KVCache-centric Architecture for Serving LLM Chatbot</td></tr>
+              <tr><th scope="row">作者</th><td>Ruoyu Qin、Zheming Li、Weiran He、Jialei Cui、Feng Ren、Mingxing Zhang、Yongwei Wu、Weimin Zheng、Xinran Xu</td></tr>
+              <tr><th scope="row">會議</th><td>FAST 2025（論文集頁碼 155–170；Best Paper）</td></tr>
+              <tr><th scope="row">篇幅</th><td data-summary-field="pdf-page-count">共 17 頁</td></tr>
+              <tr><th scope="row">正式來源</th><td><a href="https://www.usenix.org/conference/fast25/presentation/qin" target="_blank" rel="noopener noreferrer">USENIX 論文頁面</a></td></tr>
+              <tr><th scope="row">本閱讀分類</th><td>LLM Systems / KV Cache Management</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 雖然 Mooncake 同時包含 prefill/decode（P/D）分離與排程，但論文的中心抽象是「KVCache 成為跨節點的一級系統資源」：把 CPU、DRAM、SSD 與 NIC 組成全域快取，再讓排程器依快取位置決定計算位置。因此歸入 <strong>KV Cache Management</strong>，而不是泛稱推論排程。<a class="source-ref" href="#source-architecture-p3">§1 · PDF p.3（論文標示 p.156）</a></p>
+<h3>術語表</h3>
+        <dl class="term-list">
+          <dt>TTFT</dt><dd>Time to First Token，從請求到第一個輸出 token 的延遲，主要受排隊與 prefill 影響。</dd>
+          <dt>TBT</dt><dd>Time Between Tokens，輸出 token 間隔；本文以最長 10% 間隔的平均評估每個請求。</dd>
+          <dt>KVCache</dt><dd>每層 attention 已計算的 key/value 狀態；可供後續 decode 或相同 prefix 重用。</dd>
+          <dt>Effective capacity</dt><dd>在指定負載下，同時滿足 TTFT/TBT SLO 的請求容量比例／最大負載。</dd>
+          <dt>Conductor</dt><dd>Mooncake 的全域控制面，包含 cache-aware prefill、cache balancing、load-balanced decode 三類決策。</dd>
+          <dt>Mooncake Store</dt><dd>分散式 KVCache 儲存與傳輸層，使用 CPU/DRAM/SSD、GPU VRAM 與多 NIC RDMA。</dd>
+          <dt>CPP</dt><dd>Chunked Pipeline Parallelism，把一個長 prompt 切成 chunks，在多個 prefill 節點流水執行。</dd>
+          <dt>MFU</dt><dd>Model FLOPs Utilization，實際模型 FLOPs 相對硬體理論能力的利用率。</dd>
+          <dt>GQA</dt><dd>Grouped-Query Attention，多個 query heads 共用較少 key/value heads，降低 KVCache 大小。</dd>
+        </dl>
+
+        <h3>重點來源索引</h3>
+        <ol class="source-index">
+          <li id="source-abstract-p2"><span><strong>摘要、Figure 1、Introduction 開頭</strong>——問題、有效容量 +59%～+498%、生產規模。PDF p.2（論文標示 p.155）。</span></li>
+          <li id="source-architecture-p3"><span><strong>Figure 2 與系統概觀</strong>——Conductor、P/D pools、全域 Store、逐請求三階段流程、歷史部署主張。PDF p.3（論文標示 p.156）。</span></li>
+          <li id="source-background-p4"><span><strong>§2.1–2.2</strong>——prefill/decode、TTFT/TBT、effective throughput、prefix cache 重用。PDF p.4（論文標示 p.157）。</span></li>
+          <li id="source-equations-p5"><span><strong>§2.2 與 Figure 3</strong>——FLOPs、KVCache bytes、bandwidth/compute break-even、資料工作流。PDF p.5（論文標示 p.158）。</span></li>
+          <li id="source-store-p6"><span><strong>§3.2.1</strong>——block key、paged cache、副本、LRU、API、GPUDirect RDMA。PDF p.6（論文標示 p.159）。</span></li>
+          <li id="source-transfer-design-p7"><span><strong>§3.2.2 與 Figure 4</strong>——16 KB slicing、拓撲感知、多 NIC、endpoint pool、故障繞路。PDF p.7（論文標示 p.160）。</span></li>
+          <li id="source-prefill-p8"><span><strong>§3.3 與 §4 開頭</strong>——CPP 動機、TP/SP 比較、全域排程問題。PDF p.8（論文標示 p.161）。</span></li>
+          <li id="source-scheduler-p9"><span><strong>Algorithm 1 與 Figure 5</strong>——cache/load/SLO 聯合排程、HTTP 429、四種策略 TTFT。PDF p.9（論文標示 p.162）。</span></li>
+          <li id="source-workloads-p10"><span><strong>§5.1、Table 2、§5.2</strong>——硬體、dummy model、baseline、SLO、三組 trace。PDF p.10（論文標示 p.163）。</span></li>
+          <li id="source-results-p11"><span><strong>§5.2.2–5.2.3、Figures 7–8</strong>——synthetic effective capacity 與三組 prefill GPU time。PDF p.11（論文標示 p.164）。</span></li>
+          <li id="source-global-cache-p12"><span><strong>§5.3、Figures 9–11</strong>——單 token 320 KB、容量命中曲線、local/global 對照與熱點副本。PDF p.12（論文標示 p.165）。</span></li>
+          <li id="source-transfer-eval-p13"><span><strong>§5.4、Figures 12–14</strong>——傳輸引擎、頻寬敏感度與端到端 latency breakdown。PDF p.13（論文標示 p.166）。</span></li>
+          <li id="source-pd-p14"><span><strong>§5.5、Figure 15、§6–7</strong>——P/D ratio、相關工作、結論。PDF p.14（論文標示 p.167）。</span></li>
+        </ol>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 要查「為什麼搬快取值得」看來源 04；查端到端容量看 01、09、10；查全域 cache 的直接因果看 11；查網路前提看 12；查 P/D 配平與工作適用性看 13。</p>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>Mooncake: Trading More Storage for Less Computation — A KVCache-centric Architecture for Serving LLM Chatbot · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>

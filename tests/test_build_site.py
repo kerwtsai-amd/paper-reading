@@ -232,6 +232,67 @@ class BuildSiteTests(unittest.TestCase):
         self.assertIn("LLM Systems", library)
         self.assertNotIn("Example%20Paper.pdf", library)
 
+    def test_all_public_pages_load_the_canonical_bilingual_font_pair_once(self) -> None:
+        self._add_summary(
+            paper="Needs Font Injection",
+            title="Needs Font Injection",
+            source="https://arxiv.org/abs/2401.12345",
+        )
+        preloaded_directory = self._add_summary(
+            paper="Already Has Fonts",
+            title="Already Has Fonts",
+            source="https://arxiv.org/abs/2401.12346",
+        )
+        preloaded_summary = preloaded_directory / "summary.html"
+        preloaded_summary.write_text(
+            preloaded_summary.read_text(encoding="utf-8").replace(
+                "</head>",
+                build_site.PUBLIC_FONT_LINKS.replace(
+                    ' data-site-fonts="open-sans-noto-sans-tc"', ""
+                )
+                + "\n</head>",
+            ),
+            encoding="utf-8",
+        )
+        output = self.root / "_site"
+
+        build_site.build_site(self.root, output)
+
+        pages = tuple(output.rglob("*.html"))
+        self.assertGreaterEqual(len(pages), 6)
+        for page in pages:
+            with self.subTest(page=page.relative_to(output).as_posix()):
+                document = page.read_text(encoding="utf-8")
+                parser = self._parse_html(page)
+                font_stylesheets = [
+                    attributes
+                    for tag, attributes in parser.elements
+                    if tag == "link"
+                    and attributes.get("href")
+                    == build_site.PUBLIC_FONT_STYLESHEET_URL
+                ]
+                self.assertEqual(len(font_stylesheets), 1)
+                self.assertEqual(
+                    html.unescape(document).count(
+                        build_site.PUBLIC_FONT_STYLESHEET_URL
+                    ),
+                    1,
+                )
+                self.assertIn(build_site.PUBLIC_FONT_STACK, document)
+                self.assertIn("font-family: var(--site-sans)", document)
+                if page.relative_to(output).parts[0] == "papers":
+                    self.assertIn(
+                        f"--mono: {build_site.PUBLIC_FONT_STACK};", document
+                    )
+
+                preconnects = {
+                    attributes.get("href")
+                    for tag, attributes in parser.elements
+                    if tag == "link" and attributes.get("rel") == "preconnect"
+                }
+                self.assertIn("https://fonts.googleapis.com", preconnects)
+                self.assertIn("https://fonts.gstatic.com", preconnects)
+
     def test_homepage_shows_exactly_three_latest_summary_updates(self) -> None:
         fixtures = (
             {
@@ -677,6 +738,25 @@ class BuildSiteTests(unittest.TestCase):
                 summary.write_text(document, encoding="utf-8")
                 with self.assertRaises(build_site.BuildError):
                     build_site.build_site(self.root, self.root / "_site")
+
+    def test_accepts_v2_direct_summary_update_marker(self) -> None:
+        paper_directory = self._add_summary(updated="2026-09-08")
+        summary = paper_directory / "summary.html"
+        document = summary.read_text(encoding="utf-8")
+        update_start = document.index("<dl><div><dt>摘要更新")
+        update_end = document.index("</dl>", update_start) + len("</dl>")
+        v2_update = (
+            '<p class="paper-meta"><time data-summary-field="last-updated" '
+            'datetime="2026-09-09">2026 年 9 月 9 日</time></p>'
+        )
+        summary.write_text(
+            document[:update_start] + v2_update + document[update_end:],
+            encoding="utf-8",
+        )
+
+        papers = build_site.build_site(self.root, self.root / "_site")
+
+        self.assertEqual(papers[0].last_updated.isoformat(), "2026-09-09")
 
     def test_all_generated_navigation_keeps_private_paths_out(self) -> None:
         self._add_summary()

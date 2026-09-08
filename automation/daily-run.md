@@ -28,7 +28,7 @@
 ## 3. 深讀與驗證
 
 1. 對選定論文逐篇完整執行 paper-reading Skill：下載並驗證 PDF、建立 evidence ledger、完成定位／方法／證據／批判／完整性閱讀迴圈、擷取必要圖表，並從完整模板建立繁體中文 `summary.html`。
-2. 保留固定 16 章、來源標記與主張類型；不得只讀 abstract，也不得把工作日誌或工具錯誤寫進摘要。
+2. 保留模板固定的 reader-first 語意角色、來源標記與主張類型，並依每篇論文內容撰寫對應的讀者向章節標題；不得只讀 abstract，也不得把工作日誌或工具錯誤寫進摘要。
 3. 執行 Skill 指定的 `validate-summary.ps1`，再做桌面與窄螢幕視覺 QA。任何必要驗證失敗都不得提交。
 4. 執行 `python scripts/build_site.py --check`，確認站台能從已追蹤內容建置，且 Pages artifact 不含 PDF、憑證、`.agents` 或內部設定。
 

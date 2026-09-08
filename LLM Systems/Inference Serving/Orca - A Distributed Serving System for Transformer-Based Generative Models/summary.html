@@ -1,0 +1,922 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="Orca（OSDI 2022）論文閱讀紀錄：從請求級批次的阻塞機制，推導迭代級排程、選擇性批次與分散式執行設計。">
+  <title>Orca: A Distributed Serving System for Transformer-Based Generative Models｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 46rem;
+      --wide: 62rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">LLM Systems / Inference Serving</p>
+      <h1>Orca: A Distributed Serving System for Transformer-Based Generative Models</h1>
+      <div class="paper-dek" data-section-role="thesis"><p class="lead">ORCA 把自回歸生成的排程單位由「整個請求」縮小到「一次模型迭代」，再以選擇性批次（selective batching）保留異質序列的 GPU 效率；在 175B GPT 合成負載、約 190 ms/token 中位延遲下，吞吐量由 FasterTransformer 的 0.185 req/s 提升至 6.81 req/s（36.9×）。 <a class="source-ref" href="#source-result-p13">§6.2 · PDF p.13（論文標示 p.532）· Figure 10</a></p></div>
+      <p class="paper-byline">Gyeong-In Yu、Joo Seong Jeong、Geon-Woo Kim、Soojeong Kim、Byung-Gon Chun</p>
+      <p class="paper-meta">
+        <span>16th USENIX Symposium on Operating Systems Design and Implementation（OSDI 22）</span>
+        <span>2022</span>
+        <span>LLM Systems / Inference Serving</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-08">2026-09-08</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://www.usenix.org/conference/osdi22/presentation/yu" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="orca-osdi22.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀路線：</strong>先用〈<a href="#problem">固定批次為何被不同長度、Early Finish 與記憶體預留拖垮</a>〉抓住根因，再讀〈<a href="#method">Iteration-level Scheduling 加 Selective Batching 的完整路徑</a>〉走完整流程，最後用〈<a href="#evidence">Engine 效率守住了嗎？Latency–Throughput Frontier 是否前移</a>〉逐項驗證。熟悉背景的讀者可直接從問題章開始。</p>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">自迴歸迭代、KV 歷史與模型平行的最低背景</a></li>
+            <li><a href="#problem">固定批次為何被不同長度、Early Finish 與記憶體預留拖垮</a></li>
+            <li><a href="#insight">把批次邊界從 Request 改到每一次生成 Iteration</a></li>
+            <li><a href="#method">Iteration-level Scheduling 加 Selective Batching 的完整路徑</a></li>
+            <li><a href="#evidence">Engine 效率守住了嗎？Latency–Throughput Frontier 是否前移</a></li>
+            <li><a href="#critique">FCFS、公平性與預留策略：Orca 留下的部署代價</a></li>
+            <li><a href="#extensions">從 Orca 還能推導哪些排程問題</a></li>
+            <li><a href="#reference">排程不變量、接納條件與證據索引</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>自迴歸迭代、KV 歷史與模型平行的最低背景</h2>
+          <h3>只需要四個前置概念</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>概念</th><th>本文中的意思</th><th>稍後用在哪裡</th></tr></thead>
+            <tbody>
+              <tr><td>自回歸迭代</td><td>一次 iteration 跑過全部 Transformer layers 並產生一個 token；首輪 initiation 可並行處理全部輸入 token，後續 increment 每輪吃前一個輸出 token。</td><td>解釋為何一個請求有多個可重新排程的邊界。</td></tr>
+              <tr><td>增量解碼與 K/V 狀態</td><td>第 (t) 個 token 的 Attention 會重用先前 token 的 key/value；狀態隨 token 數增長，且不同請求的張量長度可不同。</td><td>解釋 selective batching 與 K/V slot 預留。</td></tr>
+              <tr><td>GPU 批次</td><td>把多請求輸入合併可放大矩陣運算、提高平行度，並讓一次載入的模型參數服務更多 token。</td><td>解釋為何不能單純把請求逐一執行。</td></tr>
+              <tr><td>模型／管線平行</td><td>intra-layer 切矩陣，inter-layer 切 layer；多個 worker 依序處理模型分區。</td><td>解釋 ORCA 如何支援 175B／341B 與保持 pipeline 滿載。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Figure 1 把前兩項串起來：initiation 一次處理多個輸入 token；increment 逐 token 前進；Transformer 的 K/V 歷史會增長，而 LSTM 的 recurrent state 大小固定。 <a class="source-ref" href="#source-background-p4">§2 · PDF p.4（論文標示 p.523）· Figure 1</a></p>
+        <p>批次之所以重要，不只因為「更多執行緒」：對大模型的線性層，權重從 GPU global memory 載入常是關鍵成本；同一輪讓更多 ready token 共用權重讀取，才是作者在相關工作討論中明示的設計原則。 <a class="source-ref" href="#source-related-p14">§7 · PDF p.14（論文標示 p.533）</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 以上概念形成本文的矛盾：服務層若只看「整個請求」，反應太慢；若每個 token 都單獨跑，GPU 又太低效。下一節因此要找一個同時允許細粒度 admission／retirement 與粗粒度權重重用的執行單位。</p>
+<figure data-figure-role="method" id="figure-1">
+          <a href="assets/images/fig-01-p04-gpt-inference-state.png"><img src="assets/images/fig-01-p04-gpt-inference-state.png" alt="GPT 自回歸迭代、Transformer layer 與跨 token K/V 狀態示意圖"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 1</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>先沿左圖看 initiation 與後續單 token iterations，再看右圖 Transformer 的 K/V 歷史會增長；這正是請求長度異質與狀態記憶體約束的來源。</span></figcaption>
+        </figure>
+<p class="bridge">有了這些背景，下一個問題是：固定批次為何被不同長度、Early Finish 與記憶體預留拖垮</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>固定批次為何被不同長度、Early Finish 與記憶體預留拖垮</h2>
+          <h3>症狀 → 根因 → 既有方法缺口</h3>
+        <ol>
+          <li><strong>可觀察症狀：</strong>同批中的短請求已完成卻不能回傳；其 batch slot 仍可能做額外運算；批次執行期間新到請求只能排隊。 <a class="source-ref" href="#source-challenge-p5">§3 C1 · PDF p.5（論文標示 p.524）· Figure 3</a></li>
+          <li><strong>根因：</strong>serving scheduler 將整批請求一次交給 engine；engine 內部完成所有請求的全部 iteration 才回傳，服務層無法在中途改變 batch membership。</li>
+          <li><strong>直接改成 iteration 排程仍不夠：</strong>不同請求可能位於 initiation／increment 的不同階段、輸入長度不同、K/V 歷史長度不同；傳統 ([B,L,H]) 批次要求相同 (L)，所以 arbitrary ready set 無法整層 batch。 <a class="source-ref" href="#source-overview-p6">§3 C2 · PDF p.6（論文標示 p.525）</a></li>
+          <li><strong>最近的前作仍不足：</strong>BatchMaker 能合併計算相同的 RNN cells；Transformer 在每個 token index 使用不同 K/V 集合，等價 cell 種類太多，且該系統不支援本文需要的大模型／pipeline parallelism。 <a class="source-ref" href="#source-related-p14">§7 · PDF p.14（論文標示 p.533）</a></li>
+        </ol>
+        <h3>由限制推導出的需求</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>需求</th><th>成功條件</th><th>ORCA 對應設計</th></tr></thead>
+            <tbody>
+              <tr><td>R1 細粒度反應</td><td>最遲在目前 iteration 後讓新請求加入、完成請求離開。</td><td>Iteration-level scheduling。</td></tr>
+              <tr><td>R2 保留 GPU 效率</td><td>任意不同長度／階段的 ready requests 仍能共同執行大部分算子。</td><td>Selective batching：非 Attention flatten；Attention split／merge。</td></tr>
+              <tr><td>R3 有界記憶體與進度</td><td>接納請求後，後續每個 token 都有 K/V 空間，不因資源耗盡陷入 deadlock。</td><td>依每個請求的 <code>max_tokens</code> 預留 K/V slots。</td></tr>
+              <tr><td>R4 大模型擴展</td><td>跨 GPU／節點分割模型，避免每 iteration 的 CPU 控制訊息迫使 GPU 同步，並維持 pipeline 利用率。</td><td>intra/inter-layer parallelism、control/data plane 分離、跨 batch pipeline。</td></tr>
+              <tr><td>R5 可控 SLO 取捨</td><td>operator 能以單一上限限制每輪合併的 requests。</td><td><code>max_bs</code> 調整吞吐／延遲。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 本文沒有把 R1–R5 寫成形式化需求表；此處是依 §3–§4 的挑戰與設計重新組織。優化目標不是單獨最大化 throughput，而是在記憶體約束與 operator 給定的 latency budget 下提高吞吐，同時保持 iteration-level FCFS。</p>
+<div class="table-scroll">
+          <table>
+            <thead><tr><th>系統／路線</th><th>排程與批次機制</th><th>主要假設／成本</th><th>對本文問題的失敗模式</th></tr></thead>
+            <tbody>
+              <tr><td>Triton／TensorFlow Serving + execution engine</td><td>Serving layer 形成 request batch；engine 把整批跑到所有請求完成。</td><td>介面清楚、模型通用；只在 batch 開始／結束交握。</td><td>early-finished 不能退出、late-joining 不能加入；異質 requests 造成等待與無效計算。</td></tr>
+              <tr><td>FasterTransformer</td><td>Transformer 專用、全操作 request-wise batching；跨 layer pipeline 以 microbatches。</td><td>支援 distributed execution；需在 microbatch batching efficiency 與 pipeline bubbles 間取捨。</td><td>無 iteration-level scheduler；固定 batch 難處理不同 input／generation length。</td></tr>
+              <tr><td>BatchMaker</td><td>把 RNN graph 切成 cells，合併相同 cells。</td><td>假設 recurrent cell 在 token positions 間相同。</td><td>Transformer 每個 token index 讀不同 K/V 集合，同時可合併的相同 cell 太少；也缺大模型平行支援。</td></tr>
+              <tr><td>Megatron-LM／DeepSpeed</td><td>intra/inter-layer model parallelism。</td><td>主要為大型訓練最佳化。</td><td>可提供分割機制，但不直接解決線上自回歸 request scheduling。</td></tr>
+              <tr><td>ORCA</td><td>iteration-level FCFS + token-wise non-Attention batching + per-request Attention + 跨 batch pipeline。</td><td>需要 scheduler 與 engine 緊密協同、每輪控制訊息、預先知道 <code>max_tokens</code>。</td><td>解決目標異質負載；但真實 trace、tail SLO 與介面通用性未驗證。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>以上比較依本文 §7 的相關工作與討論重組；作者特別指出，ORCA 的原則不是尋找「完全相同的 token cell」，而是讓所有 ready tokens 在一輪 model-parameter read 中完成盡可能多的運算。 <a class="source-ref" href="#source-related-p14">§7 · PDF p.14（論文標示 p.533）</a></p>
+<p class="bridge">問題的限制已經清楚；接著要抓住作者最關鍵的轉念。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>把批次邊界從 Request 改到每一次生成 Iteration</h2>
+          <div class="takeaway-list">
+          <div class="takeaway-item"><p class="takeaway-label">問題</p><p>固定請求批次要等最慢請求完成；先完成者不能回傳，後到者不能加入，且已完成槽位仍可能做無效運算。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">根因</p><p>既有 serving system 與 execution engine 只在整批開始／結束交握；自回歸請求卻由多次、長度不一的迭代組成。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">關鍵洞見</p><p>非 Attention 運算可把不同請求的 token 維度攤平成同一矩陣；只有 Attention 必須保留請求邊界並讀取各自 K/V 狀態。</p></div>
+          <div class="takeaway-item"><p class="takeaway-label">機制</p><p>每次只排一個 iteration；非 Attention token-wise batching，Attention 先 split、逐請求運算再 merge，並由 K/V manager 管理跨迭代狀態。</p></div>
+        </div>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> iteration-level scheduling 與 selective batching 可同時降低完成／加入等待，又保有大模型批次運算效率，並可擴展至數百億至數千億參數模型。 <a class="source-ref" href="#source-abstract-p2">Abstract、§1 · PDF pp.2–3（論文標示 pp.521–522）</a></p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 主要端到端證據使用 Poisson 到達的合成 trace、輸入長度均勻分布 (U(32,512))、生成長度均勻分布 (U(1,128))，且強制不產生 EOS；36.9× 是其中 175B、相近中位 normalized latency 的一個比較點。 <a class="source-ref" href="#source-eval-p11">§6 · PDF p.11（論文標示 p.530）</a> <a class="source-ref" href="#source-result-p13">§6.2 · PDF p.13（論文標示 p.532）· Figure 10</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> Orca 最可重用的觀點是「排程邊界必須對齊工作負載可被搶占或重組的自然邊界」。但本文只報告中位延遲，且沒有真實服務 trace、實際 checkpoint／文字與 EOS，因此結果證明的是機制在受控異質負載下的潛力，不是所有生產工作負載的普遍 SLO 保證。</p>
+<p class="bridge">直覺成立後，再沿著一次完整執行看它如何落成系統。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>Iteration-level Scheduling 加 Selective Batching 的完整路徑</h2>
+          <h3>端到端：一個請求如何穿過 ORCA</h3>
+        <ol>
+          <li><strong>到達：</strong>Endpoint 收到請求後放入 request pool；pool 保存其到達時間、phase、token 序列與最大 token 上限。</li>
+          <li><strong>首次選取：</strong>Scheduler 依到達時間掃描非 RUNNING 請求，最多取 <code>max_bs</code> 個；若是 INITIATION，先以 <code>max_tokens</code> 預留整個生命週期所需 K/V slots。 <a class="source-ref" href="#source-scheduler-p9">§4.2 · PDF p.9（論文標示 p.528）· Algorithm 1</a></li>
+          <li><strong>只執行一輪：</strong>Scheduler 將 request IDs、目前 token index／輸入長度與 tokens 交給 engine；engine 只跑一次模型 iteration，而非跑到整批所有請求完成。</li>
+          <li><strong>選擇性批次：</strong>QKV Linear 等非 Attention 算子把所有 ready tokens 攤平成 ([sum_i L_i,H]) 一起執行；在 Attention 前依請求 split，各自讀取 K/V manager 的歷史，算完再 merge 回扁平 tensor。 <a class="source-ref" href="#source-selective-p7">§3 S2 · PDF p.7（論文標示 p.526）· Figure 5</a></li>
+          <li><strong>分散式前進：</strong>intra-layer partitions 用 NCCL 交換 GPU tensor；inter-layer worker 的 CPU 控制訊息／tokens 走獨立通道。第一個 worker 可在 GPU 執行同時把控制訊息送往下一個 worker。 <a class="source-ref" href="#source-distributed-p8">§4.1 · PDF p.8（論文標示 p.527）· Figure 7</a></li>
+          <li><strong>回收或續跑：</strong>最後一個 worker 取回每個請求的一個輸出 token；scheduler 把狀態更新為 INCREMENT。完成者回傳並釋放預留 slots；未完成者回到下一次選取。</li>
+        </ol>
+        <h3>三個核心機制及其因果角色</h3>
+        <h4>Iteration-level scheduling：回答 R1</h4>
+        <p>每次 engine 返回一個 token，scheduler 就重新組 batch；因此 late-joining request 的等待上界從「目前批次剩餘全部 iterations」縮到「目前 iteration」，early-finished request 也不再被最慢請求綁住。Figure 4 的虛線交握就是這個新的控制邊界。 <a class="source-ref" href="#source-overview-p6">§3 S1 · PDF p.6（論文標示 p.525）· Figure 4</a></p>
+        <figure data-figure-role="method" id="figure-4">
+          <a href="assets/images/fig-04-p06-system-overview.png"><img src="assets/images/fig-04-p06-system-overview.png" alt="ORCA endpoint、scheduler、request pool 與 execution engine 的迭代級互動"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>注意 scheduler 與 engine 的虛線往返每輪都發生；request pool 中每個請求可處於不同 token 進度，因此 batch membership 能在下一輪重組。</span></figcaption>
+        </figure>
+        <h4>Selective batching：回答 R2</h4>
+        <p>它不是把 Attention 完全串行化；實作把不同請求的 Attention CUDA thread blocks 串接為單一 fused kernel，以降低 launch overhead、提高 GPU utilization。真正保留的是每個請求的邏輯邊界與不同 K/V 長度。 <a class="source-ref" href="#source-pipeline-p10">§5 · PDF p.10（論文標示 p.529）</a></p>
+        <figure data-figure-role="method" id="figure-5">
+          <a href="assets/images/fig-05-p07-selective-batching.png"><img src="assets/images/fig-05-p07-selective-batching.png" alt="選擇性批次將七個 token 合併、在 Attention 前分流並重組"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 5</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>追蹤 ([7,H]) 如何經 QKV Linear 後依請求切成不同形狀，再各自讀 K/V manager；Merge 後其餘線性層重新共享一次批次。</span></figcaption>
+        </figure>
+        <h4>Reservation 與 pipeline：回答 R3–R4</h4>
+        <p>一個 K/V slot 表示儲存單一 token 的 key/value 所需空間；首次接納時預留 <code>max_tokens</code>，換取「已接納請求一定能走完」的進度保證。Scheduler 同時允許最多 <code>n_workers</code> 個 batches 在 inter-layer pipeline 中飛行，使每個 worker 處理不同 batch。 <a class="source-ref" href="#source-scheduler-p9">§4.2 · PDF p.9（論文標示 p.528）· Algorithm 1</a> <a class="source-ref" href="#source-pipeline-p10">§4.2 · PDF p.10（論文標示 p.529）· Figure 8</a></p>
+        <figure data-figure-role="method" id="algorithm-1">
+          <a href="assets/images/algorithm-01-p09-scheduler.png"><img src="assets/images/algorithm-01-p09-scheduler.png" alt="ORCA 迭代級 FCFS 排程、K/V slot 預留與 pipeline 控制演算法" style="width:min(100%, 520px); margin-inline:auto;"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Algorithm 1</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>先看 Select 的 arrival-time 排序與 INITIATION reservation，再看外層以 <code>n_workers</code> 控制在途 batches；一段演算法同時承擔公平、記憶體安全與 pipeline 利用率。</span></figcaption>
+        </figure>
+        <p>原型以約 13K 行 C++ 實作，控制面採 gRPC、GPU 資料面採 NCCL，並實作 LayerNorm、Attention、GeLU 等 fused kernels。 <a class="source-ref" href="#source-pipeline-p10">§5 · PDF p.10（論文標示 p.529）</a></p>
+<h3>1. 傳統批次與 token-wise flatten</h3>
+        <div class="formula-block">
+          \[
+          X_{\text{request-batch}}\in\mathbb{R}^{B\times L\times H}
+          \quad\longrightarrow\quad
+          X_{\text{selective}}\in\mathbb{R}^{(\sum_{i=1}^{B}L_i)\times H}.
+          \]
+          <p class="formula-block__meaning"><strong>(B)</strong> 是請求數，<strong>(L_i)</strong> 是第 (i) 個請求本輪處理的 token 數，<strong>(H)</strong> 是 hidden size。傳統 batch 需要共同 (L)；ORCA 讓 non-Attention ops 不再看 request dimension，只有 Attention 依 (L_i) 拆開。這個形狀轉換直接決定 Figure 5 的 split／merge。 <a class="source-ref" href="#source-selective-p7">§3 S2 · PDF p.7（論文標示 p.526）· Figure 5</a></p>
+        </div>
+        <h3>2. Iteration-level FCFS 不變量</h3>
+        <div class="formula-block">
+          \[
+          a_i &lt; a_j \;\Longrightarrow\; I_i \ge I_j,
+          \]
+          <p class="formula-block__meaning"><strong>(a_i)</strong> 是請求 (i) 的到達時間，<strong>(I_i)</strong> 是它已完成的 iteration 數；對 request pool 內任意一對請求，較早到者不會比晚到者少跑 iteration。這保證的是處理進度順序，不保證完成順序：短的晚到請求仍可能先完成。 <a class="source-ref" href="#source-scheduler-p9">§4.2 · PDF p.9（論文標示 p.528）</a></p>
+        </div>
+        <h3>3. K/V 接納條件</h3>
+        <div class="formula-block">
+          \[
+          n_{\mathrm{rsrv}} + \mathrm{max\_tokens}(r) \le n_{\mathrm{slots}}.
+          \]
+          <p class="formula-block__meaning"><strong>(n_{\mathrm{rsrv}})</strong> 是已預留 slots，<strong>(n_{\mathrm{slots}})</strong> 是 K/V manager 配額，<strong>(mathrm{max\_tokens}(r))</strong> 是請求上限。首次排程只有在條件成立時才接納；完成後扣回該請求的上限。上限愈保守，進度保證愈強但可同時接納的請求愈少。最後一句是對公式的系統敏感度分析。 <a class="source-ref" href="#source-scheduler-p9">§4.2 · PDF p.9（論文標示 p.528）· Algorithm 1</a></p>
+        </div>
+        <h3>4. 評估中的 normalized latency</h3>
+        <div class="formula-block">
+          \[
+          L_{\mathrm{norm}}(r)=\frac{L_{\mathrm{e2e}}(r)}{N_{\mathrm{generated}}(r)}.
+          \]
+          <p class="formula-block__meaning">本文以「端到端延遲除以生成 token 數」再報中位數，以降低不同輸出長度造成的不可比性；此式是依論文文字明確化的記號，不是作者編號公式。它仍不能呈現 tail latency 或首 token 延遲。 <a class="source-ref" href="#source-fig10-p12">§6.2 · PDF p.12（論文標示 p.531）· Figure 10</a></p>
+        </div>
+<p class="bridge">方法看似合理，真正的問題是：實驗有沒有把這條因果鏈撐起來？</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>Engine 效率守住了嗎？Latency–Throughput Frontier 是否前移</h2>
+          <h3>評估問題與對照</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>要檢驗的主張</th><th>設定與控制</th><th>指標／證據</th><th>可回答與不可回答</th></tr></thead>
+            <tbody>
+              <tr><td>C1：不批次 Attention 的代價很小</td><td>關閉 ORCA scheduler，讓兩系統處理同質 batch；每請求輸入 32 或 128 tokens、生成 32 tokens；13B／101B／175B 使用相同對應平行配置。</td><td>整批 execution time；Figure 9。</td><td>可隔離 engine 實作效率；不能隔離 selective batching 中每個 kernel／fusion 的個別貢獻。</td></tr>
+              <tr><td>C2：分散式 engine 可有效跨 inter-layer partitions</td><td>175B、16 GPUs，兩系統都停用 pipeline；FasterTransformer microbatch size 設為 batch size。</td><td>整批 execution time；Figure 9c。</td><td>可比較受控的 engine path；作者將差異歸因於 control/data plane 分離，但沒有「只切換該機制」的 ablation。</td></tr>
+              <tr><td>C3：異質線上負載可同時改善 latency／throughput</td><td>Poisson arrivals；輸入 (U(32,512))，生成上限 (U(1,128))；改變 arrival rate；101B／175B／341B；FasterTransformer 外掛動態 batching scheduler。</td><td>throughput 與每生成 token 的 median end-to-end latency；Figure 10。</td><td>直接測 iteration re-batching 的目標場景；不能代表真實 token 分布、EOS、tail latency 或模型輸出品質。</td></tr>
+              <tr><td>C4：<code>max_bs</code> 提供可調吞吐／延遲取捨</td><td>ORCA 測 1、8、16、32；FasterTransformer 搜索不同 max batch／microbatch 組合。</td><td>latency-throughput frontier；Figure 10。</td><td>顯示本文硬體與負載下的敏感度；作者明確警告不能外推為 batch size 永不傷 latency。</td></tr>
+              <tr><td>C5：優勢不只來自長度異質</td><td>175B；全部請求固定為 (input, generated)=(32,32) 或 (256,256)。</td><td>median latency 與 throughput；Figure 11。</td><td>移除 early-finish 差異後仍比較系統，但仍沒有真實 arrival trace。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>共同環境</h3>
+        <ul>
+          <li><strong>硬體：</strong>Azure ND96asr A100 v4；每 VM 8 張 NVIDIA A100 40 GB，以 NVLink 相連；最多 4 VMs。每 VM 有 8 個 Mellanox 200 Gbps HDR InfiniBand adapters，作者合計為 1.6 Tb/s 跨 VM 互連。 <a class="source-ref" href="#source-eval-p11">§6 · PDF p.11（論文標示 p.530）</a></li>
+          <li><strong>模型：</strong>13B（40 layers, (H=5120), 1×1 partitions）、101B（80, 10240, 1×8）、175B（96, 12288, 2×8）、341B（120, 15360, 4×8）；最大序列 2048，weights 與 activations 為 FP16。 <a class="source-ref" href="#source-pipeline-p10">§6、Table 1 · PDF pp.10–11（論文標示 pp.529–530）</a></li>
+          <li><strong>Baseline：</strong>NVIDIA FasterTransformer；端到端時由作者實作常見的 request-level dynamic batching scheduler。Megatron-LM、DeepSpeed 被排除，理由是主要針對訓練。</li>
+          <li><strong>未提供：</strong>CUDA／NCCL／driver 版本、CPU／host memory 詳細規格、重複次數、warmup、error bars、統計信賴區間、功耗與成本。</li>
+        </ul>
+        <h3>Claim–test pair 1：selective batching 沒有把 engine 效率犧牲掉</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 在同批請求同長、且不啟用 ORCA scheduler 的 microbenchmark 中，13B／101B 的 ORCA 與 FasterTransformer 整批時間接近（ORCA 有時略慢）；175B、兩個 inter-layer partitions 且兩邊停用 pipeline 時，ORCA 最多快 47%。FasterTransformer 在若干較大 batch 出現 OOM，而 ORCA 依請求 <code>max_tokens</code> 配置 K/V 空間。 <a class="source-ref" href="#source-fig9-p12">§6.1 · PDF pp.11–12（論文標示 pp.530–531）· Figure 9</a></p>
+        <p><strong>支持結論：</strong>把 Attention 保留為 per-request 邏輯運算並未在受測 engine path 造成大型退化；跨 inter-layer partitions 時 ORCA 甚至較快。<strong>保留：</strong>47% 不是 iteration scheduling 的收益，也不是 control/data plane 的單因果 ablation。</p>
+        <figure data-figure-role="result" id="figure-9">
+          <a href="assets/images/fig-09-p12-engine-microbenchmark.png"><img src="assets/images/fig-09-p12-engine-microbenchmark.png" alt="13B、101B、175B 模型下 ORCA engine 與 FasterTransformer 的批次執行時間"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 9</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>先看 13B／101B 的黑灰柱接近，確認不 batch Attention 沒有造成數量級退化；再看 175B 跨 inter-layer partitions 時 ORCA 的控制／資料面分離優勢。</span></figcaption>
+        </figure>
+
+        <h3>Claim–test pair 2：異質 trace 下形成較好的 latency-throughput frontier</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 175B 模型在約 190 ms/token 的 median normalized latency 下，FasterTransformer 為 0.185 req/s，ORCA 為 6.81 req/s，比例為 36.9×；175B 與 341B 在圖示各負載點均由 ORCA 同時取得較低 latency／較高 throughput。 <a class="source-ref" href="#source-result-p13">§6.2 · PDF p.13（論文標示 p.532）· Figure 10</a></p>
+        <p><strong>支持結論：</strong>當 arrival time、input length 與 iteration count 都異質時，每 iteration 重組 batch 能讓後到請求搭上進行中的工作，避免 request-level batch 的等待與 inactive slots。<strong>保留：</strong>36.9× 是特定模型、特定延遲切面與合成分布，不是所有點的平均加速。</p>
+        <figure data-figure-role="result" id="figure-10">
+          <a href="assets/images/fig-10-p12-end-to-end.png"><img src="assets/images/fig-10-p12-end-to-end.png" alt="101B、175B、341B 模型的 normalized latency 與 throughput 曲線"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 10</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>每張圖向右是吞吐提高、向下是每 token 延遲降低；比較相近 y 值的曲線 x 座標，而不要把各曲線的最右端直接當成同一延遲條件。</span></figcaption>
+        </figure>
+
+        <h3>Claim–test pair 3：低負載與同質工作負載揭露收益邊界</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 101B 低負載時請求不足以形成 batch，兩系統 latency 主要由 engine 決定，ORCA 不一定較好。175B 的同質 trace 中，FasterTransformer 隨 max batch size 增加顯著改善；ORCA 除 max batch size 1（退化為無 batching 的 worker pipeline）外仍優於 FasterTransformer max batch size 8。 <a class="source-ref" href="#source-result-p13">§6.2 · PDF p.13（論文標示 p.532）· Figures 10–11</a></p>
+        <p><strong>支持結論：</strong>ORCA 的最大收益需要足夠併發；異質性會放大 request-level scheduling 的缺點，但不是唯一差異。<strong>保留：</strong>Figure 11 沒有把 engine、pipeline 與 scheduler 的貢獻逐一拆開。</p>
+        <figure data-figure-role="result" id="figure-11">
+          <a href="assets/images/fig-11-p13-homogeneous-trace.png"><img src="assets/images/fig-11-p13-homogeneous-trace.png" alt="175B 模型在同質請求 trace 下的 latency-throughput 曲線"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 11</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>這裡刻意讓所有請求輸入／輸出長度一致，移除 early-finish 異質性；觀察 FasterTransformer 放大 batch 後確實改善，再檢查 ORCA 的剩餘優勢與 batch size 1 的例外。</span></figcaption>
+        </figure>
+
+        <h3>如何正確讀圖</h3>
+        <ul>
+          <li>Figure 10 的 y 軸為對數刻度的 median ms/token；比較「相近 y 的 x」才對應相近延遲下的吞吐。</li>
+          <li>Figure 9 的缺柱代表 OOM，不是 execution time 為零。</li>
+          <li>本文沒有報 p95／p99；因此不能由 median 曲線推論 tail SLO。</li>
+        </ul>
+<h3>論文實際提供的敏感度／因果拆解</h3>
+        <ul>
+          <li><strong>Engine-only microbenchmark：</strong>移除 iteration-level scheduler，檢查 selective-batching engine 本身是否比 FasterTransformer 慢；13B／101B 接近，175B 最多快 47%。 <a class="source-ref" href="#source-fig9-p12">§6.1 · PDF pp.11–12（論文標示 pp.530–531）· Figure 9</a></li>
+          <li><strong>不同 <code>max_bs</code>：</strong>ORCA 的 1／8／16／32 形成不同 frontier；受測設定中增大 batch 提高吞吐、latency 變化小，但作者不宣稱跨硬體／負載皆成立。 <a class="source-ref" href="#source-result-p13">§6.2 · PDF p.13（論文標示 p.532）· Figure 10</a></li>
+          <li><strong>同質 trace：</strong>把 input／generated tokens 固定，移除 early-finish 異質性；FasterTransformer 因而從大 batch 明顯受益，這支持「異質 requests 是 request-level scheduling 痛點」的機制。 <a class="source-ref" href="#source-result-p13">§6.2 · PDF p.13（論文標示 p.532）· Figure 11</a></li>
+        </ul>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 這些實驗構成部分因果證據，但不是完整 factorial ablation。論文未單獨關閉 iteration-level scheduling、selective batching、Attention fusion、K/V reservation 或 control-plane separation；也未掃描 interconnect bandwidth、worker 數、真實長尾長度與 <code>max_tokens</code> over-reservation。因此「每一元件各貢獻多少」仍無法量化。</p>
+<p class="bridge">數據回答了部分問題；剩下的是適用邊界與仍未被證明的部分。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>FCFS、公平性與預留策略：Orca 留下的部署代價</h2>
+          <div class="table-scroll">
+          <table>
+            <thead><tr><th>面向</th><th>判讀</th><th>證據或影響</th></tr></thead>
+            <tbody>
+              <tr><td>優點：問題—機制對齊</td><td>排程邊界直接對齊自回歸 iteration；selective batching 又解開細粒度排程與 GPU batching 的衝突。</td><td>Figure 3–5 從症狀、阻礙到解法形成完整因果鏈。</td></tr>
+              <tr><td>優點：跨層共同設計</td><td>Scheduler、K/V memory、CUDA kernels、control/data plane 與 pipeline 一起設計，不把 serving 與 engine 當成不可穿透介面。</td><td>§4–§5；175B／341B 跨多 GPU 評估。</td></tr>
+              <tr><td>限制：工作負載代表性</td><td>端到端 trace 為 Poisson 合成；uniform 長度；沒有實際 prompt、checkpoint 或 EOS。</td><td>真實到達 burst、長尾輸出、early stopping 與內容相依計算未驗證。</td></tr>
+              <tr><td>限制：指標</td><td>報 median end-to-end latency／token 與 throughput。</td><td>沒有 TTFT、inter-token latency、p95／p99、jitter、能耗或成本。</td></tr>
+              <tr><td>限制：公平性與外推</td><td>主要 baseline 是 FasterTransformer 加作者自建 scheduler；其他 distributed engines 因偏訓練而未比較。</td><td>結果可能同時包含介面與實作品質差異；不能直接外推到其他模型、硬體或現代 serving stack。</td></tr>
+              <tr><td>風險：保守 reservation</td><td>以每請求 <code>max_tokens</code> 全額預留避免 deadlock。</td><td>若 client 上限遠高於實際生成長度，可能降低可接納 concurrency；本文沒有量化。</td></tr>
+              <tr><td>風險：緊耦合介面</td><td>serving scheduler 與 engine 每 iteration 交握。</td><td>破壞既有 serving／engine 抽象邊界；作者也把通用介面設計列為未來工作。 <a class="source-ref" href="#source-related-p14">§7 · PDF p.14（論文標示 p.533）</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 只要其他領域的模型同樣是 Transformer-based 且採 autoregressive generation，方法可能適用。 <a class="source-ref" href="#source-abstract-p2">§1 · PDF p.3（論文標示 p.522）</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 論文實驗全部是 GPT 型語言模型，故影像／語音生成的適用性仍是作者外推，不能視為實驗事實。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>從 Orca 還能推導哪些排程問題</h2>
+          <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> <strong>可重用設計 1：把 admission boundary 與 execution boundary 對齊。</strong>只要請求天然由多個短步驟組成，讓 scheduler 在每步之間重新判斷，比把整個工作黑箱化更能控制 queueing 與資源浪費；代價是控制面頻率與跨層 API 複雜度增加。</p>
+          <p><strong>可重用設計 2：先找「哪些算子真的需要 batch identity」。</strong>ORCA 沒有因 Attention 形狀不規則就放棄整層 batching，而是把 request boundary 限縮到必需的算子；這是一種把 irregularity containment 在局部的系統化方法。</p>
+          <p><strong>可重用設計 3：admission control 與狀態生命週期必須同設計。</strong>K/V 空間不是可在每個 kernel 後回收的 scratch buffer；若排程器不知道長期狀態成本，就可能接納太多工作而無法完成。Algorithm 1 將 progress guarantee 直接寫進 admission。</p>
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> <strong>延伸方向：</strong>（1）用真實 bursty trace 與 EOS 驗證 p95/p99、TTFT、token 間延遲；（2）把全額 <code>max_tokens</code> reservation 改為可證明不死鎖的增量或優先權式配置，比較 admission 與利用率；（3）對 iteration scheduling、split/merge、Attention fusion、control-plane separation 做完整 factorial ablation；（4）加入多租戶 priority／deadline，在不破壞 starvation safety 下取代單一 FCFS；（5）在不同 interconnect、GPU 世代與模型結構上量測控制面開銷是否重新成為瓶頸。</p>
+        <p>更廣泛地看，ORCA 顯示 inference engine 的效率不能只用單一靜態 batch 的 kernel time 判斷；真正的服務效能取決於到達過程、狀態生命週期、排程粒度與跨裝置 pipeline 共同形成的 latency-throughput frontier。</p>
+<ol>
+          <li>36.9× 的主要來源究竟是 early-finish、late-join、不同 input lengths、跨 worker pipeline，還是 engine implementation？要用哪些最小 ablations 才能分離？</li>
+          <li>以 <code>max_tokens</code> 全額預留雖保證進度，但若使用者普遍高估上限，吞吐損失會多大？能否在不引入 deadlock 的前提下 overbook？</li>
+          <li>iteration-level FCFS 保證早到請求的 iteration 進度不落後；對長 prompt、短 completion 與短 prompt、長 completion 混合時，這是否等價於使用者可接受的公平？</li>
+          <li>只報 median latency/token 是否可能掩蓋 iteration 重排帶來的 tail jitter？若服務 SLO 是 TTFT 與 p99 inter-token latency，scheduler 應如何改寫？</li>
+          <li>ORCA 以緊耦合跨越 serving／engine 抽象邊界。如何設計一個通用 API，既暴露每 iteration 的狀態與資源需求，又不綁死特定 Transformer kernel 實作？</li>
+        </ol>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>排程不變量、接納條件與證據索引</h2>
+          <div class="table-scroll">
+          <table>
+            <tbody>
+              <tr><th scope="row">正式題名</th><td>Orca: A Distributed Serving System for Transformer-Based Generative Models</td></tr>
+              <tr><th scope="row">作者</th><td>Gyeong-In Yu、Joo Seong Jeong、Geon-Woo Kim、Soojeong Kim、Byung-Gon Chun</td></tr>
+              <tr><th scope="row">發表</th><td>16th USENIX Symposium on Operating Systems Design and Implementation（OSDI 22），pp. 521–538，2022</td></tr>
+              <tr><th scope="row">頁數</th><td data-summary-field="pdf-page-count">共 19 頁</td></tr>
+              <tr><th scope="row">正式頁面</th><td><a href="https://www.usenix.org/conference/osdi22/presentation/yu" target="_blank" rel="noopener noreferrer">USENIX OSDI 22 論文頁面</a></td></tr>
+              <tr><th scope="row">分類</th><td>LLM Systems / Inference Serving</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 本文的主要新意落在生成式 Transformer 的線上服務排程、批次執行與排程器—執行引擎協同，而非模型訓練或網路拓撲；因此歸入 LLM Systems / Inference Serving。</p>
+<h3>術語表</h3>
+        <dl class="term-list">
+          <dt>Iteration</dt><dd>一次跑過模型所有 layers 並為每個排程請求產生一個輸出 token；是 ORCA 的排程單位。</dd>
+          <dt>Initiation phase</dt><dd>請求第一次執行，並行處理全部輸入 tokens、產生第一個輸出 token。</dd>
+          <dt>Increment phase</dt><dd>後續逐 token 生成，每輪以先前輸出 token 為輸入並重用歷史 K/V。</dd>
+          <dt>Iteration-level scheduling</dt><dd>engine 每跑一輪就返回 scheduler，允許下一輪重新組 batch。</dd>
+          <dt>Selective batching</dt><dd>非 Attention ops 以 token-wise 扁平矩陣合併；Attention 維持 per-request 邏輯執行後再 merge。</dd>
+          <dt>Attention K/V manager</dt><dd>按請求保存跨 iterations 的 keys／values，直到請求完成才釋放。</dd>
+          <dt><code>max_bs</code></dt><dd>單一 scheduled batch 的 requests 上限；operator 用來取捨 latency 與 throughput。</dd>
+          <dt>K/V slot</dt><dd>儲存單一 token 的 Attention key/value 所需記憶體單位；首次接納按 <code>max_tokens</code> 預留。</dd>
+          <dt>Intra-layer parallelism</dt><dd>切分同一 layer 的矩陣運算與參數到多 GPUs。</dd>
+          <dt>Inter-layer parallelism</dt><dd>把不同 Transformer layers 分配給依序執行的 workers，形成 pipeline。</dd>
+          <dt>Normalized latency</dt><dd>端到端請求延遲除以生成 token 數；本文報其中位數。</dd>
+        </dl>
+        <h3>重點證據索引</h3>
+        <ol class="source-index">
+          <li id="source-abstract-p2"><span><strong>核心問題、兩項技術與 36.9× 摘要主張：</strong>Abstract、§1，PDF pp.2–3（論文標示 pp.521–522）。</span></li>
+          <li id="source-background-p4"><span><strong>自回歸 iteration、initiation／increment 與 K/V 狀態：</strong>§2，PDF p.4（論文標示 p.523），Figure 1。</span></li>
+          <li id="source-challenge-p5"><span><strong>固定 batch 的 early-finished／late-joining 問題：</strong>§3 C1，PDF p.5（論文標示 p.524），Figures 2–3。</span></li>
+          <li id="source-overview-p6"><span><strong>iteration-level scheduling 與 arbitrary batching 挑戰：</strong>§3 S1／C2，PDF p.6（論文標示 p.525），Figure 4。</span></li>
+          <li id="source-selective-p7"><span><strong>flatten、split、per-request Attention、merge 與 K/V manager：</strong>§3 S2，PDF p.7（論文標示 p.526），Figure 5。</span></li>
+          <li id="source-distributed-p8"><span><strong>intra/inter-layer partitions 與 control/data plane：</strong>§4.1，PDF p.8（論文標示 p.527），Figures 6–7。</span></li>
+          <li id="source-scheduler-p9"><span><strong>iteration-level FCFS、<code>max_bs</code> 與 K/V reservation：</strong>§4.2，PDF p.9（論文標示 p.528），Algorithm 1。</span></li>
+          <li id="source-pipeline-p10"><span><strong>跨 batch pipeline、模型配置與 fused kernels：</strong>§4.2–§5，PDF p.10（論文標示 p.529），Figure 8、Table 1。</span></li>
+          <li id="source-eval-p11"><span><strong>硬體、模型、baseline、合成 trace 與 microbenchmark：</strong>§6，PDF p.11（論文標示 p.530）。</span></li>
+          <li id="source-fig9-p12"><span><strong>engine microbenchmark 與最高 47%：</strong>§6.1，PDF p.12（論文標示 p.531），Figure 9。</span></li>
+          <li id="source-fig10-p12"><span><strong>異質端到端評估設定與 normalized latency：</strong>§6.2，PDF p.12（論文標示 p.531），Figure 10。</span></li>
+          <li id="source-result-p13"><span><strong>36.9× 比較點、batch-size 敏感度與同質 trace：</strong>§6.2，PDF p.13（論文標示 p.532），Figures 10–11。</span></li>
+          <li id="source-related-p14"><span><strong>BatchMaker、execution engine 介面限制與結論：</strong>§7–§8，PDF p.14（論文標示 p.533）。</span></li>
+        </ol>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>Orca: A Distributed Serving System for Transformer-Based Generative Models · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>

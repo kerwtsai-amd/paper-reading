@@ -1,76 +1,73 @@
 <!doctype html>
-<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="1.2.0">
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <meta name="paper-summary-template" content="notion-inspired-v1">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
   <meta name="description" content="PrefillOnly 論文深度閱讀：針對單一輸出 token 的 prefill-only 工作負載，分析 hybrid prefilling、suffix KV cache discarding 與 continuous JCT calibration。">
-  <title>PrefillOnly: An Inference Engine for Prefill-only Workloads in Large Language Model Applications｜Paper Reading</title>
+  <title>PrefillOnly: An Inference Engine for Prefill-only Workloads in Large Language Model Applications｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
 
   <style>
     :root {
-      --page: #ffffff;
-      --text: #37352f;
-      --heading: #2f2e2a;
-      --muted: #787774;
-      --subtle: #9b9a97;
-      --line: #e9e9e7;
-      --surface: #f7f6f3;
-      --surface-hover: #efefed;
-      --link: #0b6bcb;
-      --selection: #d9eaf7;
-      --claim-bg: #f3f0ff;
-      --claim-accent: #6940a5;
-      --fact-bg: #edf7ed;
-      --fact-accent: #287d3c;
-      --analysis-bg: #eef5fb;
-      --analysis-accent: #276f9e;
-      --speculation-bg: #fff4e5;
-      --speculation-accent: #a05a00;
-      --content-width: 780px;
-      --toc-width: 232px;
-      --layout-gap: 44px;
-      --radius: 8px;
-      --shadow: 0 1px 2px rgb(15 15 15 / 4%), 0 3px 12px rgb(15 15 15 / 3%);
-      --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
-      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 46rem;
+      --wide: 62rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
     }
 
     *, *::before, *::after { box-sizing: border-box; }
 
     html {
       scroll-behavior: smooth;
-      scroll-padding-top: 28px;
-      background: var(--page);
+      scroll-padding-top: 2rem;
+      background: var(--paper);
     }
 
     body {
       margin: 0;
-      color: var(--text);
-      background: var(--page);
-      font-family: var(--font-sans);
-      font-size: 16.5px;
-      line-height: 1.75;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
       text-rendering: optimizeLegibility;
       -webkit-font-smoothing: antialiased;
     }
 
-    ::selection { background: var(--selection); }
+    ::selection { background: #dbe9f7; }
 
     a {
-      color: var(--link);
+      color: var(--accent);
       text-decoration-thickness: 1px;
-      text-underline-offset: 3px;
+      text-underline-offset: .2em;
       overflow-wrap: anywhere;
     }
 
     a:hover { text-decoration-thickness: 2px; }
 
     :focus-visible {
-      outline: 3px solid rgb(11 107 203 / 34%);
+      outline: 3px solid rgb(36 95 158 / 32%);
       outline-offset: 3px;
-      border-radius: 4px;
     }
 
     img { max-width: 100%; }
@@ -78,520 +75,415 @@
     .skip-link {
       position: fixed;
       z-index: 100;
-      top: 12px;
-      left: 12px;
-      transform: translateY(-160%);
-      padding: 8px 12px;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
       color: #fff;
       background: var(--heading);
-      border-radius: 6px;
       text-decoration: none;
     }
 
     .skip-link:focus { transform: translateY(0); }
 
-    .reading-progress {
-      position: fixed;
-      z-index: 90;
-      inset: 0 0 auto;
-      height: 3px;
-      background: transparent;
-    }
-
-    .reading-progress__bar {
-      display: block;
-      width: 0;
-      height: 100%;
-      background: var(--heading);
-      transition: width 100ms linear;
-    }
-
-    .paper-hero {
-      width: min(calc(100% - 40px), calc(var(--toc-width) + var(--layout-gap) + var(--content-width)));
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
       margin: 0 auto;
-      padding: 68px 0 34px calc(var(--toc-width) + var(--layout-gap));
-      border-bottom: 1px solid var(--line);
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
     }
 
-    .page-icon {
-      display: grid;
-      width: 64px;
-      height: 64px;
-      margin-bottom: 22px;
-      place-items: center;
-      color: #4b4a46;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      box-shadow: var(--shadow);
-      font-size: 32px;
-      line-height: 1;
-    }
-
-    .breadcrumb {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      align-items: center;
-      margin: 0 0 12px;
+    .site-masthead a {
       color: var(--muted);
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: .015em;
-    }
-
-    .breadcrumb span[aria-hidden="true"] { color: var(--subtle); }
-
-    h1, h2, h3, h4 {
-      color: var(--heading);
-      line-height: 1.25;
-      letter-spacing: -.018em;
-    }
-
-    h1 {
-      max-width: 930px;
-      margin: 0;
-      font-size: clamp(2.15rem, 4.5vw, 3.45rem);
-      font-weight: 750;
-      overflow-wrap: anywhere;
-    }
-
-    .paper-byline {
-      max-width: 850px;
-      margin: 15px 0 0;
-      color: var(--muted);
-      font-size: 17px;
-    }
-
-    .properties {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0 28px;
-      max-width: 780px;
-      margin: 30px 0 0;
-      padding: 0;
-    }
-
-    .property {
-      display: grid;
-      grid-template-columns: 112px minmax(0, 1fr);
-      gap: 12px;
-      align-items: baseline;
-      min-width: 0;
-      padding: 9px 0;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .property dt {
-      color: var(--muted);
-      font-size: 13px;
-      font-weight: 600;
-    }
-
-    .property dd {
-      min-width: 0;
-      margin: 0;
-      overflow-wrap: anywhere;
-    }
-
-    .tag {
-      display: inline-flex;
-      align-items: center;
-      min-height: 25px;
-      padding: 2px 9px;
-      color: #4d4c48;
-      background: #e9e9e7;
-      border-radius: 999px;
-      font-size: 12.5px;
-      font-weight: 650;
-      line-height: 1.4;
-    }
-
-    .hero-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 24px;
-    }
-
-    .button-link {
-      display: inline-flex;
-      gap: 8px;
-      align-items: center;
-      min-height: 38px;
-      padding: 7px 12px;
-      color: var(--text);
-      background: var(--page);
-      border: 1px solid #d8d8d5;
-      border-radius: 7px;
-      box-shadow: 0 1px 1px rgb(15 15 15 / 3%);
-      font-size: 14px;
-      font-weight: 600;
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
       text-decoration: none;
-    }
-
-    .button-link:hover { background: var(--surface); }
-
-    .page-layout {
-      display: grid;
-      grid-template-columns: var(--toc-width) minmax(0, var(--content-width));
-      gap: var(--layout-gap);
-      width: min(calc(100% - 40px), calc(var(--toc-width) + var(--layout-gap) + var(--content-width)));
-      margin: 0 auto;
-      padding: 44px 0 88px;
-    }
-
-    .toc-shell { min-width: 0; }
-
-    .toc {
-      position: sticky;
-      top: 28px;
-      max-height: calc(100vh - 56px);
-      overflow: auto;
-      padding-right: 10px;
-      scrollbar-width: thin;
-    }
-
-    .toc__label {
-      margin: 0 0 10px;
-      color: var(--subtle);
-      font-size: 11px;
-      font-weight: 750;
-      letter-spacing: .11em;
       text-transform: uppercase;
     }
 
-    .toc ol {
-      margin: 0;
-      padding: 0;
-      list-style: none;
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
     }
 
-    .toc a {
-      display: grid;
-      grid-template-columns: 25px minmax(0, 1fr);
-      gap: 5px;
-      padding: 5px 7px;
-      color: var(--muted);
-      border-radius: 5px;
-      font-size: 12.5px;
-      line-height: 1.4;
-      text-decoration: none;
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
     }
 
-    .toc a:hover,
-    .toc a[aria-current="location"] {
-      color: var(--text);
-      background: var(--surface);
-    }
-
-    .toc__number {
-      color: var(--subtle);
-      font-variant-numeric: tabular-nums;
-    }
-
-    main { min-width: 0; }
-
-    .reading-note {
-      margin: 0 0 44px;
-      padding: 18px 20px;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-    }
-
-    .reading-note h2 {
-      margin: 0 0 7px;
-      font-size: 15px;
-    }
-
-    .reading-note p,
-    .reading-note ul { margin-top: 7px; margin-bottom: 0; }
-
-    .paper-section {
-      padding: 9px 0 48px;
-      scroll-margin-top: 26px;
-    }
-
-    .paper-section + .paper-section { border-top: 1px solid var(--line); }
-
-    .section-heading {
-      display: grid;
-      grid-template-columns: 34px minmax(0, 1fr);
-      gap: 8px;
-      align-items: baseline;
-      margin: 25px 0 22px;
-    }
-
-    .section-number {
-      color: var(--subtle);
-      font-size: 13px;
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .section-heading h2 {
-      margin: 0;
-      font-size: clamp(1.45rem, 3vw, 1.9rem);
-      font-weight: 720;
-    }
-
-    h3 {
-      margin: 32px 0 10px;
-      font-size: 1.16rem;
-      font-weight: 700;
-    }
-
-    h4 {
-      margin: 25px 0 8px;
-      font-size: 1rem;
-      font-weight: 700;
-    }
-
-    p { margin: 0 0 1em; }
-
-    ul, ol { padding-left: 1.45em; }
-    li + li { margin-top: .32em; }
-
-    strong { color: var(--heading); }
-
-    .lead {
+    h1, h2, h3, h4 {
       color: var(--heading);
-      font-size: 1.17rem;
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
       line-height: 1.7;
     }
 
-    .muted { color: var(--muted); }
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
 
-    .statement {
-      margin: 20px 0;
-      padding: 15px 18px 15px 20px;
-      border: 1px solid transparent;
-      border-left-width: 4px;
-      border-radius: var(--radius);
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
     }
 
-    .statement p:last-child { margin-bottom: 0; }
-
-    .statement__label {
-      display: block;
-      margin-bottom: 5px;
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: .055em;
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
     }
 
-    .statement--claim {
-      background: var(--claim-bg);
-      border-color: #ded5f0;
-      border-left-color: var(--claim-accent);
-    }
-    .statement--claim .statement__label { color: var(--claim-accent); }
-
-    .statement--fact {
-      background: var(--fact-bg);
-      border-color: #cfe7d2;
-      border-left-color: var(--fact-accent);
-    }
-    .statement--fact .statement__label { color: var(--fact-accent); }
-
-    .statement--analysis {
-      background: var(--analysis-bg);
-      border-color: #d0e1ee;
-      border-left-color: var(--analysis-accent);
-    }
-    .statement--analysis .statement__label { color: var(--analysis-accent); }
-
-    .statement--speculation {
-      background: var(--speculation-bg);
-      border-color: #efdabc;
-      border-left-color: var(--speculation-accent);
-    }
-    .statement--speculation .statement__label { color: var(--speculation-accent); }
-
-    .source-ref {
-      display: inline-flex;
-      align-items: center;
-      min-height: 23px;
-      margin: 2px 2px 2px 0;
-      padding: 2px 8px;
-      color: #5c5b57;
-      background: rgb(255 255 255 / 72%);
-      border: 1px solid rgb(55 53 47 / 16%);
-      border-radius: 999px;
-      font-family: var(--font-mono);
-      font-size: 11.5px;
-      line-height: 1.35;
-      text-decoration: none;
-      vertical-align: .08em;
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
     }
 
-    .source-ref:hover { background: #fff; }
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
 
-    .key-grid {
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      margin: 20px 0;
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
     }
 
-    .key-card {
-      min-width: 0;
-      padding: 15px 16px;
-      background: var(--page);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-    }
-
-    .key-card__eyebrow {
-      margin: 0 0 5px;
+    .article-toc a {
       color: var(--muted);
-      font-size: 11px;
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
       font-weight: 800;
       letter-spacing: .08em;
       text-transform: uppercase;
     }
 
+    .takeaway-item p:last-child,
     .key-card p:last-child { margin-bottom: 0; }
 
     figure {
-      margin: 30px 0;
-      padding: 10px;
-      background: #fbfbfa;
-      border: 1px solid var(--line);
-      border-radius: 10px;
+      margin: 2.2rem 0 2.5rem;
     }
 
-    figure > a {
-      display: block;
-      line-height: 0;
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
     }
+
+    figure > a { display: block; line-height: 0; }
 
     figure img {
       display: block;
       width: 100%;
       height: auto;
       background: #fff;
-      border-radius: 6px;
     }
 
     figcaption {
-      padding: 11px 5px 4px;
+      margin-top: .7rem;
       color: var(--muted);
-      font-size: 13.5px;
-      line-height: 1.55;
+      font-size: .78rem;
+      line-height: 1.65;
     }
 
-    figcaption strong { color: var(--text); }
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
 
-    .reading-guide {
-      display: block;
-      margin-top: 5px;
-      color: var(--text);
-    }
+    .reading-guide { display: inline; margin-left: .45rem; }
 
     .formula-block {
-      margin: 22px 0;
-      padding: 18px 20px;
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
       overflow-x: auto;
-      background: #fbfbfa;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
+      border-block: 1px solid var(--line);
     }
 
     .formula-block__meaning {
-      margin-top: 12px;
+      margin: .85rem 0 0;
       color: var(--muted);
-      font-size: 14px;
+      font-size: .84rem;
     }
 
     .table-scroll {
       max-width: 100%;
-      margin: 22px 0;
+      margin: 1.8rem 0;
       overflow-x: auto;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
+      border-top: 1px solid var(--line);
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 14px;
-      line-height: 1.5;
+      font-size: .83rem;
+      line-height: 1.58;
     }
 
     caption {
-      padding: 12px 14px;
+      padding: .65rem 0;
       color: var(--muted);
-      background: var(--surface);
       border-bottom: 1px solid var(--line);
-      font-size: 12.5px;
+      font-size: .75rem;
       text-align: left;
     }
 
     th, td {
-      min-width: 118px;
-      padding: 10px 12px;
-      border-right: 1px solid var(--line);
+      min-width: 7rem;
+      padding: .7rem .65rem;
       border-bottom: 1px solid var(--line);
       text-align: left;
       vertical-align: top;
     }
 
-    tr:last-child > * { border-bottom: 0; }
-    tr > *:last-child { border-right: 0; }
-    th { color: var(--heading); background: #fbfbfa; font-weight: 700; }
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
 
-    code, pre { font-family: var(--font-mono); }
+    code, pre { font-family: var(--mono); }
 
     :not(pre) > code {
-      padding: .12em .32em;
-      color: #c7254e;
-      background: #f7f6f3;
-      border-radius: 4px;
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
       font-size: .9em;
     }
 
     pre {
       max-width: 100%;
-      margin: 22px 0;
-      padding: 16px 18px;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
       overflow: auto;
-      color: #383a42;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      font-size: 13px;
-      line-height: 1.6;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
       tab-size: 2;
     }
 
     blockquote {
-      margin: 20px 0;
-      padding: 2px 0 2px 18px;
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
       color: var(--muted);
-      border-left: 3px solid #d3d3d0;
+      border-left: 3px solid #c9ccd2;
     }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
 
     .term-list {
       display: grid;
-      grid-template-columns: minmax(140px, .75fr) minmax(0, 2fr);
-      margin: 20px 0;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
       border-top: 1px solid var(--line);
     }
 
     .term-list dt,
     .term-list dd {
       margin: 0;
-      padding: 11px 8px;
+      padding: .65rem .4rem;
       border-bottom: 1px solid var(--line);
     }
 
     .term-list dt { color: var(--heading); font-weight: 700; }
 
     .source-index {
-      margin: 20px 0;
+      margin: 1.5rem 0;
       padding-left: 0;
       list-style: none;
       counter-reset: source;
@@ -599,126 +491,60 @@
 
     .source-index li {
       display: grid;
-      grid-template-columns: 30px minmax(0, 1fr);
-      gap: 8px;
-      padding: 9px 0;
-      border-bottom: 1px solid var(--line);
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
       counter-increment: source;
     }
 
     .source-index li::before {
+      color: var(--faint);
       content: counter(source, decimal-leading-zero);
-      color: var(--subtle);
-      font-family: var(--font-mono);
-      font-size: 12px;
+      font-family: var(--mono);
+      font-size: .7rem;
     }
 
     .page-footer {
-      width: min(calc(100% - 40px), var(--content-width));
-      margin: 0 auto;
-      padding: 25px 0 45px;
-      color: var(--subtle);
-      border-top: 1px solid var(--line);
-      font-size: 12px;
-      text-align: center;
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
     }
 
-    @media (max-width: 1099px) {
-      .paper-hero {
-        width: min(calc(100% - 48px), var(--content-width));
-        padding: 56px 0 30px;
-      }
-
-      .page-layout {
-        display: block;
-        width: min(calc(100% - 48px), var(--content-width));
-        padding-top: 28px;
-      }
-
-      .toc {
-        position: static;
-        max-height: none;
-        margin-bottom: 44px;
-        padding: 15px;
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-      }
-
-      .toc ol { columns: 2; column-gap: 18px; }
-      .toc li { break-inside: avoid; }
-    }
-
-    @media (max-width: 699px) {
-      body { font-size: 16px; }
-
-      .paper-hero,
-      .page-layout,
-      .page-footer { width: min(calc(100% - 30px), var(--content-width)); }
-
-      .paper-hero { padding-top: 38px; }
-      .page-icon { width: 54px; height: 54px; font-size: 27px; }
-
-      .properties,
-      .key-grid { grid-template-columns: 1fr; }
-
-      .property { grid-template-columns: 96px minmax(0, 1fr); }
-      .toc ol { columns: 1; }
-      .section-heading { grid-template-columns: 29px minmax(0, 1fr); }
-      .paper-section { padding-bottom: 38px; }
-      .statement { padding-right: 14px; padding-left: 15px; }
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
       .term-list { grid-template-columns: 1fr; }
-      .term-list dt { padding-bottom: 2px; border-bottom: 0; }
-      .term-list dd { padding-top: 2px; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
     }
 
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
-      *, *::before, *::after { transition-duration: .01ms !important; }
     }
 
     @media print {
-      @page { size: A4; margin: 15mm 14mm 17mm; }
-
-      .skip-link,
-      .reading-progress,
-      .toc-shell,
-      .screen-only { display: none !important; }
-
-      body {
-        color: #000;
-        background: #fff;
-        font-size: 10.5pt;
-      }
-
-      .paper-hero,
-      .page-layout,
-      .page-footer {
-        display: block;
-        width: 100%;
-        margin: 0;
-        padding-right: 0;
-        padding-left: 0;
-      }
-
-      .paper-hero { padding-top: 0; }
-      .page-icon { box-shadow: none; }
-      .button-link { box-shadow: none; }
-      .button-link::after { content: " (" attr(href) ")"; font-weight: 400; }
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
       a { color: #000; }
-
-      figure,
-      table,
-      pre,
-      .statement,
-      .formula-block,
-      .key-card { break-inside: avoid; }
-
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
       h2, h3, h4 { break-after: avoid; }
       img { max-width: 100%; height: auto; }
       p { orphans: 3; widows: 3; }
-      .statement { background: #fff !important; border-color: #777 !important; }
-      .source-ref { background: #fff; border-color: #999; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
     }
   </style>
 
@@ -741,148 +567,61 @@
 <body>
   <!-- generated-from: html template/summary-template.html -->
   <a class="skip-link" href="#main-content">跳至正文</a>
-  <div class="reading-progress screen-only" aria-hidden="true"><span class="reading-progress__bar"></span></div>
 
-  <header class="paper-hero">
-    <div class="page-icon" aria-hidden="true">▤</div>
-    <p class="breadcrumb">
-      <span>Paper Reading</span>
-      <span aria-hidden="true">/</span>
-      <span>LLM Systems</span>
-      <span aria-hidden="true">/</span>
-      <span>Inference Serving</span>
-    </p>
-    <h1>PrefillOnly: An Inference Engine for Prefill-only Workloads in Large Language Model Applications</h1>
-    <p class="paper-byline">Kuntai Du, Bowen Wang, Chen Zhang, Yiming Cheng, Qing Lan, Hejian Sang, Yihua Cheng, Jiayi Yao, Xiaoxuan Liu, Yifan Qiao, Ion Stoica, Junchen Jiang</p>
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
 
-    <dl class="properties">
-      <div class="property">
-        <dt>發表資訊</dt>
-        <dd>ACM SOSP ’25（pp. 399–414）· arXiv:2505.07203v1</dd>
-      </div>
-      <div class="property">
-        <dt>年份</dt>
-        <dd>2025</dd>
-      </div>
-      <div class="property">
-        <dt>分類</dt>
-        <dd><span class="tag">LLM Systems / Inference Serving</span></dd>
-      </div>
-      <div class="property">
-        <dt>摘要更新</dt>
-        <dd><time datetime="2026-09-08">2026-09-08</time></dd>
-      </div>
-    </dl>
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">LLM Systems / Inference Serving</p>
+      <h1>PrefillOnly: An Inference Engine for Prefill-only Workloads in Large Language Model Applications</h1>
+      <div class="paper-dek" data-section-role="thesis"><p class="lead">當應用保證每個長輸入請求只輸出一個 token，PrefillOnly 便以混合預填充（hybrid prefilling）降低多層感知器（Multilayer Perceptron, MLP）暫存張量峰值、保留 prefix 而丟棄 suffix 鍵值快取（key-value cache, KV cache），並按最新 cache state 重算工作完成時間（Job Completion Time, JCT）後逐請求排程；在兩個合成 workload 上，作者報告其可在平均與 P99 latency 不高於 baselines 時承受 1.4–4.0× 的每秒查詢數（queries per second, QPS）。<a class="source-ref" href="#source-abstract-p1">Abstract · PDF p.1</a><a class="source-ref" href="#source-eval-results-p10-p12">§7, §7.2 · PDF pp.8, 10–12 · Fig. 6–10</a></p></div>
+      <p class="paper-byline">Kuntai Du, Bowen Wang, Chen Zhang, Yiming Cheng, Qing Lan, Hejian Sang, Yihua Cheng, Jiayi Yao, Xiaoxuan Liu, Yifan Qiao, Ion Stoica, Junchen Jiang</p>
+      <p class="paper-meta">
+        <span>ACM SOSP ’25（pp. 399–414）· arXiv:2505.07203v1</span>
+        <span>2025</span>
+        <span>LLM Systems / Inference Serving</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-08">2026-09-08</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://doi.org/10.1145/3731569.3764834" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="PrefillOnly-2505.07203.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
 
-    <div class="hero-actions">
-      <a class="button-link" href="https://doi.org/10.1145/3731569.3764834" target="_blank" rel="noopener noreferrer">↗ 論文頁面</a>
-      <a class="button-link" href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">↓ 開啟本地 PDF</a>
-    </div>
-  </header>
-
-  <div class="page-layout">
-    <aside class="toc-shell">
-      <nav class="toc" aria-label="文章目錄">
-        <p class="toc__label">Contents</p>
-        <ol>
-          <li><a href="#paper-info"><span class="toc__number">01</span><span>論文基本資料</span></a></li>
-          <li><a href="#one-sentence-summary"><span class="toc__number">02</span><span>一句話總結</span></a></li>
-          <li><a href="#executive-summary"><span class="toc__number">03</span><span>Executive Summary</span></a></li>
-          <li><a href="#background-motivation"><span class="toc__number">04</span><span>背景與動機</span></a></li>
-          <li><a href="#problem-definition"><span class="toc__number">05</span><span>問題定義</span></a></li>
-          <li><a href="#core-method"><span class="toc__number">06</span><span>核心方法</span></a></li>
-          <li><a href="#formulas-theory"><span class="toc__number">07</span><span>公式與理論</span></a></li>
-          <li><a href="#figures-guide"><span class="toc__number">08</span><span>圖片與圖表導讀</span></a></li>
-          <li><a href="#experimental-setup"><span class="toc__number">09</span><span>實驗設計</span></a></li>
-          <li><a href="#experimental-results"><span class="toc__number">10</span><span>實驗結果</span></a></li>
-          <li><a href="#ablation-sensitivity"><span class="toc__number">11</span><span>Ablation 與敏感度</span></a></li>
-          <li><a href="#strengths-limitations-risks"><span class="toc__number">12</span><span>優點、限制與風險</span></a></li>
-          <li><a href="#related-work"><span class="toc__number">13</span><span>與相關工作的比較</span></a></li>
-          <li><a href="#personal-analysis"><span class="toc__number">14</span><span>個人分析與延伸</span></a></li>
-          <li><a href="#discussion-questions"><span class="toc__number">15</span><span>組會討論問題</span></a></li>
-          <li><a href="#glossary-index"><span class="toc__number">16</span><span>術語表與重點索引</span></a></li>
-        </ol>
-      </nav>
-    </aside>
-
-    <main id="main-content">
-      <aside class="reading-note" aria-labelledby="reading-note-title">
-        <h2 id="reading-note-title">優先閱讀</h2>
-        <ol>
-          <li><a href="#core-method">核心方法</a>：先掌握 hybrid prefilling、suffix KV cache discarding 與 continuous JCT calibration 如何互相支撐。</li>
-          <li><a href="#experimental-results">實驗結果</a>：辨認「最高 4× QPS」成立的負載區間，以及低 QPS 時 tensor parallel 的優勢。</li>
-          <li><a href="#strengths-limitations-risks">優點、限制與風險</a>：特別留意兩個模擬 workload、單 token 假設與原文的數值／偽程式碼不一致。</li>
-        </ol>
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀路線：</strong>先用〈<a href="#problem">Decode-centric Engine 如何誤配 Prefill-only 工作負載</a>〉抓住根因，再讀〈<a href="#method">Hybrid Prefilling、Suffix KV 丟棄與 Cache-aware JCT</a>〉走完整流程，最後用〈<a href="#evidence">容量、P99、公平性與 7.9× MIL 的因果拆解</a>〉逐項驗證。熟悉背景的讀者可直接從問題章開始。</p>
       </aside>
 
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">Prefill、MIL、暫存記憶體與 Prefix Locality</a></li>
+            <li><a href="#problem">Decode-centric Engine 如何誤配 Prefill-only 工作負載</a></li>
+            <li><a href="#insight">只輸出一個 Token，為什麼仍需要專用推論引擎</a></li>
+            <li><a href="#method">Hybrid Prefilling、Suffix KV 丟棄與 Cache-aware JCT</a></li>
+            <li><a href="#evidence">容量、P99、公平性與 7.9× MIL 的因果拆解</a></li>
+            <li><a href="#critique">工作負載契約、缺失消融與 Locality–Fairness 取捨</a></li>
+            <li><a href="#extensions">專用 Prefill Engine 還能往哪裡走</a></li>
+            <li><a href="#reference">排程分數、記憶體尺度與來源索引</a></li>
+          </ol>
+        </nav>
+      </details>
+
       <!--
-        可重用元件：
-        作者主張：<aside class="statement statement--claim" data-kind="author-claim"><span class="statement__label">作者主張</span><p>...</p></aside>
-        實驗事實：<aside class="statement statement--fact" data-kind="experimental-fact"><span class="statement__label">實驗事實</span><p>...</p></aside>
-        分析：<aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>...</p></aside>
-        推測：<aside class="statement statement--speculation" data-kind="speculation"><span class="statement__label">推測</span><p>...</p></aside>
-        來源：<a class="source-ref" href="#source-fig3-p7">§4.2 · PDF p.7 · Fig. 3</a>
-        圖片：src 與 href 僅用 assets/images/...。固定格式：<figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>...</span></figcaption>。來源標籤只顯示 Figure／Table／Algorithm 與原編號，不加「原論文」、句點、頁碼、來源敘述或產製資訊；頁碼放正文來源標記或重點索引。
-        基本資料頁數欄固定寫法：<td data-summary-field="pdf-page-count">共 N 頁</td>（也可使用 dd）；完成頁面中必須恰有一個此 marker。
-        禁止把頁碼 offset 檢查、檔名／路徑處理、PDF signature／hash、下載／解析／裁圖工具或 QA 過程寫進讀者可見內容。
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
       -->
 
-      <section id="paper-info" class="paper-section">
-        <div class="section-heading"><span class="section-number">01</span><h2>論文基本資料</h2></div>
-        <dl class="term-list">
-          <dt>正式標題</dt>
-          <dd>PrefillOnly: An Inference Engine for Prefill-only Workloads in Large Language Model Applications</dd>
-          <dt>作者</dt>
-          <dd>Kuntai Du、Bowen Wang、Chen Zhang、Yiming Cheng、Qing Lan、Hejian Sang、Yihua Cheng、Jiayi Yao、Xiaoxuan Liu、Yifan Qiao、Ion Stoica、Junchen Jiang</dd>
-          <dt>正式發表</dt>
-          <dd>Proceedings of the ACM SIGOPS 31st Symposium on Operating Systems Principles（SOSP ’25），2025，pp. 399–414；DOI <a href="https://doi.org/10.1145/3731569.3764834" target="_blank" rel="noopener noreferrer">10.1145/3731569.3764834</a>。<a class="source-ref" href="#source-sosp">SOSP 2025 accepted papers</a></dd>
-          <dt>本次閱讀版本</dt>
-          <dd><a href="https://arxiv.org/abs/2505.07203" target="_blank" rel="noopener noreferrer">arXiv:2505.07203v1</a>（cs.DC，2025-05-12 提交）。<a class="source-ref" href="#source-arxiv">arXiv metadata</a></dd>
-          <dt>頁數</dt>
-          <dd data-summary-field="pdf-page-count">共 15 頁</dd>
-          <dt>分類</dt>
-          <dd><span class="tag">LLM Systems</span> <span class="tag">Inference Serving</span></dd>
-          <dt>本地 PDF</dt>
-          <dd><a href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">開啟本地 PDF</a></dd>
-        </dl>
-        <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析：分類理由</span>
-          <p>論文的主要貢獻位於 LLM serving engine：它改寫 prefill 的 GPU 記憶體生命週期，並加入 prefix-cache-aware 的線上排程。推薦與信用驗證只是用來具體化 workload，並非模型品質或應用演算法貢獻；而「KV cache」也不足以涵蓋另一半的 JCT-aware scheduling，因此歸入 <strong>LLM Systems / Inference Serving</strong>。</p>
-        </aside>
-      </section>
-
-      <section id="one-sentence-summary" class="paper-section">
-        <div class="section-heading"><span class="section-number">02</span><h2>一句話總結</h2></div>
-        <p class="lead">當應用保證每個長輸入請求只輸出一個 token，PrefillOnly 便以混合預填充（hybrid prefilling）降低多層感知器（Multilayer Perceptron, MLP）暫存張量峰值、保留 prefix 而丟棄 suffix 鍵值快取（key-value cache, KV cache），並按最新 cache state 重算工作完成時間（Job Completion Time, JCT）後逐請求排程；在兩個合成 workload 上，作者報告其可在平均與 P99 latency 不高於 baselines 時承受 1.4–4.0× 的每秒查詢數（queries per second, QPS）。<a class="source-ref" href="#source-abstract-p1">Abstract · PDF p.1</a><a class="source-ref" href="#source-eval-results-p10-p12">§7, §7.2 · PDF pp.8, 10–12 · Fig. 6–10</a></p>
-      </section>
-
-      <section id="executive-summary" class="paper-section">
-        <div class="section-heading"><span class="section-number">03</span><h2>Executive Summary</h2></div>
-        <ol>
-          <li><strong>問題：</strong>推薦、信用驗證等判別式應用可能送入數萬 tokens，卻只需一個候選 token；一般 serving engine 仍按任意長度生成來保存所有層 KV，排程也不利用固定輸出長度。</li>
-          <li><strong>根因：</strong>即使丟棄 KV，token 數成比例放大的 MLP intermediates 仍製造峰值；同時 prefix cache 的建立與逐出會持續改變每個等待請求的實際工作量。</li>
-          <li><strong>關鍵洞察：</strong>只切沿 token 可獨立計算的 non-attention path，便能控制暫存張量而不切 attention；單 token contract 又允許 suffix KV 不再為本次請求的後續 decode 保留。</li>
-          <li><strong>方法：</strong>hybrid prefilling、suffix KV cache discarding 與 continuous JCT calibration 分別處理 working-set peak、跨請求 reuse、cache-dependent scheduling。</li>
-          <li><strong>證據：</strong>作者以 4 種雙 NVIDIA GPU／模型組態、2 個合成 workload 比較 4 個 baselines；headline 是 1.4–4.0× 可承受 QPS，A100/Qwen-32B FP8 的最大輸入長度（Maximum Input Length, MIL）為 87k，而 PagedAttention 為 11k、Chunked Prefill 為 17k。<a class="source-ref" href="#source-eval-results-p10-p12">§7 · PDF pp.8–12 · Table 2, Fig. 6–10</a></li>
-          <li><strong>邊界：</strong>未測 production trace、混合生成 workload、模型品質、能耗或成本；graph rewrite 的通用性、scheduler overhead 與 cache policy 細節也未充分揭露。</li>
-        </ol>
-        <aside class="statement statement--claim" data-kind="author-claim">
-          <span class="statement__label">作者主張</span>
-          <p>單 token 輸出讓大部分本次請求產生的 KV 不再被 decode 重用，也讓工作量比任意長度生成更可預測，因而同時打開記憶體與排程兩個優化空間。<a class="source-ref" href="#source-intro-p1-p2">§1 · PDF pp.1–2</a></p>
-        </aside>
-        <aside class="statement statement--fact" data-kind="experimental-fact">
-          <span class="statement__label">實驗事實</span>
-          <p>在作者的模擬 recommendation 與 credit-verification workloads 上，PrefillOnly 的可承受 QPS 為 baseline 的 1.4–4.0×；A100/Qwen-32B FP8 的 maximum input length（MIL）由 vanilla vLLM 的 11k 增至 87k tokens。<a class="source-ref" href="#source-eval-results-p10-p12">§7 · PDF pp.8–12 · Table 2, Fig. 6–10</a></p>
-        </aside>
-        <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析</span>
-          <p>這篇工作的價值不是把一般生成式 serving 全面加速，而是示範：應用若能提供更強的輸出長度 contract，engine 就能安全改寫 tensor lifetime、KV retention 與 request order；相對地，contract 一旦放寬，多數收益都必須重新驗證。</p>
-        </aside>
-      </section>
-
-      <section id="background-motivation" class="paper-section">
-        <div class="section-heading"><span class="section-number">04</span><h2>背景與動機</h2></div>
-        <p class="lead">只需四個前置概念：prefill 與 decode 的分工、短命 activation 與可重用 KV 的差別、prefix hit 如何改變剩餘工作量，以及 compute-bound prefill 為何不像 decode 那樣從 batching 獲益。它們會直接推導下一節的四項系統需求。</p>
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>Prefill、MIL、暫存記憶體與 Prefix Locality</h2>
+          <p class="lead">只需四個前置概念：prefill 與 decode 的分工、短命 activation 與可重用 KV 的差別、prefix hit 如何改變剩餘工作量，以及 compute-bound prefill 為何不像 decode 那樣從 batching 獲益。它們會直接推導下一節的四項系統需求。</p>
 
         <h3>最小前置地圖</h3>
         <div class="table-scroll">
@@ -900,26 +639,19 @@
 
         <h3>可觀察症狀：輸出短，engine 卻仍按長生成設計</h3>
         <p>推薦、信用驗證與資料標註可把 sampling vocabulary 限制為少數 labels；例如只允許 <code>Yes</code>/<code>No</code>，以 \(P(\texttt{Yes})\) 作 score。輸出雖只有一個 token，使用者歷史或信用紀錄仍可形成數萬-token prompt。<a class="source-ref" href="#source-motivation-p3-p4">§2.3–2.4 · PDF pp.3–4</a></p>
-        <aside class="statement statement--claim" data-kind="author-claim">
-          <span class="statement__label">作者主張</span>
-          <p>此類 workload 值得使用專用 GPU，因為與一般生成流量混跑會讓 decode 更常與 prefill 同 batch，抬高生成工作的平均與 P99 time-per-output-token；推薦流量本身也可能達每秒數萬 queries。這是動機與容量估計，不是本文的 production trace 實驗。<a class="source-ref" href="#source-motivation-p3-p4">§2.4 · PDF p.4</a></p>
-        </aside>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 此類 workload 值得使用專用 GPU，因為與一般生成流量混跑會讓 decode 更常與 prefill 同 batch，抬高生成工作的平均與 P99 time-per-output-token；推薦流量本身也可能達每秒數萬 queries。這是動機與容量估計，不是本文的 production trace 實驗。<a class="source-ref" href="#source-motivation-p3-p4">§2.4 · PDF p.4</a></p>
 
         <h3>根因與最近方案的缺口</h3>
-        <aside class="statement statement--fact" data-kind="experimental-fact">
-          <span class="statement__label">實驗事實</span>
-          <p>Llama-3.1-8B 的 100k-token request 約需 12 GB KV；A100 40 GB、Qwen-32B FP8 的 PagedAttention MIL 為 11k tokens。把 20k-token input 以 512-token chunks 做一般 chunked prefill，作者量得 end-to-end throughput 下降 14%，MIL 增幅仍不到 2×；只丟棄 active-layer KV，在 L4/Llama-3.1-8B 也僅得到 1.6× MIL。<a class="source-ref" href="#source-motivation-p3-p5">§2.1, §2.5–2.6 · PDF pp.3–5</a></p>
-        </aside>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> Llama-3.1-8B 的 100k-token request 約需 12 GB KV；A100 40 GB、Qwen-32B FP8 的 PagedAttention MIL 為 11k tokens。把 20k-token input 以 512-token chunks 做一般 chunked prefill，作者量得 end-to-end throughput 下降 14%，MIL 增幅仍不到 2×；只丟棄 active-layer KV，在 L4/Llama-3.1-8B 也僅得到 1.6× MIL。<a class="source-ref" href="#source-motivation-p3-p5">§2.1, §2.5–2.6 · PDF pp.3–5</a></p>
         <p>這些觀察揭示兩個根因：峰值不只由 KV 構成，linear/MLP intermediates 也很大；完整 chunking 雖壓低當下 activation，卻迫使 engine 保存前面 chunks 的多層 KV，還降低 attention kernel 效率。跨 GPU 的 tensor parallel（TP）與 pipeline parallel（PP）可容納更長 input，但分別引入 all-reduce 與 variable-length pipeline bubbles。<a class="source-ref" href="#source-motivation-p3-p5">§2.5–2.6 · PDF pp.4–5</a></p>
-        <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析：通往問題定義的橋</span>
-          <p>因此目標不是單純「少存 KV」：系統必須同時壓低短命 activation、維持完整 attention 效率、保留跨請求 prefix reuse，並在 cache state 改變時更新 request priority。下一節把這四個必要條件定義為 R1–R4。</p>
-        </aside>
-      </section>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 因此目標不是單純「少存 KV」：系統必須同時壓低短命 activation、維持完整 attention 效率、保留跨請求 prefix reuse，並在 cache state 改變時更新 request priority。下一節把這四個必要條件定義為 R1–R4。</p>
+<p class="bridge">有了這些背景，下一個問題是：Decode-centric Engine 如何誤配 Prefill-only 工作負載</p>
+        </section>
 
-      <section id="problem-definition" class="paper-section">
-        <div class="section-heading"><span class="section-number">05</span><h2>問題定義</h2></div>
-        <h3>作者的 workload contract 與系統目標</h3>
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>Decode-centric Engine 如何誤配 Prefill-only 工作負載</h2>
+          <h3>作者的 workload contract 與系統目標</h3>
         <dl class="term-list">
           <dt>輸入</dt>
           <dd>長 prompt、固定模型／硬體組態，以及可接受的單-token label 集合；請求 \(r\) 有 \(n_{\text{input}}\) 個 tokens，其中當下有 \(n_{\text{cached}}\) 個 prefix tokens 可命中 cache。</dd>
@@ -935,7 +667,7 @@
         <h3>由失敗機制推導的需求</h3>
         <div class="table-scroll">
           <table>
-            <caption>每項 requirement 都在 Section 06 對應一個明確機制。</caption>
+          <caption>每項 requirement 都在後文的方法章對應一個明確機制。</caption>
             <thead><tr><th>症狀與根因</th><th>最近方案為何不夠</th><th>導出的成功條件</th></tr></thead>
             <tbody>
               <tr><td>KV 丟掉後，MLP intermediates 仍主導 peak memory。</td><td>Naive KV discard 只帶來 1.6× MIL。<a class="source-ref" href="#source-motivation-p3-p5">§2.6 · PDF p.5</a></td><td><strong>R1 Working-set：</strong>暫存張量必須只隨 chunk 大小、而非完整 input 長度成長。</td></tr>
@@ -945,10 +677,7 @@
             </tbody>
           </table>
         </div>
-        <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析：形式化邊界</span>
-          <p>「JCT 是 deterministic」較精確的解讀是：在固定模型／硬體與當下 cache state 下，<em>service work</em> 比任意長度生成更可預測；實際 end-to-end completion time 仍受 queue、cache eviction 與 contention 影響，所以系統實際使用 estimator／proxy，而不是精確閉式解。<a class="source-ref" href="#source-scheduler-p7-p8">§6.3 · PDF p.8</a></p>
-        </aside>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 「JCT 是 deterministic」較精確的解讀是：在固定模型／硬體與當下 cache state 下，<em>service work</em> 比任意長度生成更可預測；實際 end-to-end completion time 仍受 queue、cache eviction 與 contention 影響，所以系統實際使用 estimator／proxy，而不是精確閉式解。<a class="source-ref" href="#source-scheduler-p7-p8">§6.3 · PDF p.8</a></p>
         <h3>假設、約束與不在範圍內的情況</h3>
         <ul>
           <li>輸出必須恰為一個 tokenizer token；多 token label、chain-of-thought 或 structured generation 不在範圍內。</li>
@@ -956,11 +685,47 @@
           <li>評估將 prefill-only 與 generative workloads 分開部署；本文沒有處理混合 workload interference。</li>
           <li>方法需要 non-attention computation 沿 token 維度可分離，且 graph／buffer liveness 允許安全的 preallocation 與 in-place reuse；論文只在三個 dense LLM families 上評估。</li>
         </ul>
-      </section>
+<div class="table-scroll">
+          <table>
+            <caption>技術路線比較；只有 PagedAttention、Chunked Prefill、TP、PP 是本文實驗 baselines。</caption>
+            <thead><tr><th>路線／代表工作</th><th>主要優化</th><th>與 PrefillOnly 的差異與取捨</th></tr></thead>
+            <tbody>
+              <tr><td>Orca、vLLM / PagedAttention</td><td>Continuous batching；token-granularity KV paging，提升一般 autoregressive decode throughput。</td><td>假設輸出長度不定，必須保留 decode 所需的所有層 KV；PrefillOnly 利用單 token contract 縮短 suffix KV lifetime，且不用 batching。</td></tr>
+              <tr><td>DistServe</td><td>把 prefill 與 decode 分離到不同 GPUs，以 TTFT／TPOT SLO 提升 goodput。</td><td>本文只測專用 prefill-only workload；作者推測可把 PrefillOnly 放到 disaggregated prefill node，但沒有實作／評估。</td></tr>
+              <tr><td>Sarathi-Serve / Chunked Prefill</td><td>把 prefill 分 chunk，以改善排程或容納長 input。</td><td>一般 chunking 也切 attention，必須保存前 chunks 的多層 KV 且可能降低 kernel 效率；PrefillOnly 只切 token-wise non-attention path。</td></tr>
+              <tr><td>Tensor / Pipeline Parallel</td><td>跨 GPU 分散模型／計算以提高 MIL 或降低低負載單請求 latency。</td><td>TP 有 all-reduce、PP 有 bubbles；PrefillOnly 以單 GPU instance 避免通訊，偏向 high-QPS throughput，但絕對 MIL 不一定最高。</td></tr>
+              <tr><td>CacheGen、CacheBlend、KV compression</td><td>壓縮／串流 KV，或融合非 prefix cache 以減少載入與重算。</td><td>PrefillOnly 不改 KV 內容，作者認為可相容；但本文沒有整合測試。</td></tr>
+              <tr><td>LMCache / CPU offload</td><td>將 KV 放到 GPU 之外的 tier。</td><td>可避免 suffix discard 犧牲未來 reuse；本文僅列 future work。</td></tr>
+              <tr><td>PyTorch 2；Tiresias、Optimus 等傳統 DL systems</td><td>前者以 graph compilation 消除不必要 tensors；後兩者依 JCT 排程。</td><td>LLM 特有之處是大型 token-wise MLP intermediates，以及 JCT 會隨 prefix cache hit 動態改變。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-related-p12">§8 · PDF p.12</a><a class="source-ref" href="#source-discussion-p12-p13">§9 · PDF pp.12–13</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> PrefillOnly 與「更快 attention kernel」並非互斥；它主要改變 operator placement、tensor lifetime 與 request order。最有價值的比較對象應是同樣針對長 prefill、開啟 prefix caching、且以相同 GPU budget 運作的系統，而不是一般 decode-heavy serving。</p>
+<p class="bridge">問題的限制已經清楚；接著要抓住作者最關鍵的轉念。</p>
+        </section>
 
-      <section id="core-method" class="paper-section">
-        <div class="section-heading"><span class="section-number">06</span><h2>核心方法</h2></div>
-        <h3>先走一次端到端請求</h3>
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>只輸出一個 Token，為什麼仍需要專用推論引擎</h2>
+          <ol>
+          <li><strong>問題：</strong>推薦、信用驗證等判別式應用可能送入數萬 tokens，卻只需一個候選 token；一般 serving engine 仍按任意長度生成來保存所有層 KV，排程也不利用固定輸出長度。</li>
+          <li><strong>根因：</strong>即使丟棄 KV，token 數成比例放大的 MLP intermediates 仍製造峰值；同時 prefix cache 的建立與逐出會持續改變每個等待請求的實際工作量。</li>
+          <li><strong>關鍵洞察：</strong>只切沿 token 可獨立計算的 non-attention path，便能控制暫存張量而不切 attention；單 token contract 又允許 suffix KV 不再為本次請求的後續 decode 保留。</li>
+          <li><strong>方法：</strong>hybrid prefilling、suffix KV cache discarding 與 continuous JCT calibration 分別處理 working-set peak、跨請求 reuse、cache-dependent scheduling。</li>
+          <li><strong>證據：</strong>作者以 4 種雙 NVIDIA GPU／模型組態、2 個合成 workload 比較 4 個 baselines；headline 是 1.4–4.0× 可承受 QPS，A100/Qwen-32B FP8 的最大輸入長度（Maximum Input Length, MIL）為 87k，而 PagedAttention 為 11k、Chunked Prefill 為 17k。<a class="source-ref" href="#source-eval-results-p10-p12">§7 · PDF pp.8–12 · Table 2, Fig. 6–10</a></li>
+          <li><strong>邊界：</strong>未測 production trace、混合生成 workload、模型品質、能耗或成本；graph rewrite 的通用性、scheduler overhead 與 cache policy 細節也未充分揭露。</li>
+        </ol>
+        <p class="evidence-paragraph" data-kind="author-claim"><span class="evidence-kind evidence-kind--claim">作者主張</span> 單 token 輸出讓大部分本次請求產生的 KV 不再被 decode 重用，也讓工作量比任意長度生成更可預測，因而同時打開記憶體與排程兩個優化空間。<a class="source-ref" href="#source-intro-p1-p2">§1 · PDF pp.1–2</a></p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 在作者的模擬 recommendation 與 credit-verification workloads 上，PrefillOnly 的可承受 QPS 為 baseline 的 1.4–4.0×；A100/Qwen-32B FP8 的 maximum input length（MIL）由 vanilla vLLM 的 11k 增至 87k tokens。<a class="source-ref" href="#source-eval-results-p10-p12">§7 · PDF pp.8–12 · Table 2, Fig. 6–10</a></p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 這篇工作的價值不是把一般生成式 serving 全面加速，而是示範：應用若能提供更強的輸出長度 contract，engine 就能安全改寫 tensor lifetime、KV retention 與 request order；相對地，contract 一旦放寬，多數收益都必須重新驗證。</p>
+<p class="bridge">直覺成立後，再沿著一次完整執行看它如何落成系統。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>Hybrid Prefilling、Suffix KV 丟棄與 Cache-aware JCT</h2>
+          <h3>先走一次端到端請求</h3>
         <p>把 Figure 2 視為兩個回授迴圈：memory profile 決定 inference working set 與 cache budget；每個完成請求又改變 prefix-cache state，供下一次 scheduler 校準。</p>
         <ol>
           <li><strong>Profile run（R1/R3）：</strong>使用者給定 MIL；PrefillOnly 以同長度 fake request 跑一次 forward，量測 peak GPU memory，剩餘空間留給 prefix KV cache。</li>
@@ -973,22 +738,13 @@
         <p><a class="source-ref" href="#source-overview-p5">§3.1–3.2 · PDF p.5 · Fig. 2</a></p>
 
         <h3>R1 + R2｜Hybrid prefilling：把 chunk boundary 放在 dependency 正確的位置</h3>
-        <aside class="statement statement--fact" data-kind="experimental-fact">
-          <span class="statement__label">實驗事實</span>
-          <p>Llama-3.1-8B 以 32,768 tokens prefill 時，MLP intermediates 週期性把記憶體推近 20 GB；hybrid prefilling 的 trace 峰值約低 2 GB。Fig. 4 的兩個 MLP tensors 形狀為 \([32768,28672]\) 與 \([32768,14336]\)，相當於單層 KV 大小的 14× 與 7×。<a class="source-ref" href="#source-method-p6-p7">§4.1 · PDF p.6 · Fig. 3–4</a></p>
-        </aside>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> Llama-3.1-8B 以 32,768 tokens prefill 時，MLP intermediates 週期性把記憶體推近 20 GB；hybrid prefilling 的 trace 峰值約低 2 GB。Fig. 4 的兩個 MLP tensors 形狀為 \([32768,28672]\) 與 \([32768,14336]\)，相當於單層 KV 大小的 14× 與 7×。<a class="source-ref" href="#source-method-p6-p7">§4.1 · PDF p.6 · Fig. 3–4</a></p>
         <p><strong>Input/signal：</strong><code>torch.compile</code> 產生的 computation graph 與 tensor shapes。<strong>Decision：</strong>把連續、沿 token 可分離的 operations 組成 virtual layer；attention 不分 chunk。<strong>Action：</strong>virtual layer 逐 chunk forward，完整 output 先配置後直接寫入對應 slice；若 input/output 同 shape 且生命期允許，再重用 input buffer。<strong>預期效果：</strong>把主要 temporary footprint 從完整序列縮到單一 chunk，同時避免 concatenate 的第二份完整 output 與一般 chunked attention 的效率損失。<a class="source-ref" href="#source-method-p6-p7">§4.2–4.3 · PDF pp.6–7</a></p>
-        <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析：原文用語需收斂</span>
-          <p>論文稱非 attention layers「都是 linear layers」並不嚴謹，因自己的 Fig. 4 就含非線性 SwiGLU。正確的必要性質是<strong>沿 token 維度可分離</strong>；這足以讓 chunking 保持語義，但對有跨 token coupling 的 MoE capacity、convolution、SSM 或其他 operator，通用性尚未被驗證。</p>
-        </aside>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 論文稱非 attention layers「都是 linear layers」並不嚴謹，因自己的 Fig. 4 就含非線性 SwiGLU。正確的必要性質是<strong>沿 token 維度可分離</strong>；這足以讓 chunking 保持語義，但對有跨 token coupling 的 MoE capacity、convolution、SSM 或其他 operator，通用性尚未被驗證。</p>
 
         <h3>R3｜Suffix KV cache discarding：縮短本次請求不再需要的 KV 壽命</h3>
         <p><strong>Input/signal：</strong>profile run 留出的 prefix-cache budget，以及 request 中可保留的 prefix。<strong>Decision：</strong>prefix KV 仍跨請求保存在 GPU，suffix KV 則不為不存在的 decode 保留。<strong>Action：</strong>hybrid prefilling 在單次 model forward 完成 request，使當前 layer 的 suffix KV 用完即可丟棄；實作重用 vLLM sliding-window attention abstraction，不改硬體 kernel。<strong>預期效果：</strong>以可能犧牲被丟棄部分的未來跨請求 reuse 為代價，換取較大 MIL，同時保留部分 prefix caching。<a class="source-ref" href="#source-cache-p7">§5.1 · PDF p.7</a><a class="source-ref" href="#source-discussion-p12-p13">§9 · PDF pp.12–13</a></p>
-        <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析：不要誤讀「只保留一層 KV」</span>
-          <p>這不表示整個 engine 永遠只存在一層 KV：當前 request 的非保留 suffix working KV 可逐層釋放，但被選入跨請求 prefix cache 的 tokens 仍需保存多層 KV。論文未提供 prefix/suffix 邊界、allocation／eviction policy、fragmentation safety margin 或 OOM 行為。</p>
-        </aside>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 這不表示整個 engine 永遠只存在一層 KV：當前 request 的非保留 suffix working KV 可逐層釋放，但被選入跨請求 prefix cache 的 tokens 仍需保存多層 KV。論文未提供 prefix/suffix 邊界、allocation／eviction policy、fragmentation safety margin 或 OOM 行為。</p>
 
         <h3>R4｜Continuous JCT calibration：讓 locality 進入每一步決策</h3>
         <p>作者認為 prefill-only 工作 compute-bound，多 request batching 不會像 decode 一樣顯著提高 throughput，卻增加平均 latency，因此 PrefillOnly 一次只排一個 request；論文未描述 request 內部 preemption。<strong>Input/signal：</strong>waiting queue、當下 prefix-cache state 與每個 request 的等待時間。<strong>Decision：</strong>以 cache-miss tokens 預測 JCT，再扣除 aging term。<strong>Action：</strong>選 score 最小者；它完成並改變 cache state 後，對其餘 requests 全部重算。<strong>預期效果：</strong>把可立即 hit 的 request 提前，同時避免長 request 永久飢餓。<a class="source-ref" href="#source-scheduler-p7-p8">§6.1–6.3 · PDF pp.7–8 · Fig. 5, Algorithm 1</a></p>
@@ -997,11 +753,7 @@
   計算預測 JCT 並扣除 aging / fairness 項
 選 score 最小者執行；完成後對剩餘 requests 全部重算</code></pre>
         <p>Fig. 5 的四請求例子中，FIFO 與靜態 SRJF 都只有一次 cache hit；持續校準讓順序成為 A→D→C→B，得到兩次 hit。這是概念例示，不是量化 ablation。<a class="source-ref" href="#source-fig5-p8">§6.2–6.3 · PDF p.8 · Fig. 5</a></p>
-      </section>
-
-      <section id="formulas-theory" class="paper-section">
-        <div class="section-heading"><span class="section-number">07</span><h2>公式與理論</h2></div>
-        <h3>候選 token 機率</h3>
+<h3>候選 token 機率</h3>
         <div class="formula-block">
           \[
             P(\texttt{Yes}) + P(\texttt{No}) = 1
@@ -1024,59 +776,29 @@
         </div>
         <p>作者可用每 1,000 tokens 粒度涵蓋 MIL 的 \((n_{\text{input}},n_{\text{cached}})\) profiling samples 訓練小型 linear regression；預設直接以 \(n_{\text{miss}}\) 代理 JCT。在 1×A100、Qwen-32B FP8 上，miss-token count 與實際 JCT 的 Pearson \(r=0.987\)。<a class="source-ref" href="#source-scheduler-p7-p8">§6.3 · PDF p.8</a></p>
 
-        <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析：Algorithm 1 的兩個文字錯誤</span>
-          <p>第 11 行原文寫成 <code>score_min ← jct</code>，但當輪沒有名為 <code>jct</code> 的變數；依第 9–10 行與正文語義，應為 <code>score_min ← score</code>。此外，演算法使用 \(T_{\text{queue}}\)，後文改稱 \(T_{\text{req}}\)，兩者都被定義成 queuing time。本摘要統一為 \(T_{\text{queue}}\)。<a class="source-ref" href="#source-scheduler-p7-p8">§6.3 · PDF p.8 · Algorithm 1</a></p>
-        </aside>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 第 11 行原文寫成 <code>score_min ← jct</code>，但當輪沒有名為 <code>jct</code> 的變數；依第 9–10 行與正文語義，應為 <code>score_min ← score</code>。此外，演算法使用 \(T_{\text{queue}}\)，後文改稱 \(T_{\text{req}}\)，兩者都被定義成 queuing time。本摘要統一為 \(T_{\text{queue}}\)。<a class="source-ref" href="#source-scheduler-p7-p8">§6.3 · PDF p.8 · Algorithm 1</a></p>
 
         <h3>複雜度與記憶體直覺</h3>
-        <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析：論文未提供正式漸近推導</span>
-          <p>設 layers 為 \(L\)、input tokens 為 \(n\)、hybrid chunk size 為 \(c\)、MLP width 為 \(d_{\mathrm{ff}}\)、waiting requests 為 \(|Q|\)。傳統 MLP temporary peak 約隨 \(n d_{\mathrm{ff}}\) 成長；hybrid path 把主要 chunk-local 部分壓到 \(c d_{\mathrm{ff}}\)，但仍需 layer-level input/output。MLP 與 dense attention 的算術階數沒有改變，所以這是 peak-memory／constant-factor optimization，不是漸近 FLOPs 改善。每次排程線性掃描 queue 約為 \(O(|Q|)\)；若 \(N\) 個 requests 同時等待且不使用更進階資料結構，drain queue 最壞可達 \(O(N^2)\)。論文未量測 scan、prefix lookup、RPC 或 compile overhead。</p>
-        </aside>
-      </section>
-
-      <section id="figures-guide" class="paper-section">
-        <div class="section-heading"><span class="section-number">08</span><h2>圖片與圖表導讀</h2></div>
-        <figure id="source-fig2-p5">
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 設 layers 為 \(L\)、input tokens 為 \(n\)、hybrid chunk size 為 \(c\)、MLP width 為 \(d_{\mathrm{ff}}\)、waiting requests 為 \(|Q|\)。傳統 MLP temporary peak 約隨 \(n d_{\mathrm{ff}}\) 成長；hybrid path 把主要 chunk-local 部分壓到 \(c d_{\mathrm{ff}}\)，但仍需 layer-level input/output。MLP 與 dense attention 的算術階數沒有改變，所以這是 peak-memory／constant-factor optimization，不是漸近 FLOPs 改善。每次排程線性掃描 queue 約為 \(O(|Q|)\)；若 \(N\) 個 requests 同時等待且不使用更進階資料結構，drain queue 最壞可達 \(O(N^2)\)。論文未量測 scan、prefix lookup、RPC 或 compile overhead。</p>
+<figure data-figure-role="method" id="source-fig2-p5">
           <a href="assets/images/fig-02-p05.png"><img src="assets/images/fig-02-p05.png" alt="PrefillOnly 系統流程：請求進入 waiting queue，經持續 JCT 校準排程，再以 hybrid prefilling 執行並丟棄 suffix KV cache。"></a>
           <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 2</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>把箭頭由左至右讀：cache state 同時回饋 scheduler 與 executor；三個藍色標註正好是 scheduling、compute graph、KV lifetime 三個協同層。</span></figcaption>
         </figure>
-
-        <figure id="source-fig3-p6">
+<figure data-figure-role="method" id="source-fig3-p6">
           <a href="assets/images/fig-03-p06.png"><img src="assets/images/fig-03-p06.png" alt="Llama-3.1-8B 處理 32768 tokens 時，傳統 prefill 與 hybrid prefilling 的 GPU memory traces。"></a>
           <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 3</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>上圖週期尖峰來自 linear／MLP intermediates；下圖只保留單一 chunk 的 temporaries，峰值約少 2 GB。這張圖支持「瓶頸不只有 KV cache」，但只是一個模型／長度的 memory trace。</span></figcaption>
         </figure>
-
-        <figure id="source-fig5-p8">
+<figure data-figure-role="method" id="source-fig5-p8">
           <a href="assets/images/fig-05-p08.png"><img src="assets/images/fig-05-p08.png" alt="FIFO、靜態 SRJF 與持續 JCT 校準 SRJF 的四請求排程時序及 cache hit 差異。"></a>
           <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 5</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>A/D 與 B/C 各共享 prefix，而 cache 只能容納一組。重算後，D 因剛好命中 A 的 cache 而被提前，使總 cache hits 從 1 增為 2；這是機制示例，不是 workload-level ablation。</span></figcaption>
         </figure>
+<p class="bridge">方法看似合理，真正的問題是：實驗有沒有把這條因果鏈撐起來？</p>
+        </section>
 
-        <figure id="source-fig6-p9">
-          <a href="assets/images/fig-06-p09.png"><img src="assets/images/fig-06-p09.png" alt="PrefillOnly 與四個 baselines 在推薦及信用驗證 workload、四種 GPU 組態上的 QPS 對平均 latency 曲線。"></a>
-          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 6</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>往右下較好。低 QPS 時，把兩張 GPU 用於單請求的 TP／PP 可較快；壓力升高後其曲線提早上彎，而一 GPU 一 instance 的 PrefillOnly 能維持更高到達率。缺線通常代表該 baseline 的 MIL 不足，不能解讀為零延遲。</span></figcaption>
-        </figure>
-
-        <figure id="source-fig7-p11">
-          <a href="assets/images/fig-07-p11.png"><img src="assets/images/fig-07-p11.png" alt="PrefillOnly 與 baselines 在兩個 workload、四種 GPU 組態上的 QPS 對 P99 latency 曲線。"></a>
-          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 7</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>這張圖檢查完整 PrefillOnly 排程在平均 latency 之外的 P99；高 QPS 曲線顯示整體系統仍有較低 P99，但不能由此隔離 aging term 的因果貢獻。論文也沒有 error bars、重複次數或 confidence interval。</span></figcaption>
-        </figure>
-
-        <figure id="source-fig10-p12">
-          <a href="assets/images/fig-10-p12.png"><img src="assets/images/fig-10-p12.png" alt="A100 上 Qwen-32B FP8 的 maximum input length ablation：vanilla、chunking、preallocation 與 in-place optimization。"></a>
-          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 10</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>11k→45k 是 chunking 主增益，preallocation 再到 63k，in-place 到 87k；總計相對 vanilla 為 7.9×。圖中另列一般 chunked prefill 17k，且明示其會傷效能。</span></figcaption>
-        </figure>
-
-        <figure id="source-fig11-p12">
-          <a href="assets/images/fig-11-p12.png"><img src="assets/images/fig-11-p12.png" alt="公平參數 lambda 為 0、200、2000 時的 request latency CDF。"></a>
-          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 11</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>較大 \(\lambda\) 將等待時間更強地納入優先序，右尾縮短但分布中段右移，呈現 tail fairness 與平均 latency 的取捨。作者的預設 \(\lambda=500\) 並未出現在這三條曲線中。</span></figcaption>
-        </figure>
-      </section>
-
-      <section id="experimental-setup" class="paper-section">
-        <div class="section-heading"><span class="section-number">09</span><h2>實驗設計</h2></div>
-        <h3>先把主張對到測試</h3>
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>容量、P99、公平性與 7.9× MIL 的因果拆解</h2>
+          <h3>先把主張對到測試</h3>
         <div class="table-scroll">
           <table>
             <caption>Evaluation 的 claim–test map；setup 不只列設備，也說明每項證據能回答什麼。<a class="source-ref" href="#source-eval-setup-p9-p10">§7–7.2 · PDF pp.8–12</a></caption>
@@ -1126,15 +848,8 @@
           <li><strong>Pipeline Parallel（PP=2）：</strong>模型切到兩張 GPU。</li>
         </ul>
         <p>所有系統都開啟 prefix caching。PrefillOnly 與兩個非平行 baseline 各啟動兩個單 GPU instances，並以 user ID 固定路由到同一 instance；TP／PP 則讓單 request 使用兩張 GPU。總 GPU 數相同，但 low-QPS single-request latency 的資源形態不同，需連同 throughput 一起解讀。主要指標為 mean/P99 latency、QPS-throughput trade-off 與 MIL；未評估 accuracy、quality、energy 或 cost。<a class="source-ref" href="#source-eval-setup-p9-p10">§7.1 · PDF p.10</a></p>
-      </section>
-
-      <section id="experimental-results" class="paper-section">
-        <div class="section-heading"><span class="section-number">10</span><h2>實驗結果</h2></div>
-        <h3>C1｜高負載 capacity–latency trade-off</h3>
-        <aside class="statement statement--fact" data-kind="experimental-fact">
-          <span class="statement__label">實驗事實</span>
-          <p><strong>觀察：</strong>作者總結 PrefillOnly 可承受 baseline 的 1.4–4.0× QPS，且平均與 P99 latency 不高於比較系統。負載點先以所有 requests 同時抵達 PrefillOnly 的吞吐定義 \(x\)，再測 \(x/4,x/2,x,2x,3x,4x\)。<a class="source-ref" href="#source-eval-results-p10-p12">§7, §7.2 · PDF pp.8, 10–11 · Fig. 6–7</a></p>
-        </aside>
+<h3>C1｜高負載 capacity–latency trade-off</h3>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> <strong>觀察：</strong>作者總結 PrefillOnly 可承受 baseline 的 1.4–4.0× QPS，且平均與 P99 latency 不高於比較系統。負載點先以所有 requests 同時抵達 PrefillOnly 的吞吐定義 \(x\)，再測 \(x/4,x/2,x,2x,3x,4x\)。<a class="source-ref" href="#source-eval-results-p10-p12">§7, §7.2 · PDF pp.8, 10–11 · Fig. 6–7</a></p>
         <dl class="term-list">
           <dt>測試／metric</dt><dd>兩個 workloads、四種硬體組態上掃 QPS，分別觀察 mean 與 P99 latency。</dd>
           <dt>支持的結論</dt><dd>Fig. 6–7 一致顯示，高 QPS 時 PrefillOnly 的曲線較晚進入 queueing cliff，因此主要勝在 sustainable capacity，而非所有負載下的 service latency。</dd>
@@ -1156,37 +871,24 @@
             </tbody>
           </table>
         </div>
-        <aside class="statement statement--fact" data-kind="experimental-fact">
-          <span class="statement__label">實驗事實</span>
-          <p><strong>觀察：</strong>相對較強的非平行 baseline（Chunked Prefill），PrefillOnly 的 MIL 比例為 L4 \(130/46\approx2.8\times\)、A100 \(87/17\approx5.1\times\)、H100 \(97/25\approx3.9\times\)。這支持作者「最高約 5×、且不需平行化」的表述。<a class="source-ref" href="#source-table2-p10">§7 · PDF p.10 · Table 2</a></p>
-        </aside>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> <strong>觀察：</strong>相對較強的非平行 baseline（Chunked Prefill），PrefillOnly 的 MIL 比例為 L4 \(130/46\approx2.8\times\)、A100 \(87/17\approx5.1\times\)、H100 \(97/25\approx3.9\times\)。這支持作者「最高約 5×、且不需平行化」的表述。<a class="source-ref" href="#source-table2-p10">§7 · PDF p.10 · Table 2</a></p>
         <p><strong>Caveat：</strong>L4/H100 上 TP 的絕對 MIL 仍較高，H100 上 PP 也較高；此實驗支持的是「用單 GPU instance 容納 workload 並避開通訊」，不是 PrefillOnly 永遠有最高絕對 context ceiling。</p>
 
         <h3>C3｜兩個 workload 分離兩種增益來源</h3>
-        <div class="key-grid">
-          <article class="key-card">
-            <p class="key-card__eyebrow">Prefix-locality test</p>
+        <div class="takeaway-list">
+          <div class="takeaway-item">
+            <p class="takeaway-label">Prefix-locality test</p>
             <p><strong>Recommendation：</strong>每 user 的 50 requests 共享 profile。高 QPS 下 Chunked Prefill throughput 下滑；作者歸因於 prefix-cache throttling。Calibration 會優先執行可命中新 cache 的 requests，而 TP／PP 雖有較大 cache space，仍承擔通訊或同步。<a class="source-ref" href="#source-eval-results-p10-p12">§7.2 · PDF p.11 · Fig. 9</a></p>
-          </article>
-          <article class="key-card">
-            <p class="key-card__eyebrow">Long-input test</p>
+          </div>
+          <div class="takeaway-item">
+            <p class="takeaway-label">Long-input test</p>
             <p><strong>Credit verification：</strong>每 user 只有一個 40k–60k-token request，幾乎沒有同 user reuse；增益主要來自單 GPU 容納 input，避開 TP all-reduce 與 PP bubbles。NVLink 提升 TP throughput 後，Fig. 8 中 PrefillOnly 仍較高。<a class="source-ref" href="#source-eval-results-p10-p12">§7.2 · PDF p.11 · Fig. 8</a></p>
-          </article>
+          </div>
         </div>
-        <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析：因果證據仍不完整</span>
-          <p>兩個 workloads 的對照有助於分辨「cache-aware scheduling」與「避免跨 GPU」兩種來源，但 Recommendation 沒有完整系統下的 scheduler-only ablation，也沒直接報 cache-hit-rate；因此 Fig. 9 支持整體相關趨勢，不能單獨量化 calibration 的因果貢獻。</p>
-        </aside>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 兩個 workloads 的對照有助於分辨「cache-aware scheduling」與「避免跨 GPU」兩種來源，但 Recommendation 沒有完整系統下的 scheduler-only ablation，也沒直接報 cache-hit-rate；因此 Fig. 9 支持整體相關趨勢，不能單獨量化 calibration 的因果貢獻。</p>
 
-        <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析：需顯式保留的原文矛盾</span>
-          <p>Fig. 10 顯示 vanilla 11k、hybrid 87k，故 \(87/11\approx7.9\times\)，與 caption 一致；正文卻稱「相對 chunked prefill 超過 8.7×」。同圖 chunked prefill 為 17k，所以可重算比例其實是 \(87/17\approx5.1\times\)。本摘要採 bars／Table 2 可重算數字，不沿用該句。另 Table 2 把 A100/PP 的 MIL 寫成 38k，卻又標 credit workload（40k–60k）可執行；Fig. 10 稱模型為 Qwen-2.5-32B FP8，Table 3 則列 DeepSeek-R1-Distill-Qwen-32B-FP8-dynamic；Fig. 7 caption 寫「three hardware setups」，圖中實際有四欄。<a class="source-ref" href="#source-table2-p10">Table 2–3 · PDF p.10</a><a class="source-ref" href="#source-fig7-p11">Fig. 7 · PDF p.11</a><a class="source-ref" href="#source-fig10-p12">Fig. 10 · PDF p.12</a></p>
-        </aside>
-      </section>
-
-      <section id="ablation-sensitivity" class="paper-section">
-        <div class="section-heading"><span class="section-number">11</span><h2>Ablation 與敏感度分析</h2></div>
-        <h3>C2｜Hybrid prefilling 的 component ablation</h3>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> Fig. 10 顯示 vanilla 11k、hybrid 87k，故 \(87/11\approx7.9\times\)，與 caption 一致；正文卻稱「相對 chunked prefill 超過 8.7×」。同圖 chunked prefill 為 17k，所以可重算比例其實是 \(87/17\approx5.1\times\)。本摘要採 bars／Table 2 可重算數字，不沿用該句。另 Table 2 把 A100/PP 的 MIL 寫成 38k，卻又標 credit workload（40k–60k）可執行；Fig. 10 稱模型為 Qwen-2.5-32B FP8，Table 3 則列 DeepSeek-R1-Distill-Qwen-32B-FP8-dynamic；Fig. 7 caption 寫「three hardware setups」，圖中實際有四欄。<a class="source-ref" href="#source-table2-p10">Table 2–3 · PDF p.10</a><a class="source-ref" href="#source-fig7-p11">Fig. 7 · PDF p.11</a><a class="source-ref" href="#source-fig10-p12">Fig. 10 · PDF p.12</a></p>
+<h3>C2｜Hybrid prefilling 的 component ablation</h3>
         <div class="table-scroll">
           <table>
             <caption>Figure 10：A100 上的 Qwen-32B FP8；MIL 由圖中 bars 讀取。<a class="source-ref" href="#source-fig10-p12">§7.2 · PDF p.12 · Fig. 10</a></caption>
@@ -1200,16 +902,10 @@
             </tbody>
           </table>
         </div>
-        <aside class="statement statement--fact" data-kind="experimental-fact">
-          <span class="statement__label">實驗事實</span>
-          <p>11k→45k 顯示 token-wise chunking 是最大單一增益；preallocation 與 in-place reuse 再把 MIL 推至 63k 與 87k。這組證據直接支持 R1 的 component contribution，但只測一個模型／GPU／precision 組合。<a class="source-ref" href="#source-fig10-p12">§7.2 · PDF p.12 · Fig. 10</a></p>
-        </aside>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 11k→45k 顯示 token-wise chunking 是最大單一增益；preallocation 與 in-place reuse 再把 MIL 推至 63k 與 87k。這組證據直接支持 R1 的 component contribution，但只測一個模型／GPU／precision 組合。<a class="source-ref" href="#source-fig10-p12">§7.2 · PDF p.12 · Fig. 10</a></p>
 
         <h3>C4｜Fairness sensitivity</h3>
-        <aside class="statement statement--fact" data-kind="experimental-fact">
-          <span class="statement__label">實驗事實</span>
-          <p>Fig. 11 比較 \(\lambda=0,200,2000\) 的 latency CDF：較大 \(\lambda\) 使右尾較短，而分布中段可右移，呈現 tail 與平均 latency 的方向性取捨。圖未列具體 mean、P99、workload 條件或 confidence interval，也未測實驗預設 \(\lambda=500\)，因此不能由此推導最佳值。<a class="source-ref" href="#source-fig11-p12">§7.2 · PDF p.12 · Fig. 11</a></p>
-        </aside>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> Fig. 11 比較 \(\lambda=0,200,2000\) 的 latency CDF：較大 \(\lambda\) 使右尾較短，而分布中段可右移，呈現 tail 與平均 latency 的方向性取捨。圖未列具體 mean、P99、workload 條件或 confidence interval，也未測實驗預設 \(\lambda=500\)，因此不能由此推導最佳值。<a class="source-ref" href="#source-fig11-p12">§7.2 · PDF p.12 · Fig. 11</a></p>
 
         <h3>缺少的隔離實驗</h3>
         <ul>
@@ -1218,11 +914,29 @@
           <li>沒有獨立量測 scheduler queue scan、cache lookup、ZeroMQ、<code>torch.compile</code> compile／recompile overhead。</li>
           <li>沒有 numerical-equivalence test 證明 graph rewrite、preallocation 與 in-place 在所有支援模型上維持結果一致。</li>
         </ul>
-      </section>
+<figure data-figure-role="result" id="source-fig6-p9">
+          <a href="assets/images/fig-06-p09.png"><img src="assets/images/fig-06-p09.png" alt="PrefillOnly 與四個 baselines 在推薦及信用驗證 workload、四種 GPU 組態上的 QPS 對平均 latency 曲線。"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 6</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>往右下較好。低 QPS 時，把兩張 GPU 用於單請求的 TP／PP 可較快；壓力升高後其曲線提早上彎，而一 GPU 一 instance 的 PrefillOnly 能維持更高到達率。缺線通常代表該 baseline 的 MIL 不足，不能解讀為零延遲。</span></figcaption>
+        </figure>
+<figure data-figure-role="result" id="source-fig7-p11">
+          <a href="assets/images/fig-07-p11.png"><img src="assets/images/fig-07-p11.png" alt="PrefillOnly 與 baselines 在兩個 workload、四種 GPU 組態上的 QPS 對 P99 latency 曲線。"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 7</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>這張圖檢查完整 PrefillOnly 排程在平均 latency 之外的 P99；高 QPS 曲線顯示整體系統仍有較低 P99，但不能由此隔離 aging term 的因果貢獻。論文也沒有 error bars、重複次數或 confidence interval。</span></figcaption>
+        </figure>
+<figure data-figure-role="result" id="source-fig10-p12">
+          <a href="assets/images/fig-10-p12.png"><img src="assets/images/fig-10-p12.png" alt="A100 上 Qwen-32B FP8 的 maximum input length ablation：vanilla、chunking、preallocation 與 in-place optimization。"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 10</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>11k→45k 是 chunking 主增益，preallocation 再到 63k，in-place 到 87k；總計相對 vanilla 為 7.9×。圖中另列一般 chunked prefill 17k，且明示其會傷效能。</span></figcaption>
+        </figure>
+<figure data-figure-role="result" id="source-fig11-p12">
+          <a href="assets/images/fig-11-p12.png"><img src="assets/images/fig-11-p12.png" alt="公平參數 lambda 為 0、200、2000 時的 request latency CDF。"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 11</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>較大 \(\lambda\) 將等待時間更強地納入優先序，右尾縮短但分布中段右移，呈現 tail fairness 與平均 latency 的取捨。作者的預設 \(\lambda=500\) 並未出現在這三條曲線中。</span></figcaption>
+        </figure>
+<p class="bridge">數據回答了部分問題；剩下的是適用邊界與仍未被證明的部分。</p>
+        </section>
 
-      <section id="strengths-limitations-risks" class="paper-section">
-        <div class="section-heading"><span class="section-number">12</span><h2>優點、限制與風險</h2></div>
-        <h3>優點</h3>
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>工作負載契約、缺失消融與 Locality–Fairness 取捨</h2>
+          <h3>優點</h3>
         <ul>
           <li><strong>從 workload contract 推導跨層優化：</strong>不是單點 kernel tweak，而是把 output-length certainty 連到 activation lifetime、KV policy 與 scheduler。</li>
           <li><strong>保留 prefix reuse：</strong>避免「全部 KV 都丟掉」這個看似簡單卻破壞跨 request reuse 的解法。</li>
@@ -1248,39 +962,13 @@
           </table>
         </div>
         <p><a class="source-ref" href="#source-discussion-p12-p13">§9 · PDF pp.12–13</a></p>
-        <aside class="statement statement--speculation" data-kind="speculation">
-          <span class="statement__label">推測</span>
-          <p>若 prefix reuse 很低且 request 長度接近、queue 又很短，continuous calibration 的額外 scan 可能幾乎沒有收益；此時核心價值會主要剩下 hybrid prefilling。論文未單獨量測這個區域。</p>
-        </aside>
-      </section>
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> 若 prefix reuse 很低且 request 長度接近、queue 又很短，continuous calibration 的額外 scan 可能幾乎沒有收益；此時核心價值會主要剩下 hybrid prefilling。論文未單獨量測這個區域。</p>
+        </section>
 
-      <section id="related-work" class="paper-section">
-        <div class="section-heading"><span class="section-number">13</span><h2>與相關工作的比較</h2></div>
-        <div class="table-scroll">
-          <table>
-            <caption>技術路線比較；只有 PagedAttention、Chunked Prefill、TP、PP 是本文實驗 baselines。</caption>
-            <thead><tr><th>路線／代表工作</th><th>主要優化</th><th>與 PrefillOnly 的差異與取捨</th></tr></thead>
-            <tbody>
-              <tr><td>Orca、vLLM / PagedAttention</td><td>Continuous batching；token-granularity KV paging，提升一般 autoregressive decode throughput。</td><td>假設輸出長度不定，必須保留 decode 所需的所有層 KV；PrefillOnly 利用單 token contract 縮短 suffix KV lifetime，且不用 batching。</td></tr>
-              <tr><td>DistServe</td><td>把 prefill 與 decode 分離到不同 GPUs，以 TTFT／TPOT SLO 提升 goodput。</td><td>本文只測專用 prefill-only workload；作者推測可把 PrefillOnly 放到 disaggregated prefill node，但沒有實作／評估。</td></tr>
-              <tr><td>Sarathi-Serve / Chunked Prefill</td><td>把 prefill 分 chunk，以改善排程或容納長 input。</td><td>一般 chunking 也切 attention，必須保存前 chunks 的多層 KV 且可能降低 kernel 效率；PrefillOnly 只切 token-wise non-attention path。</td></tr>
-              <tr><td>Tensor / Pipeline Parallel</td><td>跨 GPU 分散模型／計算以提高 MIL 或降低低負載單請求 latency。</td><td>TP 有 all-reduce、PP 有 bubbles；PrefillOnly 以單 GPU instance 避免通訊，偏向 high-QPS throughput，但絕對 MIL 不一定最高。</td></tr>
-              <tr><td>CacheGen、CacheBlend、KV compression</td><td>壓縮／串流 KV，或融合非 prefix cache 以減少載入與重算。</td><td>PrefillOnly 不改 KV 內容，作者認為可相容；但本文沒有整合測試。</td></tr>
-              <tr><td>LMCache / CPU offload</td><td>將 KV 放到 GPU 之外的 tier。</td><td>可避免 suffix discard 犧牲未來 reuse；本文僅列 future work。</td></tr>
-              <tr><td>PyTorch 2；Tiresias、Optimus 等傳統 DL systems</td><td>前者以 graph compilation 消除不必要 tensors；後兩者依 JCT 排程。</td><td>LLM 特有之處是大型 token-wise MLP intermediates，以及 JCT 會隨 prefix cache hit 動態改變。</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p><a class="source-ref" href="#source-related-p12">§8 · PDF p.12</a><a class="source-ref" href="#source-discussion-p12-p13">§9 · PDF pp.12–13</a></p>
-        <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析</span>
-          <p>PrefillOnly 與「更快 attention kernel」並非互斥；它主要改變 operator placement、tensor lifetime 與 request order。最有價值的比較對象應是同樣針對長 prefill、開啟 prefix caching、且以相同 GPU budget 運作的系統，而不是一般 decode-heavy serving。</p>
-        </aside>
-      </section>
-
-      <section id="personal-analysis" class="paper-section">
-        <div class="section-heading"><span class="section-number">14</span><h2>個人分析與可延伸方向</h2></div>
-        <h3>可借鑑的設計原則</h3>
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>專用 Prefill Engine 還能往哪裡走</h2>
+          <h3>可借鑑的設計原則</h3>
         <ul>
           <li><strong>把應用 contract 變成系統 optimization license：</strong>固定一個 output token 不是 API 細節，而是允許釋放 KV、預測 work 與改變 batch policy 的語義保證。</li>
           <li><strong>以 operator dependency 決定 chunk boundary：</strong>避免把整個 graph 一視同仁切 chunk；先辨認跨 token dependency，再控制高峰值的 token-wise intermediates。</li>
@@ -1296,29 +984,37 @@
           <li>在 DistServe 類 prefill/decode disaggregation 的 prefill nodes 實測；比較 hybrid prefilling 與 FlashAttention／FlashInfer 等 kernel 改善的可疊加性。</li>
           <li>驗證不同模型結構與硬體：MoE、GQA/MQA、SSM、AMD Instinct；同時公布 chunk autotuning、compile cache 與 numerical-equivalence tests。</li>
         </ol>
-        <aside class="statement statement--speculation" data-kind="speculation">
-          <span class="statement__label">推測</span>
-          <p>更完整的 scheduler 可以把 \(n_{\text{miss}}\) 擴充為「預測執行時間 + 目前 cache 被逐出的外部成本 + aging penalty」，並在 low-QPS 時動態轉向 TP，在 high-QPS 時轉回單 GPU instances。這可能統一本文呈現的 latency／throughput 路線，但尚未被實驗驗證。</p>
-        </aside>
-        <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析：整體判斷</span>
-          <p>這是一篇問題切分清楚、方法彼此相依的 systems paper：hybrid prefilling 解 active-memory peak，才讓 suffix KV discard 真正有用；cache-aware JCT 又補上 prefix reuse 的排程面。最大缺口不是 headline performance，而是 workload 外部效度與實作細節不足，使讀者難判斷收益能否跨 production traffic、模型結構與 accelerator 重現。</p>
-        </aside>
-      </section>
-
-      <section id="discussion-questions" class="paper-section">
-        <div class="section-heading"><span class="section-number">15</span><h2>組會討論問題</h2></div>
-        <ol>
+        <p class="evidence-paragraph" data-kind="speculation"><span class="evidence-kind evidence-kind--speculation">推測</span> 更完整的 scheduler 可以把 \(n_{\text{miss}}\) 擴充為「預測執行時間 + 目前 cache 被逐出的外部成本 + aging penalty」，並在 low-QPS 時動態轉向 TP，在 high-QPS 時轉回單 GPU instances。這可能統一本文呈現的 latency／throughput 路線，但尚未被實驗驗證。</p>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 這是一篇問題切分清楚、方法彼此相依的 systems paper：hybrid prefilling 解 active-memory peak，才讓 suffix KV discard 真正有用；cache-aware JCT 又補上 prefix reuse 的排程面。最大缺口不是 headline performance，而是 workload 外部效度與實作細節不足，使讀者難判斷收益能否跨 production traffic、模型結構與 accelerator 重現。</p>
+<ol>
           <li>如果輸出從 1 token 放寬為固定的 2–8 tokens，哪些 KV 必須保留、hybrid prefilling 與 JCT estimator 可保留多少？是否存在可連續調整的「short-output」版本？</li>
           <li>Fig. 5 的 locality gain 在多 tenant、低 prefix overlap 或無 user-id affinity routing 時還剩多少？應如何把 cache eviction 的外部成本加入 score？</li>
           <li>對低 QPS，TP 的 single-request latency 可能較佳；可否在相同 GPU pool 內根據 queue depth／SLO 動態切換 TP 與單 GPU PrefillOnly，而不付出模型重載成本？</li>
           <li>論文缺少 chunk size、compile overhead 與數值等價測試。要把 graph rewrite 上 production，最低限度需要哪些 correctness invariant、shape guards 與 rollback 機制？</li>
         </ol>
-      </section>
+        </section>
 
-      <section id="glossary-index" class="paper-section">
-        <div class="section-heading"><span class="section-number">16</span><h2>術語表與重點索引</h2></div>
-        <h3>術語表</h3>
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>排程分數、記憶體尺度與來源索引</h2>
+          <dl class="term-list">
+          <dt>正式標題</dt>
+          <dd>PrefillOnly: An Inference Engine for Prefill-only Workloads in Large Language Model Applications</dd>
+          <dt>作者</dt>
+          <dd>Kuntai Du、Bowen Wang、Chen Zhang、Yiming Cheng、Qing Lan、Hejian Sang、Yihua Cheng、Jiayi Yao、Xiaoxuan Liu、Yifan Qiao、Ion Stoica、Junchen Jiang</dd>
+          <dt>正式發表</dt>
+          <dd>Proceedings of the ACM SIGOPS 31st Symposium on Operating Systems Principles（SOSP ’25），2025，pp. 399–414；DOI <a href="https://doi.org/10.1145/3731569.3764834" target="_blank" rel="noopener noreferrer">10.1145/3731569.3764834</a>。<a class="source-ref" href="#source-sosp">SOSP 2025 accepted papers</a></dd>
+          <dt>本次閱讀版本</dt>
+          <dd><a href="https://arxiv.org/abs/2505.07203" target="_blank" rel="noopener noreferrer">arXiv:2505.07203v1</a>（cs.DC，2025-05-12 提交）。<a class="source-ref" href="#source-arxiv">arXiv metadata</a></dd>
+          <dt>頁數</dt>
+          <dd data-summary-field="pdf-page-count">共 15 頁</dd>
+          <dt>分類</dt>
+          <dd><span class="tag">LLM Systems</span> <span class="tag">Inference Serving</span></dd>
+          <dt>本地 PDF</dt>
+          <dd><a href="PrefillOnly-2505.07203.pdf">開啟本地 PDF</a></dd>
+        </dl>
+        <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> 論文的主要貢獻位於 LLM serving engine：它改寫 prefill 的 GPU 記憶體生命週期，並加入 prefix-cache-aware 的線上排程。推薦與信用驗證只是用來具體化 workload，並非模型品質或應用演算法貢獻；而「KV cache」也不足以涵蓋另一半的 JCT-aware scheduling，因此歸入 <strong>LLM Systems / Inference Serving</strong>。</p>
+<h3>術語表</h3>
         <dl class="term-list">
           <dt>Prefill-only workload</dt><dd>每個 request 只執行 prefill 並輸出一個 token 的工作負載；本文假設輸入通常很長。</dd>
           <dt>Prefill / Decode</dt><dd>Prefill 一次處理全部 input 並產生第一 token；decode 之後每輪再產生一 token。</dd>
@@ -1353,62 +1049,28 @@
         <ol class="source-index">
           <li id="source-sosp"><span><a href="https://sigops.org/s/conferences/sosp/2025/accepted.html" target="_blank" rel="noopener noreferrer">SOSP 2025 Accepted Papers</a>：正式題名、作者與 conference status；正式 DOI 另見 <a href="https://doi.org/10.1145/3731569.3764834" target="_blank" rel="noopener noreferrer">ACM DOI</a>。</span></li>
           <li id="source-arxiv"><span><a href="https://arxiv.org/abs/2505.07203" target="_blank" rel="noopener noreferrer">arXiv:2505.07203v1</a>：submission metadata、abstract 與本次閱讀版本；<a href="https://arxiv.org/pdf/2505.07203v1" target="_blank" rel="noopener noreferrer">鎖版 PDF</a>。</span></li>
-          <li id="source-abstract-p1"><span><a href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">Abstract · PDF p.1</a>：workload 定義、兩項核心機制與最高 4× QPS 主張。</span></li>
-          <li id="source-intro-p1-p2"><span><a href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">§1 · PDF pp.1–2</a>：機會、挑戰、hybrid prefill 與 continuous JCT calibration 概覽。</span></li>
-          <li id="source-motivation-p3-p4"><span><a href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">§2.1–2.4 · PDF pp.3–4</a>：prefill/decode、KV cache、單 token 應用與 workload characteristics。</span></li>
-          <li id="source-motivation-p3-p5"><span><a href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">§2.1, §2.5–2.6 · PDF pp.3–5</a>：KV size、MIL、chunked prefill／parallelism 限制與 naive discard 結果。</span></li>
-          <li id="source-overview-p5"><span><a href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">§3 · PDF p.5</a>：profile run、runtime workflow 與三個核心 techniques。</span></li>
-          <li id="source-method-p6-p7"><span><a href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">§4 · PDF pp.6–7</a>：memory trace、tensor shapes、<code>torch.compile</code>、preallocation 與 in-place。</span></li>
-          <li id="source-cache-p7"><span><a href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">§5 · PDF p.7</a>：suffix KV cache discarding 與 parallelization trade-off。</span></li>
-          <li id="source-scheduler-p7-p8"><span><a href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">§6 · PDF pp.7–8</a>：不 batching、動態 cache state、JCT proxy、aging 與 Algorithm 1。</span></li>
-          <li id="source-eval-setup-p9-p10"><span><a href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">§7.1 · PDF pp.9–10</a>：datasets、arrival process、models、hardware、baselines 與 routing。</span></li>
-          <li id="source-table2-p10"><span><a href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">Table 2 · PDF p.10</a>：各方法／GPU 的 MIL 與 workload feasibility 標記。</span></li>
-          <li id="source-eval-results-p10-p12"><span><a href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">§7.2 · PDF pp.10–12</a>：QPS–latency、throughput、MIL ablation 與 fairness sensitivity。</span></li>
-          <li id="source-related-p12"><span><a href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">§8 · PDF p.12</a>：LLM engines、KV cache systems、LLM applications 與傳統 DL systems。</span></li>
-          <li id="source-discussion-p12-p13"><span><a href="PrefillOnly%20-%20An%20Inference%20Engine%20for%20Prefill-only%20Workloads%20in%20Large%20Language%20Model%20Applications.pdf">§9–10 · PDF pp.12–13</a>：CPU offload、disaggregation、latency optimization 與 conclusion。</span></li>
+          <li id="source-abstract-p1"><span><a href="PrefillOnly-2505.07203.pdf">Abstract · PDF p.1</a>：workload 定義、兩項核心機制與最高 4× QPS 主張。</span></li>
+          <li id="source-intro-p1-p2"><span><a href="PrefillOnly-2505.07203.pdf">§1 · PDF pp.1–2</a>：機會、挑戰、hybrid prefill 與 continuous JCT calibration 概覽。</span></li>
+          <li id="source-motivation-p3-p4"><span><a href="PrefillOnly-2505.07203.pdf">§2.1–2.4 · PDF pp.3–4</a>：prefill/decode、KV cache、單 token 應用與 workload characteristics。</span></li>
+          <li id="source-motivation-p3-p5"><span><a href="PrefillOnly-2505.07203.pdf">§2.1, §2.5–2.6 · PDF pp.3–5</a>：KV size、MIL、chunked prefill／parallelism 限制與 naive discard 結果。</span></li>
+          <li id="source-overview-p5"><span><a href="PrefillOnly-2505.07203.pdf">§3 · PDF p.5</a>：profile run、runtime workflow 與三個核心 techniques。</span></li>
+          <li id="source-method-p6-p7"><span><a href="PrefillOnly-2505.07203.pdf">§4 · PDF pp.6–7</a>：memory trace、tensor shapes、<code>torch.compile</code>、preallocation 與 in-place。</span></li>
+          <li id="source-cache-p7"><span><a href="PrefillOnly-2505.07203.pdf">§5 · PDF p.7</a>：suffix KV cache discarding 與 parallelization trade-off。</span></li>
+          <li id="source-scheduler-p7-p8"><span><a href="PrefillOnly-2505.07203.pdf">§6 · PDF pp.7–8</a>：不 batching、動態 cache state、JCT proxy、aging 與 Algorithm 1。</span></li>
+          <li id="source-eval-setup-p9-p10"><span><a href="PrefillOnly-2505.07203.pdf">§7.1 · PDF pp.9–10</a>：datasets、arrival process、models、hardware、baselines 與 routing。</span></li>
+          <li id="source-table2-p10"><span><a href="PrefillOnly-2505.07203.pdf">Table 2 · PDF p.10</a>：各方法／GPU 的 MIL 與 workload feasibility 標記。</span></li>
+          <li id="source-eval-results-p10-p12"><span><a href="PrefillOnly-2505.07203.pdf">§7.2 · PDF pp.10–12</a>：QPS–latency、throughput、MIL ablation 與 fairness sensitivity。</span></li>
+          <li id="source-related-p12"><span><a href="PrefillOnly-2505.07203.pdf">§8 · PDF p.12</a>：LLM engines、KV cache systems、LLM applications 與傳統 DL systems。</span></li>
+          <li id="source-discussion-p12-p13"><span><a href="PrefillOnly-2505.07203.pdf">§9–10 · PDF pp.12–13</a>：CPU offload、disaggregation、latency optimization 與 conclusion。</span></li>
           <li><span>必要圖：<a href="#source-fig2-p5">Fig. 2</a>、<a href="#source-fig3-p6">Fig. 3</a>、<a href="#source-fig5-p8">Fig. 5</a>、<a href="#source-fig6-p9">Fig. 6</a>、<a href="#source-fig7-p11">Fig. 7</a>、<a href="#source-fig10-p12">Fig. 10</a>、<a href="#source-fig11-p12">Fig. 11</a>。</span></li>
         </ol>
-      </section>
-    </main>
-  </div>
+        </section>
+      </main>
+    </div>
+  </article>
 
   <footer class="page-footer">
-    <p>Paper Reading · PrefillOnly: An Inference Engine for Prefill-only Workloads in Large Language Model Applications · 最後更新 2026-09-08</p>
-    <p>模板版本 1.2.0。頁面中的分析與推測不代表原論文作者立場。</p>
+    <p>PrefillOnly: An Inference Engine for Prefill-only Workloads in Large Language Model Applications · 分析與推測不代表原論文作者立場。</p>
   </footer>
-
-  <script>
-    (() => {
-      const progressBar = document.querySelector('.reading-progress__bar');
-      const tocLinks = [...document.querySelectorAll('.toc a[href^="#"]')];
-      const sections = tocLinks
-        .map((link) => document.querySelector(link.getAttribute('href')))
-        .filter(Boolean);
-
-      const updateProgress = () => {
-        const root = document.documentElement;
-        const distance = root.scrollHeight - root.clientHeight;
-        const percent = distance > 0 ? Math.min(100, Math.max(0, root.scrollTop / distance * 100)) : 0;
-        if (progressBar) progressBar.style.width = `${percent}%`;
-      };
-
-      updateProgress();
-      document.addEventListener('scroll', updateProgress, { passive: true });
-      window.addEventListener('resize', updateProgress);
-
-      if ('IntersectionObserver' in window && sections.length) {
-        const byId = new Map(tocLinks.map((link) => [link.hash.slice(1), link]));
-        const observer = new IntersectionObserver((entries) => {
-          const visible = entries
-            .filter((entry) => entry.isIntersecting)
-            .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-          if (!visible) return;
-          tocLinks.forEach((link) => link.removeAttribute('aria-current'));
-          byId.get(visible.target.id)?.setAttribute('aria-current', 'location');
-        }, { rootMargin: '-12% 0px -72% 0px', threshold: 0 });
-        sections.forEach((section) => observer.observe(section));
-      }
-    })();
-  </script>
 </body>
 </html>

@@ -46,6 +46,7 @@ DOWNLOAD_ATTR_RE = re.compile(
 TARGET_ATTR_RE = re.compile(r"\s+target\s*=", re.IGNORECASE)
 REL_ATTR_RE = re.compile(r"\s+rel\s*=", re.IGNORECASE)
 HEAD_OPEN_RE = re.compile(r"<head\b[^>]*>", re.IGNORECASE)
+HEAD_CLOSE_RE = re.compile(r"</head\s*>", re.IGNORECASE)
 ROBOTS_META_RE = re.compile(
     r"<meta\b(?=[^>]*\bname\s*=\s*['\"]robots['\"])[^>]*>",
     re.IGNORECASE,
@@ -59,6 +60,29 @@ CLASS_ATTRIBUTE_RE = re.compile(
 )
 INVALID_PERCENT_ESCAPE_RE = re.compile(r"%(?![0-9a-fA-F]{2})")
 PUBLISHABLE_IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"})
+
+PUBLIC_FONT_STYLESHEET_URL = (
+    "https://fonts.googleapis.com/css2?"
+    "family=Noto+Sans+TC:wght@400;500;600;700;800&"
+    "family=Open+Sans:wght@400;500;600;700;800&display=swap"
+)
+PUBLIC_FONT_STACK = '"Open Sans", "Noto Sans TC", sans-serif'
+PUBLIC_FONT_LINKS = (
+    '  <link rel="preconnect" href="https://fonts.googleapis.com">\n'
+    '  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
+    '  <link data-site-fonts="open-sans-noto-sans-tc" rel="stylesheet" href="'
+    + html.escape(PUBLIC_FONT_STYLESHEET_URL, quote=True)
+    + '">'
+)
+PUBLIC_FONT_POLICY = f"""  <style data-site-font-policy="open-sans-noto-sans-tc">
+    :root {{
+      --site-sans: {PUBLIC_FONT_STACK};
+      --sans: {PUBLIC_FONT_STACK};
+      --serif: {PUBLIC_FONT_STACK};
+      --mono: {PUBLIC_FONT_STACK};
+    }}
+    html, body, button, input, select, textarea {{ font-family: var(--site-sans); }}
+  </style>"""
 
 
 class BuildError(RuntimeError):
@@ -123,12 +147,13 @@ class SummaryMetadataParser(HTMLParser):
         self, tag: str, attrs: list[tuple[str, str | None]]
     ) -> None:
         tag = tag.casefold()
+        attr_map = {name.casefold(): value or "" for name, value in attrs}
         if tag in {"script", "style"}:
             self._suppressed_depth += 1
 
-        # A summary date is metadata only when it belongs to the definition-list
-        # property labelled exactly "摘要更新".  Other <time> elements in the
-        # research report must not affect homepage recency.
+        # V2 summaries mark the one recency date directly. V1 summaries used a
+        # definition-list property labelled exactly "摘要更新". Other <time>
+        # elements in the article must not affect homepage recency.
         if self._pending_summary_update_index is not None:
             if tag == "dd":
                 self._summary_update_dd_index = self._pending_summary_update_index
@@ -139,8 +164,9 @@ class SummaryMetadataParser(HTMLParser):
             self._dt_depth += 1
             if self._dt_depth == 1:
                 self._dt_parts = []
+        elif tag == "time" and attr_map.get("data-summary-field") == "last-updated":
+            self.summary_update_datetimes.append([attr_map.get("datetime", "")])
         elif tag == "time" and self._summary_update_dd_index is not None:
-            attr_map = {name.casefold(): value or "" for name, value in attrs}
             self.summary_update_datetimes[self._summary_update_dd_index].append(
                 attr_map.get("datetime", "")
             )
@@ -150,11 +176,9 @@ class SummaryMetadataParser(HTMLParser):
         elif tag == "title":
             self._title_depth += 1
         elif tag == "a":
-            attr_map = {name.casefold(): value or "" for name, value in attrs}
             self._anchor_href = attr_map.get("href")
             self._anchor_parts = []
         elif tag == "img":
-            attr_map = {name.casefold(): value or "" for name, value in attrs}
             if "src" in attr_map:
                 self.image_sources.append(attr_map["src"])
 
@@ -233,12 +257,14 @@ def _summary_last_updated(parser: SummaryMetadataParser, path: Path) -> date:
     fields = parser.summary_update_datetimes
     if len(fields) != 1:
         raise BuildError(
-            "Summary must contain exactly one <dt>摘要更新</dt> property followed "
-            f"by a <dd> date: {path}"
+            "Summary must contain exactly one update date, either a V2 "
+            "<time data-summary-field=\"last-updated\"> marker or the legacy "
+            f"<dt>摘要更新</dt> property: {path}"
         )
     if len(fields[0]) != 1:
         raise BuildError(
-            "The 摘要更新 property must contain exactly one <time datetime=\"YYYY-MM-DD\">: "
+            "The summary update marker must contain exactly one "
+            "<time datetime=\"YYYY-MM-DD\">: "
             f"{path}"
         )
 
@@ -585,7 +611,8 @@ def _rewrite_summary(
     rewritten = _rewrite_public_breadcrumb(
         rewritten, paper, topic_route, subtopic_route
     )
-    return _inject_robots_policy(rewritten, paper.relative_directory)
+    rewritten = _inject_robots_policy(rewritten, paper.relative_directory)
+    return _inject_public_typography(rewritten, paper.relative_directory)
 
 
 def _inject_robots_policy(document: str, relative_directory: Path) -> str:
@@ -601,6 +628,25 @@ def _inject_robots_policy(document: str, relative_directory: Path) -> str:
         + robots_meta
         + document[head_match.end() :]
     )
+
+
+def _inject_public_typography(document: str, relative_directory: Path) -> str:
+    """Guarantee the public article has the canonical bilingual font policy."""
+    head_close = HEAD_CLOSE_RE.search(document)
+    if not head_close:
+        raise BuildError(f"Summary has no closing head element: {relative_directory}")
+
+    head = document[: head_close.start()]
+    additions: list[str] = []
+    if PUBLIC_FONT_STYLESHEET_URL not in html.unescape(head):
+        additions.append(PUBLIC_FONT_LINKS)
+    if 'data-site-font-policy="open-sans-noto-sans-tc"' not in head.casefold():
+        additions.append(PUBLIC_FONT_POLICY)
+    if not additions:
+        return document
+
+    insertion = "\n" + "\n".join(additions) + "\n"
+    return document[: head_close.start()] + insertion + document[head_close.start() :]
 
 
 def _validate_image_references(
@@ -717,10 +763,11 @@ def _copy_assets(
 
 
 SITE_STYLE = """
-    :root { color-scheme: light dark; --bg: #f4f6fb; --panel: #fff; --text: #172033; --muted: #647089; --line: #dce2ec; --accent: #3157d5; --accent-soft: #e9edff; --folder: #f1b84b; --folder-tab: #ffd77d; --shadow: 0 12px 32px rgb(16 24 40 / .07); }
+    :root { color-scheme: light dark; --site-sans: "Open Sans", "Noto Sans TC", sans-serif; --bg: #f4f6fb; --panel: #fff; --text: #172033; --muted: #647089; --line: #dce2ec; --accent: #3157d5; --accent-soft: #e9edff; --folder: #f1b84b; --folder-tab: #ffd77d; --shadow: 0 12px 32px rgb(16 24 40 / .07); }
     @media (prefers-color-scheme: dark) { :root { --bg: #10131b; --panel: #181d29; --text: #eef2ff; --muted: #aab3c7; --line: #30394c; --accent: #a9baff; --accent-soft: #252e50; --folder: #c68d29; --folder-tab: #e3b453; --shadow: 0 12px 32px rgb(0 0 0 / .25); } }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.6; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--site-sans); line-height: 1.6; }
+    button, input, select, textarea { font-family: inherit; }
     a { color: var(--accent); }
     a:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
     .shell { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; }
@@ -864,6 +911,7 @@ def _render_page(*, title: str, description: str, content: str, script: str = ""
   <meta name="robots" content="noindex, noarchive">
   <meta name="description" content="{html.escape(description, quote=True)}">
   <title>{html.escape(title)}</title>
+{PUBLIC_FONT_LINKS}
   <style>{SITE_STYLE}</style>
 </head>
 <body>

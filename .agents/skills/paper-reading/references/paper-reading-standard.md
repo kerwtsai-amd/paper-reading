@@ -51,26 +51,21 @@ Keep provenance explicit when adding context beyond the paper. Cite canonical ex
 - If total page count is shown, include exactly one `data-summary-field="pdf-page-count"` element whose entire visible value is exactly `共 N 頁`. When the page-number systems match, do not write confirmations such as `一致`, `無 offset`, or `無頁碼偏移`. When they differ, write `PDF p.N（論文標示 p.M）` in the relevant source marker without additional process explanation.
 - Keep the evidence ledger, page-number mapping, hashes, and tool diagnostics in working state only. Do not disguise production details with the `分析` or `推測` labels. If an exception affects the user's access to the result, mention it concisely in the completion report only.
 
-## Required `summary.html` Sections
+## Required `summary.html` Editorial Roles
 
-Every section below must be present in this order. Preserve each exact Traditional Chinese section title shown in code formatting:
+The HTML template fixes semantic roles and their order, not generic reader-facing chapter names. Every role below must occur exactly once as `data-section-role`; each `<h2>` must be a paper-specific question or claim that tells the reader what that chapter resolves.
 
-1. **`論文基本資料` (Paper Metadata):** Formal title, authors, conference, journal, or arXiv record, year, canonical link, classification, classification rationale, a neutrally worded local PDF link, and the plain total page count `共 N 頁`. Do not include file or tool-validation information.
-2. **`一句話總結` (One-Sentence Summary):** State the central problem, method, and result in one to three sentences. Do not include promotional numbers without sources.
-3. **`Executive Summary`:** Use the compact causal order problem, root cause or gap, key insight, method, primary evidence, limitations, and takeaways.
-4. **`背景與動機` (Background and Motivation):** Explain the minimal domain and systems prerequisites required to understand the paper, the topic's role in the broader workflow, existing bottlenecks, and the authors' observations. A comparison table or prerequisite map is useful when it removes later ambiguity, but every included concept must be used later. End with a bridge to the exact problem in Section 05. Explain prefill's role in model inference only when the paper actually concerns prefill.
-5. **`問題定義` (Problem Definition):** Organize the explanation as observable symptom, root mechanism, why the nearest existing approach is insufficient, and the resulting requirements or success criteria. Cover objectives, inputs and outputs, assumptions, constraints, important terminology, and notation. Distinguish definitions stated by the authors from formalization introduced by the summarizer.
-6. **`核心方法` (Core Method):** Start with an end-to-end execution walkthrough, then explain the architecture, algorithm, component responsibilities, interactions, state changes, and design intuition in execution order. Tie each design choice to a named requirement or failure mechanism. When restructuring pseudocode, preserve its semantics without copying long passages.
-7. **`公式與理論` (Equations and Theory):** Include only equations needed to understand or validate the method. Explain each variable, unit or system meaning, assumption, purpose, qualitative sensitivity, and where the equation affects execution.
-8. **`圖片與圖表導讀` (Figure and Table Reading Guide):** Include necessary crops next to the concept or claim they resolve. Each caption's source label must show only `Figure/Table/Algorithm + the original identifier`, followed by a self-authored reading guide that tells the reader what to inspect and why it matters. Put page numbers in body source markers or the key-evidence index, not in captions.
-9. **`實驗設計` (Experimental Design):** Organize hardware, software, models, datasets, baselines, workloads, metrics, variable control, and fairness around the claims each experiment is intended to test.
-10. **`實驗結果` (Experimental Results):** Present claim-test pairs: claim, setup and controls, metric, observation, supported conclusion, and caveat. Organize metrics according to the paper's actual evaluation goals. For model-inference work, these may include latency, throughput, Time to First Token (TTFT), memory, and cost. Explain what the figures and tables can and cannot support.
-11. **`Ablation 與敏感度分析` (Ablation and Sensitivity Analysis):** Contribution of each design choice, parameter sensitivity, and interactions. Explicitly note when the paper does not provide these results.
-12. **`優點、限制與風險` (Strengths, Limitations, and Risks):** Strengths, system assumptions, applicable scope, scalability, generalizability, deployment constraints, author-stated limitations, and additional analysis.
-13. **`與相關工作的比較` (Comparison with Related Work):** Compare the closest alternatives by mechanism, assumptions, applicable scenarios, deployment cost, and failure mode rather than merely listing names.
-14. **`個人分析與可延伸方向` (Independent Analysis and Extensions):** Reusable design ideas, conclusions still requiring validation, research or engineering extensions, and broader significance. Mark content as `分析` or `推測` as appropriate.
-15. **`組會討論問題` (Research-Group Discussion Questions):** Provide three to five technically substantive questions that prompt discussion of evidence or design.
-16. **`術語表與重點索引` (Glossary and Key-Evidence Index):** Abbreviations, terminology, definitions, and the pages, sections, Figures, Tables, or Equations supporting key conclusions.
+1. **Header `thesis`:** Compact bibliographic context plus one non-repeated lede containing the problem, mechanism, strongest evidence, and principal boundary.
+2. **`prerequisites`:** Only the minimum domain or systems concepts used later. Prefer a small example, data-flow sketch, or comparison table when it lowers cognitive load. Explicitly reconnect every concept to a later design choice or result.
+3. **`problem`:** Observable symptom → root mechanism → why the nearest approach is insufficient → derived requirements or success criteria. Integrate the closest related-work comparison here rather than postponing it to a detached survey chapter.
+4. **`insight`:** A concrete analogy, miniature calculation, or one packet/request/token/tensor/cache-block walkthrough that makes the central mechanism intuitive. Map the objects to formal notation and state where the simplification stops being exact.
+5. **`method`:** The complete end-to-end flow followed by component mechanics in execution order. Tie every component to a named requirement. Put equations, algorithms, and method figures at their first explanatory use; there is no separate formula warehouse or figure gallery.
+6. **`evidence`:** Claim-test units that keep setup, controls, metric, observation, supported conclusion, and caveat together. Include main results, ablations, sensitivity analysis, and fairness checks beside the result figure or table they interpret.
+7. **`critique`:** Strengths, assumptions, applicable scope, scalability, deployment constraints, author-stated limitations, external-validity risks, and conclusions the evidence cannot support.
+8. **`extensions`:** Reusable design ideas, independent analysis, concrete follow-up experiments, broader significance, and three to five substantive research-group questions. Mark analysis and speculation explicitly.
+9. **`reference`:** Formal metadata, neutral local-PDF link context where needed, exactly one plain page-count field `共 N 頁`, glossary, and key-evidence index. Keep this appendix lower in visual prominence than the article.
+
+The article must read as continuous exposition, not a collection of form fields. Do not repeat the same summary in the header, first chapter, and conclusion. Do not use generic headings such as `背景與動機`, `核心方法`, `公式與理論`, `圖片與圖表導讀`, or `實驗結果` as the universal top-level scheme.
 
 ## Method and Experiment Reading Checks
 
@@ -103,12 +98,14 @@ Every section below must be present in this order. Preserve each exact Tradition
 
 ## HTML and Writing Quality
 
-- Start from a complete copy of the canonical template. Do not arbitrarily remove CSS, MathJax, the table of contents, fixed section IDs, or evidence-callout classes.
+- Start from a complete copy of the canonical template. Preserve its CSS, MathJax, table of contents, semantic role markers, evidence labels, and responsive structure.
 - Write all reader-facing prose in Traditional Chinese (`zh-Hant`). On first use, format technical terms as `中文（English, ABBR）`. Avoid vague descriptions, paragraph-by-paragraph translation, and long verbatim excerpts.
 - Use `\( ... \)` for inline equations and `\[ ... \]` for display equations. Put code and pseudocode in `<pre><code>` so MathJax does not process them.
 - Place a source chip next to every key result. Prefer the format `§4.2 · PDF p.7（論文標示 p.5）· Fig. 3`.
 - Include a table of contents, correct heading hierarchy, source index, image descriptions, tables, code styling, clear focus states, desktop and narrow-screen layouts, and print styles.
-- A pinned-version MathJax CDN is allowed. Do not add external fonts, trackers, frameworks, or complex build dependencies.
+- Use a single editorial reading column. Do not add a permanent sidebar TOC, dashboard properties grid, detached figure gallery, or card wall. Prefer compact inline evidence markers; normally keep large statement callouts to six or fewer.
+- Use Open Sans for Latin glyphs and Noto Sans TC for CJK glyphs throughout the page. Preserve the canonical `"Open Sans", "Noto Sans TC", sans-serif` value for all three template variables `--sans`, `--serif`, and `--mono`; the repeated value is intentional, including for headings and code.
+- The only permitted font resources are preconnects to `https://fonts.googleapis.com` and `https://fonts.gstatic.com` (the latter with `crossorigin`) plus the exact Google Fonts stylesheet `https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&family=Open+Sans:wght@400;500;600;700;800&display=swap`. A pinned-version MathJax CDN is also allowed. Do not add another stylesheet, font, preconnect, tracker, framework, or complex build dependency.
 - Do not leave `{{PLACEHOLDER}}`, sample data, fabricated citations, or template instructions in the finished output.
 - After writing, inspect all reader-visible content and remove filename explanations, file-validation details, page-offset status, path, tool, download, or cropping procedures, and other operational logs.
 - Inspect the explanatory spine: prerequisites must be reused, the problem must derive the requirements, components must answer those requirements, and conclusions must point to the experiments that test them.
@@ -121,7 +118,7 @@ End full-text research only when all of the following are true:
 - The central problem, method flow, important equations, experimental design, main results, ablations or missing ablations, limitations, and related work all have sources.
 - Every important number is traceable, and workloads or conditions have not been conflated as directly comparable.
 - Figures required to understand the core method and main results have been extracted and inspected.
-- All 16 sections have sufficient content or explicitly state `論文未提供`.
+- Every required semantic role has meaningful content or explicitly states `論文未提供`.
 - `作者主張`, `實驗事實`, `分析`, and `推測` content is clearly separated.
 - Every unresolved issue is recorded as a limitation or in the delivery report rather than filled with assumed knowledge.
 - Every prerequisite introduced for the reader is used later, every major component is tied to a problem or requirement, and every principal empirical conclusion has a claim-test mapping.
@@ -130,7 +127,9 @@ End full-text research only when all of the following are true:
 
 - The PDF and `summary.html` both open successfully.
 - The table of contents and internal anchors work, there is exactly one `h1`, and sections appear in the correct order.
+- The first two screenfuls communicate the problem, core insight, and strongest evidence without repeating the same summary in multiple boxes.
 - MathJax renders without obvious parse errors.
+- Latin and CJK samples resolve respectively to Open Sans and Noto Sans TC, and no unexpected stylesheet or font connection is requested.
 - Images exist, are non-empty, use correct paths, remain legible, and have complete caption sources.
 - Key data and conclusions are traceable.
 - There is no page-level horizontal overflow at 1440 px, 1024 px, or 390 px; individual tables can scroll horizontally.
