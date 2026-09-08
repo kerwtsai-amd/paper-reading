@@ -763,56 +763,150 @@ def _copy_assets(
 
 
 SITE_STYLE = """
-    :root { color-scheme: light dark; --site-sans: "Open Sans", "Noto Sans TC", sans-serif; --bg: #f4f6fb; --panel: #fff; --text: #172033; --muted: #647089; --line: #dce2ec; --accent: #3157d5; --accent-soft: #e9edff; --folder: #f1b84b; --folder-tab: #ffd77d; --shadow: 0 12px 32px rgb(16 24 40 / .07); }
-    @media (prefers-color-scheme: dark) { :root { --bg: #10131b; --panel: #181d29; --text: #eef2ff; --muted: #aab3c7; --line: #30394c; --accent: #a9baff; --accent-soft: #252e50; --folder: #c68d29; --folder-tab: #e3b453; --shadow: 0 12px 32px rgb(0 0 0 / .25); } }
-    * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--site-sans); line-height: 1.6; }
+    :root { color-scheme: light; --site-sans: "Open Sans", "Noto Sans TC", sans-serif; --paper: #fff; --ink: #24272d; --heading: #111319; --muted: #626873; --faint: #8d929c; --line: #dedfe3; --soft-line: #ececef; --wash: #f7f7f5; --accent: #245f9e; --accent-soft: #edf4fb; --folder: #e3eaf2; --folder-tab: #cbd8e6; }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { background: var(--paper); scroll-behavior: smooth; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--site-sans); font-size: 16px; line-height: 1.65; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
     button, input, select, textarea { font-family: inherit; }
-    a { color: var(--accent); }
-    a:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-    .shell { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; }
-    .site-header { padding: 2.4rem 0 1.5rem; }
-    .hero { padding-top: 4rem; }
-    .breadcrumbs { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0 0 1.4rem; color: var(--muted); font-size: .9rem; }
+    ::selection { background: #dbe9f7; }
+    a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: .2em; }
+    a:hover { text-decoration-thickness: 2px; }
+    :focus-visible { outline: 3px solid rgb(36 95 158 / 32%); outline-offset: 3px; }
+    .skip-link { position: fixed; z-index: 100; top: .75rem; left: .75rem; transform: translateY(-180%); padding: .45rem .7rem; color: #fff; background: var(--heading); text-decoration: none; }
+    .skip-link:focus { transform: translateY(0); }
+    .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
+    .shell { width: min(74rem, calc(100% - 2.5rem)); margin-inline: auto; }
+    .home-masthead { border-bottom: 1px solid var(--soft-line); }
+    .home-nav { display: flex; align-items: center; justify-content: space-between; min-height: 3.8rem; gap: 1rem; }
+    .site-brand { color: var(--heading); font-size: .78rem; font-weight: 700; letter-spacing: .12em; text-decoration: none; text-transform: uppercase; }
+    .nav-link { color: var(--muted); font-size: .88rem; font-weight: 600; text-decoration: none; }
+    .nav-link:hover { color: var(--accent); }
+    .site-header { padding: clamp(2.3rem, 5vw, 4rem) 0 1.6rem; }
+    .hero { padding-top: clamp(3rem, 7vw, 5.4rem); padding-bottom: clamp(2rem, 5vw, 3.4rem); }
+    .breadcrumbs { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0 0 1.4rem; color: var(--faint); font-size: .82rem; }
     .breadcrumbs a { color: inherit; }
-    .eyebrow, .folder-kicker { margin: 0 0 .4rem; color: var(--accent); font-size: .76rem; font-weight: 780; letter-spacing: .1em; text-transform: uppercase; }
-    h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.12; }
-    h2 { margin: 0; font-size: clamp(1.35rem, 3vw, 1.8rem); }
-    .intro { max-width: 48rem; margin: .8rem 0 0; color: var(--muted); }
-    main { padding-bottom: 4rem; }
+    .eyebrow, .folder-kicker { margin: 0 0 .55rem; color: var(--accent); font-size: .74rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1, h2, h3 { color: var(--heading); font-weight: 700; letter-spacing: -.025em; text-wrap: balance; }
+    h1 { max-width: 54rem; margin: 0; font-size: clamp(2.2rem, 5vw, 3.7rem); line-height: 1.08; }
+    h2 { margin: 0; font-size: clamp(1.3rem, 3vw, 1.7rem); line-height: 1.25; }
+    .intro { max-width: 47rem; margin: 1rem 0 0; color: var(--muted); font-size: 1.02rem; }
+    .library-stats { display: flex; flex-wrap: wrap; gap: .55rem 1.5rem; margin: 1.6rem 0 0; }
+    .library-stats div { display: flex; align-items: baseline; gap: .35rem; }
+    .library-stats dt { color: var(--faint); font-size: .78rem; }
+    .library-stats dd { margin: 0; color: var(--heading); font-size: .9rem; font-weight: 700; }
+    main { padding-bottom: 5rem; }
     .section-block { margin-top: 2.8rem; }
     .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
-    .section-heading p { margin: 0; color: var(--muted); font-size: .92rem; }
-    .library-cta { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 1.1rem; margin-top: 2rem; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 1.15rem; background: linear-gradient(135deg, var(--panel), var(--accent-soft)); color: var(--text); padding: 1.25rem 1.35rem; text-decoration: none; box-shadow: var(--shadow); }
-    .library-cta:hover { border-color: var(--accent); transform: translateY(-1px); }
-    .library-cta strong { display: block; font-size: 1.12rem; }
+    .section-heading p { margin: 0; color: var(--muted); font-size: .9rem; }
+    .latest-section { border-top: 1px solid var(--soft-line); padding: 1.5rem 0 2.5rem; }
+    .latest-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: .9rem; }
+    .latest-heading p { margin: 0; color: var(--muted); font-size: .88rem; }
+    .latest-paper { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 1.5rem; border: 1px solid #c8d9ea; border-radius: .6rem; background: var(--accent-soft); padding: 1.25rem 1.35rem; }
+    .latest-paper-path { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin: 0; color: var(--faint); font-size: .8rem; }
+    .latest-paper-title { margin: .65rem 0 0; font-size: clamp(1.2rem, 2.6vw, 1.65rem); line-height: 1.35; }
+    .latest-paper-title a { color: var(--heading); text-decoration: none; overflow-wrap: anywhere; }
+    .latest-paper-title a:hover { color: var(--accent); text-decoration: underline; }
+    .latest-paper-date { margin: .55rem 0 0; color: var(--muted); font-size: .82rem; }
+    .latest-paper-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .65rem 1rem; }
+    .latest-paper-actions .source-link { font-size: .82rem; white-space: nowrap; }
+    .latest-primary { display: inline-flex; align-items: center; min-height: 2.45rem; border: 1px solid #b8cde3; border-radius: .45rem; background: var(--paper); padding: .48rem .72rem; font-size: .86rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+    .latest-primary:hover { border-color: var(--accent); }
+    .database-section { border-top: 1px solid var(--soft-line); padding-top: 1.5rem; }
+    .database-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; }
+    .database-heading p { margin: 0; color: var(--muted); font-size: .88rem; }
+    .database-controls { margin-top: 1.25rem; }
+    .topic-filters { display: flex; gap: .45rem; overflow-x: auto; padding: .15rem .15rem .65rem; scrollbar-width: thin; }
+    .topic-filter { display: inline-flex; flex: 0 0 auto; align-items: center; gap: .45rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--paper); color: var(--muted); cursor: pointer; padding: .42rem .65rem; font-size: .84rem; line-height: 1.2; }
+    .topic-filter:hover { border-color: #b9c5d2; color: var(--heading); background: var(--wash); }
+    .topic-filter[aria-pressed="true"] { border-color: #b8cde3; color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+    .topic-filter-count { min-width: 1.35rem; border-radius: 999px; background: rgb(98 104 115 / 9%); color: inherit; padding: .08rem .35rem; font-size: .72rem; text-align: center; }
+    .database-search { display: grid; grid-template-columns: minmax(15rem, 24rem) auto; align-items: center; gap: .75rem; margin-top: .55rem; }
+    .database-search input { width: 100%; border: 1px solid var(--line); border-radius: .5rem; background: var(--paper); color: var(--ink); padding: .64rem .78rem; font: inherit; font-size: .9rem; }
+    .database-search input::placeholder { color: var(--faint); }
+    .result-status { margin: 0; color: var(--muted); font-size: .84rem; white-space: nowrap; }
+    .database-frame { margin-top: .85rem; overflow: hidden; border: 1px solid var(--line); border-radius: .55rem; background: var(--paper); }
+    .database-scroll { overflow-x: auto; }
+    .paper-database { width: 100%; min-width: 56rem; border-collapse: collapse; table-layout: fixed; }
+    .paper-database caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+    .paper-database th { background: var(--wash); color: var(--faint); font-size: .74rem; font-weight: 600; letter-spacing: .02em; text-align: left; }
+    .paper-database th, .paper-database td { border-right: 1px solid var(--soft-line); border-bottom: 1px solid var(--soft-line); padding: .72rem .8rem; vertical-align: middle; }
+    .paper-database th:last-child, .paper-database td:last-child { border-right: 0; }
+    .paper-database tbody tr:last-child td { border-bottom: 0; }
+    .paper-database tbody tr:hover { background: #fafaf8; }
+    .paper-database .column-title { width: 37%; }
+    .paper-database .column-topic { width: 15%; }
+    .paper-database .column-subtopic { width: 17%; }
+    .paper-database .column-updated { width: 14%; }
+    .paper-database .column-source { width: 9%; }
+    .paper-database .column-action { width: 8%; }
+    .paper-title-link { display: block; color: var(--heading); font-weight: 600; line-height: 1.45; text-decoration: none; overflow-wrap: anywhere; }
+    .paper-title-link:hover { color: var(--accent); text-decoration: underline; }
+    .property-pill { display: inline-block; max-width: 100%; border-radius: .32rem; background: var(--accent-soft); color: #315f8a; padding: .14rem .4rem; font-size: .78rem; line-height: 1.45; text-decoration: none; overflow-wrap: anywhere; }
+    .property-pill:hover { color: var(--accent); text-decoration: underline; }
+    .property-link { color: var(--muted); font-size: .82rem; text-decoration: none; overflow-wrap: anywhere; }
+    .property-link:hover { color: var(--accent); text-decoration: underline; }
+    .database-date { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+    .source-cell .source-link { font-size: .78rem; white-space: nowrap; }
+    .database-action { text-align: right; }
+    .database-action a { font-size: .82rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+    .empty-state { margin: .85rem 0 0; border: 1px dashed var(--line); border-radius: .55rem; background: var(--wash); color: var(--muted); padding: 1rem; text-align: center; }
+    .empty-state button { margin-left: .55rem; border: 0; background: transparent; color: var(--accent); cursor: pointer; font-weight: 700; padding: .25rem; text-decoration: underline; text-underline-offset: .2em; }
+    .library-cta { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 1.1rem; margin-top: 2rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--wash); color: var(--ink); padding: 1.15rem 1.25rem; text-decoration: none; }
+    .library-cta:hover { border-color: #b9c5d2; background: var(--accent-soft); }
+    .library-cta strong { display: block; font-size: 1.08rem; }
     .library-cta small { color: var(--muted); }
-    .folder-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr)); gap: 1rem; }
-    .folder-card { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 1rem; min-height: 8.3rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--panel); color: var(--text); padding: 1.05rem; text-decoration: none; box-shadow: var(--shadow); }
-    .folder-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .folder-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr)); gap: .85rem; }
+    .folder-card { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: .9rem; min-height: 7.5rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--paper); color: var(--ink); padding: 1rem; text-decoration: none; }
+    .folder-card:hover { border-color: #b9c5d2; background: var(--wash); }
     .folder-card strong { display: block; line-height: 1.35; }
     .folder-card small { display: block; margin-top: .28rem; color: var(--muted); }
-    .folder-icon { position: relative; display: inline-block; width: 3.4rem; height: 2.55rem; border-radius: .25rem .45rem .45rem .45rem; background: var(--folder); box-shadow: inset 0 -5px 0 rgb(0 0 0 / .08); }
-    .folder-icon::before { position: absolute; left: 0; top: -.58rem; width: 1.7rem; height: .75rem; border-radius: .35rem .35rem 0 0; background: var(--folder-tab); content: ""; }
-    .folder-icon.compact { width: 2.6rem; height: 1.95rem; }
-    .folder-icon.compact::before { top: -.45rem; width: 1.3rem; height: .58rem; }
-    .paper-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1rem; }
-    .paper-card { display: flex; min-height: 12rem; flex-direction: column; border: 1px solid var(--line); border-radius: 1rem; background: var(--panel); padding: 1.1rem; box-shadow: var(--shadow); }
-    .paper-card h3 { margin: 0; font-size: 1.05rem; line-height: 1.45; }
-    .paper-card h3 a { color: var(--text); text-decoration: none; }
+    .folder-icon { position: relative; display: inline-block; width: 3.2rem; height: 2.35rem; border-radius: .2rem .4rem .4rem .4rem; background: var(--folder); }
+    .folder-icon::before { position: absolute; left: 0; top: -.5rem; width: 1.55rem; height: .65rem; border-radius: .3rem .3rem 0 0; background: var(--folder-tab); content: ""; }
+    .folder-icon.compact { width: 2.5rem; height: 1.8rem; }
+    .folder-icon.compact::before { top: -.4rem; width: 1.25rem; height: .52rem; }
+    .paper-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: .85rem; }
+    .paper-card { display: flex; min-height: 11.5rem; flex-direction: column; border: 1px solid var(--line); border-radius: .65rem; background: var(--paper); padding: 1.05rem; }
+    .paper-card:hover { background: var(--wash); }
+    .paper-card h3 { margin: 0; font-size: 1.03rem; line-height: 1.45; }
+    .paper-card h3 a { color: var(--heading); text-decoration: none; }
     .paper-card h3 a:hover { color: var(--accent); text-decoration: underline; }
-    .paper-meta { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .8rem; color: var(--muted); font-size: .84rem; }
-    .paper-date { margin: .65rem 0 0; color: var(--muted); font-size: .84rem; }
-    .paper-actions { display: flex; flex-wrap: wrap; gap: .9rem; margin-top: auto; padding-top: 1rem; font-weight: 700; font-size: .9rem; }
+    .paper-meta { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .8rem; color: var(--muted); font-size: .82rem; }
+    .paper-date { margin: .65rem 0 0; color: var(--muted); font-size: .82rem; }
+    .paper-actions { display: flex; flex-wrap: wrap; gap: .9rem; margin-top: auto; padding-top: 1rem; font-weight: 700; font-size: .88rem; }
     .source-link { color: var(--muted); font-weight: 600; }
     .search-box { max-width: 44rem; margin-top: 1.5rem; }
     .search-box label { display: block; margin-bottom: .45rem; font-weight: 700; }
-    .search-box input { width: 100%; border: 1px solid var(--line); border-radius: .8rem; background: var(--panel); color: var(--text); padding: .85rem 1rem; font: inherit; }
-    #result-status { margin: .55rem 0 0; color: var(--muted); font-size: .92rem; }
-    .empty-state { border: 1px dashed var(--line); border-radius: .9rem; color: var(--muted); padding: 1rem; text-align: center; }
+    .search-box input { width: 100%; border: 1px solid var(--line); border-radius: .5rem; background: var(--paper); color: var(--ink); padding: .72rem .85rem; font: inherit; }
+    #result-status { margin: .55rem 0 0; color: var(--muted); font-size: .9rem; }
     [hidden] { display: none !important; }
-    @media (max-width: 560px) { .hero { padding-top: 2.5rem; } .library-cta { grid-template-columns: auto 1fr; } .library-cta .cta-arrow { display: none; } .section-heading { align-items: start; flex-direction: column; } }
-    @media (prefers-reduced-motion: no-preference) { .library-cta, .folder-card { transition: border-color .16s ease, transform .16s ease; } }
+    @media (max-width: 760px) {
+      .shell { width: min(100% - 1.5rem, 74rem); }
+      .hero { padding-top: 2.8rem; }
+      .latest-heading, .database-heading, .section-heading { align-items: start; flex-direction: column; }
+      .latest-paper { grid-template-columns: minmax(0, 1fr); gap: 1rem; padding: 1rem; }
+      .latest-paper-actions { justify-content: flex-start; }
+      .database-search { grid-template-columns: minmax(0, 1fr); gap: .4rem; }
+      .database-frame { overflow: visible; border: 0; background: transparent; }
+      .database-scroll { overflow: visible; }
+      .paper-database { display: block; min-width: 0; }
+      .paper-database thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+      .paper-database tbody { display: grid; gap: .7rem; }
+      .paper-database tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem 1rem; border: 1px solid var(--line); border-radius: .55rem; background: var(--paper); padding: .85rem; }
+      .paper-database tbody tr:hover { background: var(--wash); }
+      .paper-database td { display: block; border: 0; padding: 0; }
+      .paper-database .paper-title-cell { grid-column: 1 / -1; padding-bottom: .3rem; border-bottom: 1px solid var(--soft-line); }
+      .paper-database .topic-cell, .paper-database .subtopic-cell, .paper-database .updated-cell, .paper-database .source-cell { grid-column: 1; display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); align-items: baseline; gap: .5rem; }
+      .paper-database .topic-cell::before, .paper-database .subtopic-cell::before, .paper-database .updated-cell::before, .paper-database .source-cell::before { color: var(--faint); content: attr(data-label); font-size: .72rem; }
+      .paper-database .database-action { grid-column: 2; grid-row: 2 / span 4; display: flex; align-items: end; }
+    }
+    @media (max-width: 430px) {
+      .home-nav { min-height: 3.4rem; }
+      .nav-link { font-size: .8rem; }
+      .library-stats { gap: .4rem 1rem; }
+      .paper-database tbody tr { grid-template-columns: minmax(0, 1fr); }
+      .paper-database .database-action { grid-column: 1; grid-row: auto; justify-content: flex-start; padding-top: .25rem; }
+    }
+    @media (prefers-reduced-motion: no-preference) { .folder-card, .paper-card, .topic-filter { transition: border-color .16s ease, background-color .16s ease, color .16s ease; } }
 """
 
 
@@ -922,13 +1016,15 @@ def _render_page(*, title: str, description: str, content: str, script: str = ""
 """
 
 
-def _source_link(paper: Paper) -> str:
+def _source_link(paper: Paper, *, label: str = "原始來源 ↗") -> str:
     if paper.source is None:
         return ""
     return (
         '<a class="source-link" href="'
         + html.escape(paper.source.url, quote=True)
-        + '" target="_blank" rel="noopener noreferrer">原始來源 ↗</a>'
+        + '" target="_blank" rel="noopener noreferrer">'
+        + html.escape(label)
+        + "</a>"
     )
 
 
@@ -995,71 +1091,209 @@ def _render_home(
     topic_routes: dict[str, str],
     subtopic_routes: dict[tuple[str, str], str],
 ) -> str:
-    latest_papers = sorted(papers, key=_paper_recency_key)[:3]
-    recent_folders: list[tuple[date, str, str, list[Paper]]] = []
-    for topic in sorted(grouped, key=_normalized_sort_key):
-        for subtopic in sorted(grouped[topic], key=_normalized_sort_key):
-            children = grouped[topic][subtopic]
-            recent_folders.append(
-                (max(paper.last_updated for paper in children), topic, subtopic, children)
-            )
-    recent_folders.sort(
-        key=lambda item: (
-            -item[0].toordinal(),
-            _normalized_sort_key(item[1]),
-            _normalized_sort_key(item[2]),
-        )
+    papers_by_recency = sorted(papers, key=_paper_recency_key)
+    latest_paper = papers_by_recency[0]
+    latest_topic_route = _route_component(topic_routes[latest_paper.topic])
+    latest_subtopic_route = _route_component(
+        subtopic_routes[(latest_paper.topic, latest_paper.subtopic)]
+    )
+    latest_href = f"papers/{latest_paper.slug}/"
+    latest_source_link = _source_link(latest_paper) or (
+        '<span class="latest-no-source">無原始來源</span>'
     )
 
-    recent_cards: list[str] = []
-    for newest, topic, subtopic, children in recent_folders[:3]:
-        topic_route = _route_component(topic_routes[topic])
-        subtopic_route = _route_component(subtopic_routes[(topic, subtopic)])
-        attributes = (
-            "data-recent-folder "
-            f'data-topic="{html.escape(topic, quote=True)}" '
-            f'data-subtopic="{html.escape(subtopic, quote=True)}"'
-        )
-        recent_cards.append(
-            _folder_card(
-                href=f"library/{topic_route}/{subtopic_route}/",
-                kicker=topic,
-                title=subtopic,
-                detail=f"{len(children)} 篇 · 最近更新 {_display_date(newest)}",
-                attributes=attributes,
-            )
+    topic_filters: list[str] = [
+        '<button class="topic-filter" type="button" data-topic-filter="" '
+        f'data-topic-count="{len(papers)}" '
+        'aria-pressed="true" aria-controls="paper-list">全部'
+        f'<span class="topic-filter-count" aria-label="{len(papers)} 篇">'
+        f"{len(papers)}</span></button>"
+    ]
+    for topic in sorted(grouped, key=_normalized_sort_key):
+        topic_count = sum(len(children) for children in grouped[topic].values())
+        topic_filters.append(
+            '<button class="topic-filter" type="button" data-topic-filter="'
+            + html.escape(topic, quote=True)
+            + f'" data-topic-count="{topic_count}" aria-pressed="false" '
+            + 'aria-controls="paper-list">'
+            + html.escape(topic)
+            + f'<span class="topic-filter-count" aria-label="{topic_count} 篇">'
+            + f"{topic_count}</span></button>"
         )
 
-    latest_cards = [
-        _render_paper_card(
-            paper, paper_href=f"papers/{paper.slug}/", latest=True
+    database_rows: list[str] = []
+    for paper in papers_by_recency:
+        topic_route = _route_component(topic_routes[paper.topic])
+        subtopic_route = _route_component(
+            subtopic_routes[(paper.topic, paper.subtopic)]
         )
-        for paper in latest_papers
-    ]
-    content = f"""  <header class="site-header hero shell">
+        paper_href = f"papers/{paper.slug}/"
+        search_text = " ".join(
+            (paper.topic, paper.subtopic, paper.title, paper.directory_name)
+        )
+        source_link = _source_link(paper, label="來源 ↗") or '<span aria-label="無原始來源">—</span>'
+        database_rows.append(
+            '<tr data-paper data-paper-slug="'
+            + html.escape(paper.slug, quote=True)
+            + '" data-topic="'
+            + html.escape(paper.topic, quote=True)
+            + '" data-search="'
+            + html.escape(search_text, quote=True)
+            + '">'
+            + '<td class="paper-title-cell" data-label="論文"><a class="paper-title-link" '
+            + f'data-home-paper="{html.escape(paper.slug, quote=True)}" '
+            + f'href="{html.escape(paper_href, quote=True)}">'
+            + html.escape(paper.title)
+            + "</a></td>"
+            + '<td class="topic-cell" data-label="Topic"><a class="property-pill" href="'
+            + f"library/{topic_route}/"
+            + '">'
+            + html.escape(paper.topic)
+            + "</a></td>"
+            + '<td class="subtopic-cell" data-label="Subtopic"><a class="property-link" href="'
+            + f"library/{topic_route}/{subtopic_route}/"
+            + '">'
+            + html.escape(paper.subtopic)
+            + "</a></td>"
+            + '<td class="updated-cell" data-label="摘要更新"><time class="database-date" datetime="'
+            + paper.last_updated.isoformat()
+            + '">'
+            + paper.last_updated.isoformat()
+            + "</time></td>"
+            + '<td class="source-cell" data-label="來源">'
+            + source_link
+            + "</td>"
+            + '<td class="database-action" data-label="閱讀"><a aria-label="閱讀 '
+            + html.escape(paper.title, quote=True)
+            + ' 摘要" href="'
+            + html.escape(paper_href, quote=True)
+            + '">開啟 →</a></td></tr>'
+        )
+
+    subtopic_count = sum(len(subtopics) for subtopics in grouped.values())
+    newest_update = max(paper.last_updated for paper in papers)
+    content = f"""  <a class="skip-link" href="#main-content">跳至主要內容</a>
+  <div class="home-masthead">
+    <nav class="home-nav shell" aria-label="主要導覽">
+      <a class="site-brand" href="./" aria-current="page">Paper Reading</a>
+      <a class="nav-link" data-library-link href="library/">資料夾瀏覽 →</a>
+    </nav>
+  </div>
+  <header class="site-header hero shell">
     <p class="eyebrow">Paper Reading</p>
-    <h1>論文閱讀首頁</h1>
-    <p class="intro">把近期研究焦點、最新完成的深度閱讀，以及依 Topic／Subtopic 整理的完整儲藏庫放在同一個入口。</p>
-    <a class="library-cta" href="library/">
-      <span class="folder-icon compact" aria-hidden="true"></span>
-      <span><strong>論文閱讀儲藏庫</strong><small>{len(papers)} 篇論文 · {len(grouped)} 個 Topic</small></span>
-      <span class="cta-arrow" aria-hidden="true">進入儲藏庫 →</span>
-    </a>
+    <h1>論文閱讀資料庫</h1>
+    <p class="intro">以 Topic 聚合研究脈絡，從同一個資料庫搜尋、篩選並開啟每篇繁體中文深度閱讀。</p>
+    <dl class="library-stats" aria-label="資料庫統計">
+      <div><dt>論文</dt><dd>{len(papers)} 篇</dd></div>
+      <div><dt>Topic</dt><dd>{len(grouped)} 個</dd></div>
+      <div><dt>Subtopic</dt><dd>{subtopic_count} 個</dd></div>
+      <div><dt>最近更新</dt><dd><time datetime="{newest_update.isoformat()}">{newest_update.isoformat()}</time></dd></div>
+    </dl>
   </header>
-  <main class="shell">
-    <section class="section-block" aria-labelledby="recent-topics-heading">
-      <div class="section-heading"><h2 id="recent-topics-heading">最近關注的主題</h2><p>依子題中最新完成的摘要排序</p></div>
-      <div class="folder-grid">{''.join(recent_cards)}</div>
+  <main class="shell" id="main-content">
+    <section class="latest-section" aria-labelledby="latest-paper-heading">
+      <div class="latest-heading">
+        <h2 id="latest-paper-heading">最新論文</h2>
+        <p>最近完成的深度閱讀</p>
+      </div>
+      <article class="latest-paper" data-latest-paper="{html.escape(latest_paper.slug, quote=True)}">
+        <div>
+          <p class="latest-paper-path">
+            <a class="property-pill" href="library/{latest_topic_route}/">{html.escape(latest_paper.topic)}</a>
+            <span aria-hidden="true">›</span>
+            <a class="property-link" href="library/{latest_topic_route}/{latest_subtopic_route}/">{html.escape(latest_paper.subtopic)}</a>
+          </p>
+          <h3 class="latest-paper-title"><a data-latest-paper-link href="{html.escape(latest_href, quote=True)}">{html.escape(latest_paper.title)}</a></h3>
+          <p class="latest-paper-date">摘要更新：<time datetime="{latest_paper.last_updated.isoformat()}">{_display_date(latest_paper.last_updated)}</time></p>
+        </div>
+        <div class="latest-paper-actions">
+          {latest_source_link}
+          <a class="latest-primary" href="{html.escape(latest_href, quote=True)}">閱讀摘要 →</a>
+        </div>
+      </article>
     </section>
-    <section class="section-block" aria-labelledby="latest-papers-heading">
-      <div class="section-heading"><h2 id="latest-papers-heading">最新三篇論文閱讀</h2><p>依摘要更新日期排序</p></div>
-      <div class="paper-grid">{''.join(latest_cards)}</div>
+    <section class="database-section" aria-labelledby="database-heading">
+      <div class="database-heading">
+        <h2 id="database-heading">全部論文</h2>
+        <p>依摘要更新日期排列</p>
+      </div>
+      <div class="database-controls">
+        <div class="topic-filters" role="group" aria-label="依 Topic 篩選論文">{''.join(topic_filters)}</div>
+        <div class="database-search">
+          <label class="visually-hidden" for="home-paper-search">搜尋論文</label>
+          <input id="home-paper-search" type="search" placeholder="搜尋標題、Topic 或 Subtopic…" autocomplete="off" aria-controls="paper-list">
+          <p class="result-status" id="home-result-status" role="status" aria-live="polite">共 {len(papers)} 篇</p>
+        </div>
+      </div>
+      <div class="database-frame">
+        <div class="database-scroll">
+          <table class="paper-database">
+            <caption>論文閱讀資料庫</caption>
+            <colgroup>
+              <col class="column-title"><col class="column-topic"><col class="column-subtopic">
+              <col class="column-updated"><col class="column-source"><col class="column-action">
+            </colgroup>
+            <thead><tr><th scope="col">論文</th><th scope="col">Topic</th><th scope="col">Subtopic</th><th scope="col">摘要更新</th><th scope="col">來源</th><th scope="col">閱讀</th></tr></thead>
+            <tbody id="paper-list">{''.join(database_rows)}</tbody>
+          </table>
+        </div>
+      </div>
+      <p class="empty-state" id="home-empty-state" hidden>找不到符合條件的論文。<button id="clear-home-filters" type="button">清除篩選</button></p>
     </section>
   </main>"""
+    script = """  <script>
+    (() => {
+      const input = document.querySelector("#home-paper-search");
+      const papers = [...document.querySelectorAll("#paper-list [data-paper]")];
+      const filters = [...document.querySelectorAll("[data-topic-filter]")];
+      const status = document.querySelector("#home-result-status");
+      const empty = document.querySelector("#home-empty-state");
+      const clear = document.querySelector("#clear-home-filters");
+      const normalize = (value) => value.normalize("NFKC").toLocaleLowerCase("zh-Hant");
+      let activeTopic = "";
+
+      const update = () => {
+        const terms = normalize(input.value).trim().split(/\\s+/).filter(Boolean);
+        let visible = 0;
+        for (const paper of papers) {
+          const matchesTopic = !activeTopic || paper.dataset.topic === activeTopic;
+          const haystack = normalize(paper.dataset.search || "");
+          const matchesSearch = terms.every((term) => haystack.includes(term));
+          const matches = matchesTopic && matchesSearch;
+          paper.hidden = !matches;
+          if (matches) visible += 1;
+        }
+        const filtered = Boolean(activeTopic || terms.length);
+        status.textContent = filtered ? `顯示 ${visible} / ${papers.length} 篇` : `共 ${papers.length} 篇`;
+        empty.hidden = visible !== 0;
+      };
+
+      for (const filter of filters) {
+        filter.addEventListener("click", () => {
+          activeTopic = filter.dataset.topicFilter || "";
+          for (const candidate of filters) {
+            candidate.setAttribute("aria-pressed", String(candidate === filter));
+          }
+          update();
+        });
+      }
+      input.addEventListener("input", update);
+      clear.addEventListener("click", () => {
+        activeTopic = "";
+        input.value = "";
+        for (const filter of filters) {
+          filter.setAttribute("aria-pressed", String(!filter.dataset.topicFilter));
+        }
+        update();
+        input.focus();
+      });
+    })();
+  </script>"""
     return _render_page(
-        title="Paper Reading｜論文閱讀首頁",
-        description="近期研究主題、最新三篇論文閱讀與完整論文儲藏庫",
+        title="Paper Reading｜論文閱讀資料庫",
+        description="依 Topic 篩選與搜尋全部繁體中文論文閱讀摘要",
         content=content,
+        script=script,
     )
 
 

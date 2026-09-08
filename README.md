@@ -39,7 +39,7 @@ At the beginning of every scheduled run, the automation first resumes any work t
 
 ## Published Site Structure
 
-- `/` is the dashboard. It links to the library, shows up to three recently active Topic/Subtopic folders, and presents the three most recently updated paper readings.
+- `/` is a light, Notion-style paper database. It highlights the latest reading, then shows every published reading in deterministic recency order, with Topic views, full-text search, result counts, and direct links into the existing taxonomy and stable paper URLs.
 - `/library/` is the searchable repository. Its generated folder pages provide `Topic → Subtopic → Paper` navigation.
 - `/papers/<stable-slug>/` contains each published summary. A paper keeps this source-derived URL when its Topic or Subtopic classification changes.
 

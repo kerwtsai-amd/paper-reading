@@ -212,17 +212,20 @@ class BuildSiteTests(unittest.TestCase):
         self.assertTrue(
             any(
                 attrs.get("href") == "library/"
-                and "library-cta" in attrs.get("class", "").split()
+                and "data-library-link" in attrs
                 for attrs, _ in homepage_parser.anchors
             )
         )
         self.assertTrue(
             any(
-                tag == "article"
-                and attrs.get("data-latest-paper") == "arxiv-2401-12345"
+                tag == "tr"
+                and attrs.get("data-paper-slug") == "arxiv-2401-12345"
                 for tag, attrs in homepage_parser.elements
             )
         )
+        self.assertIn('class="paper-database"', homepage)
+        self.assertIn('data-topic-filter="LLM Systems"', homepage)
+        self.assertIn('id="home-paper-search"', homepage)
 
         library_path = output / "library" / "index.html"
         library = library_path.read_text(encoding="utf-8")
@@ -293,7 +296,7 @@ class BuildSiteTests(unittest.TestCase):
                 self.assertIn("https://fonts.googleapis.com", preconnects)
                 self.assertIn("https://fonts.gstatic.com", preconnects)
 
-    def test_homepage_shows_exactly_three_latest_summary_updates(self) -> None:
+    def test_homepage_database_lists_every_paper_by_summary_recency(self) -> None:
         fixtures = (
             {
                 "topic": "Newest Topic",
@@ -346,31 +349,47 @@ class BuildSiteTests(unittest.TestCase):
         papers = build_site.build_site(self.root, output)
         slug_by_directory = {paper.directory_name: paper.slug for paper in papers}
         homepage = self._parse_html(output / "index.html")
-        latest_slugs = [
-            attrs["data-latest-paper"]
+        database_slugs = [
+            attrs["data-paper-slug"]
             for tag, attrs in homepage.elements
-            if tag == "article" and "data-latest-paper" in attrs
+            if tag == "tr" and "data-paper-slug" in attrs
         ]
 
         self.assertEqual(
-            latest_slugs,
+            database_slugs,
             [
                 slug_by_directory["Newest Directory"],
                 slug_by_directory["Alpha Directory"],
                 slug_by_directory["Beta Directory"],
+                slug_by_directory["Fourth Directory"],
+                slug_by_directory["Old Directory"],
             ],
         )
-        self.assertEqual(len(latest_slugs), 3)
+        self.assertEqual(len(database_slugs), len(fixtures))
         homepage_document = (output / "index.html").read_text(encoding="utf-8")
-        for slug in latest_slugs:
-            self.assertIn(f'href="papers/{slug}/"', homepage_document)
-            self.assertTrue((output / "papers" / slug / "index.html").is_file())
-        self.assertNotIn(
-            f'data-latest-paper="{slug_by_directory["Fourth Directory"]}"',
+        latest_items = [
+            attrs["data-latest-paper"]
+            for tag, attrs in homepage.elements
+            if tag == "article" and "data-latest-paper" in attrs
+        ]
+        self.assertEqual(latest_items, [slug_by_directory["Newest Directory"]])
+        self.assertIn("<h2 id=\"latest-paper-heading\">最新論文</h2>", homepage_document)
+        self.assertIn(
+            'data-latest-paper-link href="papers/'
+            + slug_by_directory["Newest Directory"]
+            + '/"',
             homepage_document,
         )
-        self.assertNotIn(
-            f'data-latest-paper="{slug_by_directory["Old Directory"]}"',
+        for slug in database_slugs:
+            self.assertIn(f'href="papers/{slug}/"', homepage_document)
+            self.assertTrue((output / "papers" / slug / "index.html").is_file())
+        self.assertEqual(
+            homepage_document.count('class="source-link"'), len(fixtures) + 1
+        )
+        self.assertIn(
+            '<th scope="col">論文</th><th scope="col">Topic</th>'
+            '<th scope="col">Subtopic</th><th scope="col">摘要更新</th>'
+            '<th scope="col">來源</th><th scope="col">閱讀</th>',
             homepage_document,
         )
 
@@ -382,7 +401,7 @@ class BuildSiteTests(unittest.TestCase):
         }
         self.assertEqual(library_paper_slugs, set(slug_by_directory.values()))
 
-    def test_homepage_recent_folders_use_newest_child_and_deterministic_ties(
+    def test_homepage_has_accessible_counted_topic_filters_and_mobile_hooks(
         self,
     ) -> None:
         fixtures = (
@@ -405,30 +424,38 @@ class BuildSiteTests(unittest.TestCase):
         output = self.root / "_site"
         build_site.build_site(self.root, output)
         homepage_path = output / "index.html"
-        recent = [
+        filters = [
             attrs
-            for attrs, _ in self._parse_html(homepage_path).anchors
-            if "data-recent-folder" in attrs
+            for tag, attrs in self._parse_html(homepage_path).elements
+            if tag == "button" and "data-topic-filter" in attrs
         ]
 
         self.assertEqual(
-            [(item["data-topic"], item["data-subtopic"]) for item in recent],
-            [
-                ("Zulu Topic", "Hot Folder"),
-                ("Alpha Topic", "Tie Folder"),
-                ("Beta Topic", "Tie Folder"),
-            ],
+            [item["data-topic-filter"] for item in filters],
+            ["", "Alpha Topic", "Beta Topic", "Gamma Topic", "Zulu Topic"],
         )
-        self.assertEqual(len(recent), 3)
+        self.assertEqual(filters[0]["aria-pressed"], "true")
+        self.assertTrue(all(item["aria-controls"] == "paper-list" for item in filters))
+        self.assertTrue(all(item["aria-pressed"] == "false" for item in filters[1:]))
         self.assertEqual(
-            len({(item["data-topic"], item["data-subtopic"]) for item in recent}),
-            3,
+            {item["data-topic-filter"]: item["data-topic-count"] for item in filters},
+            {
+                "": "5",
+                "Alpha Topic": "1",
+                "Beta Topic": "1",
+                "Gamma Topic": "1",
+                "Zulu Topic": "2",
+            },
         )
-        for item in recent:
-            self.assertFalse(item["href"].startswith("/"), item["href"])
-            self.assertTrue(
-                self._resolve_local_href(output, homepage_path, item["href"]).is_file()
-            )
+
+        document = homepage_path.read_text(encoding="utf-8")
+        self.assertIn('role="status" aria-live="polite"', document)
+        self.assertIn('id="clear-home-filters"', document)
+        self.assertIn("matchesTopic && matchesSearch", document)
+        self.assertIn("@media (max-width: 760px)", document)
+        self.assertIn("content: attr(data-label)", document)
+        self.assertIn("color-scheme: light", document)
+        self.assertNotIn("prefers-color-scheme: dark", document)
 
     def test_library_drills_down_from_topic_to_subtopic_to_stable_paper(self) -> None:
         fixtures = (
@@ -450,12 +477,12 @@ class BuildSiteTests(unittest.TestCase):
         expected_slugs = {paper.slug for paper in papers}
         homepage_path = output / "index.html"
         homepage = self._parse_html(homepage_path)
-        ctas = [
+        library_links = [
             attrs
             for attrs, _ in homepage.anchors
-            if "library-cta" in attrs.get("class", "").split()
+            if "data-library-link" in attrs
         ]
-        self.assertEqual([attrs["href"] for attrs in ctas], ["library/"])
+        self.assertEqual([attrs["href"] for attrs in library_links], ["library/"])
         library_path = self._resolve_local_href(output, homepage_path, "library/")
         self.assertTrue(library_path.is_file())
 
