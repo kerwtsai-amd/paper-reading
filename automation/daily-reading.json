@@ -8,7 +8,77 @@
       "dateField": "submittedOrPublished"
     }
   },
-  "topics": [],
+  "topics": [
+    {
+      "id": "networked-inference",
+      "name": "Networked Inference",
+      "enabled": true,
+      "queries": [
+        "(\"disaggregated inference\" OR \"prefill-decode disaggregation\" OR \"P/D disaggregation\") (\"KV cache transfer\" OR KVCache) (RDMA OR RoCE OR \"inter-node network\")",
+        "(\"LLM serving\" OR \"generative inference\") (\"GPU cluster\" OR \"cluster-scale\") (\"network-aware\" OR \"bandwidth-aware\" OR interconnect)",
+        "(\"MoE inference\" OR \"expert parallelism\") (\"All-to-All\" OR AlltoAllv OR dispatch OR combine) (RDMA OR RoCE OR network)"
+      ],
+      "excludeTerms": [
+        "wireless",
+        "mobile edge",
+        "AI-RAN",
+        "federated learning"
+      ]
+    },
+    {
+      "id": "cluster-network-design",
+      "name": "Cluster Network Design",
+      "enabled": true,
+      "queries": [
+        "(\"AI cluster\" OR \"GPU cluster\" OR \"accelerator cluster\") (\"network architecture\" OR \"fabric topology\" OR interconnect)",
+        "(\"scale-up network\" OR \"scale-out network\" OR \"backend fabric\" OR \"multi-rail\" OR \"rail-optimized\") (GPU OR accelerator)",
+        "(\"topology-aware collective\" OR \"collective schedule synthesis\" OR \"direct-connect topology\") (AllReduce OR AlltoAll OR GPU)"
+      ],
+      "excludeTerms": [
+        "clustering algorithm",
+        "graph clustering",
+        "neural architecture search",
+        "wireless",
+        "Internet of Things",
+        "social network"
+      ]
+    },
+    {
+      "id": "inference-optimization",
+      "name": "Inference Optimization",
+      "enabled": true,
+      "queries": [
+        "(\"LLM serving\" OR \"generative inference\") (\"continuous batching\" OR \"chunked prefill\" OR \"request scheduling\") (goodput OR TTFT OR TPOT OR TBT OR \"tail latency\")",
+        "(\"KV cache\" OR KVCache) (offload OR migration OR transfer OR \"remote memory\" OR \"cache-aware routing\") (LLM OR inference)",
+        "\"distributed LLM inference\" (\"compute-communication overlap\" OR \"tensor parallelism\" OR \"context parallelism\") (collective OR RDMA OR interconnect)",
+        "(\"LLM inference\" OR \"generative inference\") (\"speculative decoding\" OR \"multi-token prediction\" OR quantization OR \"kernel fusion\" OR \"sparse attention\") (throughput OR latency OR memory OR goodput)"
+      ],
+      "excludeTerms": [
+        "wireless",
+        "mobile edge",
+        "medical imaging",
+        "federated learning"
+      ]
+    },
+    {
+      "id": "rdma-network",
+      "name": "RDMA Network",
+      "enabled": true,
+      "queries": [
+        "(RoCEv2 OR \"RDMA over Ethernet\") (\"congestion control\" OR PFC OR ECN OR DCQCN OR incast OR \"head-of-line blocking\") (AI OR GPU OR LLM)",
+        "(RDMA OR RoCE OR InfiniBand) (multipath OR \"load balancing\" OR \"packet spraying\" OR RNIC OR SmartNIC OR DPU) (\"AI cluster\" OR LLM)",
+        "(UET OR \"Ultra Ethernet\" OR UALink OR \"optical circuit switching\") (AI OR HPC) (fabric OR transport OR interconnect)",
+        "(RCCL OR ROCm OR xGMI OR \"Infinity Fabric\" OR \"AMD Instinct\") (collective OR inference OR RDMA OR interconnect)"
+      ],
+      "excludeTerms": [
+        "wireless",
+        "vehicular",
+        "satellite",
+        "blockchain",
+        "medical imaging"
+      ]
+    }
+  ],
   "quality": {
     "requireCanonicalLandingPage": true,
     "requireFullText": true,

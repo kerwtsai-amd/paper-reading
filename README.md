@@ -47,7 +47,7 @@ Recency comes from each summary's validated update-date metadata rather than fil
 
 ## Daily Reading Configuration
 
-The configuration file is [`automation/daily-reading.json`](automation/daily-reading.json). Its `topics` array is currently empty, so the automation will neither invent nor enable a research topic. Add at least one topic with `enabled: true` before automatic paper selection can begin.
+The configuration file is [`automation/daily-reading.json`](automation/daily-reading.json). It currently enables four discovery topics: Networked Inference, Cluster Network Design, Inference Optimization, and RDMA Network. These entries guide candidate discovery only; each selected paper is still classified independently from its primary technical contribution.
 
 The complete rules for safety checks, paper selection, validation, precise staging, Pages readiness, crash recovery, and duplicate-proof Teams notification are in [`automation/daily-run.md`](automation/daily-run.md). To configure the Teams destination, copy [`automation/daily-reading.local.example.json`](automation/daily-reading.local.example.json) to the local file `automation/daily-reading.local.json`; the actual local file is ignored by Git.
 
