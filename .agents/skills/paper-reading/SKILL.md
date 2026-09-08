@@ -1,8 +1,8 @@
 ---
 name: paper-reading
-description: Organize, download, deeply read, and summarize academic papers in this Paper Reading workspace as evidence-traceable Traditional Chinese HTML. Use for paper discovery, classification, PDF intake or reading, figure/table extraction, technical analysis, or summary.html work when Confluence delivery is not requested; use paper-reading-confluence for Confluence pages.
+description: Organize, download, deeply read, and summarize academic papers in this Paper Reading workspace as reader-first, evidence-traceable Traditional Chinese HTML. Use for paper discovery, classification, PDF intake or reading, figure/table extraction, technical analysis, or summary.html work when Confluence delivery is not requested; use paper-reading-confluence for Confluence pages.
 metadata:
-  short-description: Evidence-traceable Traditional Chinese paper reading and HTML summaries
+  short-description: Reader-first, evidence-traceable Traditional Chinese HTML paper summaries
 ---
 
 # Paper Reading
@@ -14,7 +14,7 @@ If the user requests creating, updating, or migrating a Confluence paper page, u
 ## Fixed Project Contract
 
 1. Treat the nearest ancestor directory containing both `AGENTS.md` and `html template/summary-template.html` as the Paper Reading root; in this project, it is the working directory. Do not create categories or paper files outside that root.
-2. Before doing any substantive paper work, read [references/paper-reading-standard.md](references/paper-reading-standard.md).
+2. Before doing any substantive paper work, read [references/paper-reading-standard.md](references/paper-reading-standard.md). Before drafting, also read and apply the shared [reader-first exposition guide](references/reader-first-exposition.md).
 3. Before generating HTML, read `html template/summary-template.html` from the root and create the paper's `summary.html` from a complete copy. Preserve the template version marker, CSS, MathJax, fixed section IDs, evidence labels, and responsive structure.
 4. The project has no default Topic or Subtopic. Every paper must use exactly two category levels, with the formal paper title as the third-level folder. The only valid target structure is:
 
@@ -54,6 +54,7 @@ Use evidence coverage, not a fixed number of passes, as the stopping condition. 
 3. **Evidence pass:** Closely read the evaluation setup, baselines, workloads, hardware, software, metrics, main results, ablations, and sensitivity analyses. Verify captions, axes, units, and comparison conditions.
 4. **Critical pass:** Separate author claims, facts directly supported by experiments, your own analysis, and speculation. Look for missing baselines, unfair comparisons, external-validity issues, deployment constraints, and untested assumptions.
 5. **Completeness pass:** Recheck every important number, equation, figure, table, and summary conclusion. Continue targeted reading whenever a key statement lacks a source, any of the 16 sections is uncovered, or a core figure is missing. If the paper genuinely omits the information, write `論文未提供`.
+6. **Exposition pass:** Define the target reader's minimum prerequisites and arrange the report as one causal thread: system context → observable problem → root mechanism → limits of existing approaches → derived requirements → end-to-end method → claim-aligned evidence → boundaries. Remove any prerequisite that is not used later.
 
 Do not substitute the abstract for full-text reading, and do not invent information absent from the paper merely because it seems plausible from background knowledge.
 
@@ -68,6 +69,7 @@ Do not substitute the abstract for full-text reading, and do not invent informat
 
 - Copy the root's `html template/summary-template.html` to the target `summary.html`, then replace every `{{...}}` placeholder. HTML-escape titles, authors, and URLs.
 - Write all reader-facing prose in `summary.html` in Traditional Chinese (`zh-Hant`). On first use, retain the English full name and abbreviation for technical terms. The instruction language being English does not change the required output language. Reorganize the content as a research report rather than translating paragraph by paragraph or copying long passages.
+- Apply the reader-first guide across the fixed sections. In particular, make Section 04 a minimal prerequisite bridge, Section 05 a problem-to-requirements chain, Section 06 an end-to-end walkthrough followed by component mechanics, and Sections 09–10 claim-test pairs. Keep external prerequisites visibly distinct from claims made by the paper.
 - Preserve all 16 fixed sections. When information is missing, write `論文未提供`; do not omit the section or fabricate content.
 - Use `\( ... \)` and `\[ ... \]` for important equations, and explain each variable, unit or system meaning, relationship to the method, and source in the paper.
 - Apply the template's four textual evidence labels to important statements: `作者主張`, `實驗事實`, `分析`, and `推測`. Do not communicate this distinction by color alone.

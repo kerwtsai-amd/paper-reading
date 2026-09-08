@@ -748,7 +748,7 @@
     <p class="breadcrumb">
       <span>Paper Reading</span>
       <span aria-hidden="true">/</span>
-      <span>LLM Serving Systems</span>
+      <span>LLM Systems</span>
       <span aria-hidden="true">/</span>
       <span>KV Cache Management</span>
     </p>
@@ -766,11 +766,11 @@
       </div>
       <div class="property">
         <dt>分類</dt>
-        <dd><span class="tag">LLM Serving Systems / KV Cache Management</span></dd>
+        <dd><span class="tag">LLM Systems / KV Cache Management</span></dd>
       </div>
       <div class="property">
         <dt>摘要更新</dt>
-        <dd><time datetime="2026-09-06">2026-09-06</time></dd>
+        <dd><time datetime="2026-09-08">2026-09-08</time></dd>
       </div>
     </dl>
 
@@ -809,9 +809,9 @@
       <aside class="reading-note" aria-labelledby="reading-note-title">
         <h2 id="reading-note-title">優先閱讀</h2>
         <ol>
-          <li><a href="#core-method">核心方法</a>：先掌握「TPOT 餘裕排程＋layer-wise KV offload＋容量前瞻」如何串成一個控制迴路。</li>
-          <li><a href="#experimental-results">實驗結果</a>：理解作者宣稱的 69×／45×／低於 3%，並檢查它們和官方 SVG 圖點不完全一致的數據稽核。</li>
-          <li><a href="#strengths-limitations-risks">優點、限制與風險</a>：檢查僅有 vLLM baseline、短於動機的實測 context、預測器與統計細節缺失等證據邊界。</li>
+          <li><a href="#problem-definition">問題定義</a>：先沿著「長 prompt 無法 admission → queueing 主導 TTFT → 需要降低即時 GPU KV residency」建立因果鏈。</li>
+          <li><a href="#core-method">核心方法</a>：再追一個 request 的完整路徑，理解 TPOT 餘裕排程、逐層 KV 搬移與容量前瞻如何接成控制迴路。</li>
+          <li><a href="#experimental-results">實驗結果</a>：最後用 claim–test 對照檢查 69×、45×、吞吐代價與 17.7–28.7 percentage-point 的證據邊界。</li>
         </ol>
       </aside>
 
@@ -838,6 +838,7 @@
               <tr><th scope="row">版本資訊</th><td>arXiv:2410.00428v3 [cs.DC]；初稿 2024-10-01，v3 修訂 2024-10-09；論文未提供正式會議或期刊資訊。</td></tr>
               <tr><th scope="row">Canonical page</th><td><a href="https://arxiv.org/abs/2410.00428" target="_blank" rel="noopener noreferrer">https://arxiv.org/abs/2410.00428</a></td></tr>
               <tr><th scope="row">Canonical PDF</th><td><a href="https://arxiv.org/pdf/2410.00428" target="_blank" rel="noopener noreferrer">https://arxiv.org/pdf/2410.00428</a></td></tr>
+              <tr><th scope="row">DOI</th><td><a href="https://doi.org/10.48550/arXiv.2410.00428" target="_blank" rel="noopener noreferrer">10.48550/arXiv.2410.00428</a></td></tr>
               <tr><th scope="row">本地 PDF</th><td><a href="LayerKV%20-%20Layer-wise%20KV%20Cache%20for%20LLM%20Serving%20(2410.00428).pdf">開啟本地 PDF</a></td></tr>
               <tr><th scope="row">頁數</th><td data-summary-field="pdf-page-count">共 11 頁</td></tr>
             </tbody>
@@ -845,16 +846,16 @@
         </div>
         <aside class="statement statement--analysis" data-kind="analysis">
           <span class="statement__label">分析：分類理由</span>
-          <p>歸入 <strong>LLM Serving Systems / KV Cache Management</strong>：主要貢獻是在既有 vLLM serving stack 中，把 KV block 的配置、位置追蹤與 offloading 從 request 粒度細化到 layer 粒度，並以 SLO-aware scheduler 決定 prefill admission；它不是新的模型架構或注意力近似法。<a class="source-ref" href="#source-fig3-p4">§3–§4 · PDF pp.3–6 · Fig.3</a></p>
+          <p>歸入 <strong>LLM Systems / KV Cache Management</strong>：主要貢獻位於 serving runtime 的記憶體管理與排程層，把 KV block 的配置、位置追蹤與 offloading 從 request 粒度細化到 layer 粒度，再以 SLO-aware scheduler 控制 prefill admission；它不是新的模型架構或注意力近似法。<a class="source-ref" href="#source-fig3-p4">§3–§4 · PDF pp.3–6 · Fig.3</a></p>
         </aside>
       </section>
 
       <section id="one-sentence-summary" class="paper-section">
         <div class="section-heading"><span class="section-number">02</span><h2>一句話總結</h2></div>
-        <p class="lead">LayerKV 將長 prompt 的首 token 延遲問題視為 GPU KV block 的 admission bottleneck：它在 prefill 時按 layer 把 KV 非同步移至 CPU，並只在既有 decode request 的 TPOT 餘裕允許時插入新 prefill；作者在指定的 L20／vLLM 負載下報告最高 <strong>69× mean TTFT</strong>、<strong>45× P99 TTFT</strong> 改善與 <strong>17.7–28.7%</strong> 較低的 SLO violation rate。<a class="source-ref" href="#source-fig6-p8">§5.2.3 · PDF pp.7–8 · Fig.6–7</a> <a class="source-ref" href="#source-fig8-p8">§5.2.4 · PDF p.8 · Fig.8</a></p>
+        <p class="lead">LayerKV 將長 prompt 的首 token 延遲追到 GPU KV block 的 admission bottleneck：prefill 產生的 KV 按 layer 非同步移至 CPU，只有在現有 decode requests 的 TPOT 餘裕容許時才插入新 prefill；作者在 L20／vLLM 0.5.5 的指定負載下報告最高 <strong>69× mean TTFT</strong>、<strong>45× P99 TTFT</strong> 改善，以及 <strong>17.7–28.7%</strong> 較低的 SLO violation rate。<a class="source-ref" href="#source-fig6-p8">§5.2.3 · PDF pp.7–8 · Fig.6–7</a> <a class="source-ref" href="#source-fig8-p8">§5.2.4 · PDF p.8 · Fig.8</a></p>
         <aside class="statement statement--analysis" data-kind="analysis">
           <span class="statement__label">分析</span>
-          <p>這不是把單一 request 的 prefill 算得更快，而是把系統進入飽和後的等待牆往後推；上述最大倍數不可脫離 arrival rate、模型與 baseline 條件解讀。</p>
+          <p>這不是把單一 request 的 prefill 算得更快，而是把系統進入飽和後的等待牆往後推；上述最大倍數不可脫離 arrival rate、模型與 baseline 條件解讀。Figure 8 的 17.7–28.7% 依圖軸應解讀為約 17.7–28.7 個百分點，而非相對百分比。</p>
         </aside>
       </section>
 
@@ -872,7 +873,7 @@
         </aside>
         <aside class="statement statement--fact" data-kind="experimental-fact">
           <span class="statement__label">實驗事實</span>
-          <p>評估使用 Llama-2-7B、Yi-34B-200K、Llama-3.1-70B，分別配置 1、2、4 張 NVIDIA L20 48GB；在 ShareGPT arrival-rate sweep 中，作者報告 mean TTFT 最高 69×、Llama-2-7B P99 TTFT 最高 45×，並宣稱飽和 throughput gap 低於 3%。官方 SVG 的圖點稽核顯示後兩個「最高／低於」敘述並不精確，詳見實驗結果。<a class="source-ref" href="#source-fig6-p8">§5.1–§5.2.3 · PDF pp.6–8 · Fig.6–7</a></p>
+          <p>評估使用 Llama-2-7B、Yi-34B-200K、Llama-3.1-70B，分別配置 1、2、4 張 NVIDIA L20 48GB；在 ShareGPT arrival-rate sweep 中，作者報告 mean TTFT 最高 69×、Llama-2-7B P99 TTFT 最高 45×，並宣稱飽和 throughput gap 低於 3%。Figure 4、6、7 的圖點顯示，這些「up to／低於」headline 的範圍與最大值敘述並不完全一致，詳見實驗結果。<a class="source-ref" href="#source-fig6-p8">§5.1–§5.2.3 · PDF pp.6–8 · Fig.4、6–7</a></p>
         </aside>
         <aside class="statement statement--analysis" data-kind="analysis">
           <span class="statement__label">分析</span>
@@ -888,39 +889,56 @@
 
       <section id="background-motivation" class="paper-section">
         <div class="section-heading"><span class="section-number">04</span><h2>背景與動機</h2></div>
-        <h3>Prefill、decode 與兩個互動式 SLO</h3>
-        <p>Decoder-only LLM 在 <strong>prefill</strong> 一次平行處理全部 prompt tokens，產生第一個 output token 並建立各層 KV cache；attention 工作量隨 prompt length 近似二次增長、FFN 近似線性，因此 prefill 通常呈超線性。之後 <strong>decode</strong> 每輪只產生一個新 token 及其 KV。<a class="source-ref" href="#background-motivation">§2.1.1 · PDF p.2</a></p>
-        <ul>
-          <li><strong>Time to First Token（TTFT）</strong>：request arrival 到第一個 token，包含 queueing delay 與 prefill latency。</li>
-          <li><strong>Time Per Output Token（TPOT）</strong>：同一 request 相鄰輸出 token 的平均間隔；亦常稱 Time Between Tokens（TBT）或 Inter-Token Latency（ITL）。</li>
-        </ul>
-        <p><a class="source-ref" href="#source-fig1-p1">§1 · PDF p.1 · Fig.1</a></p>
-        <h3>為何 PagedAttention 仍會碰到 admission bottleneck</h3>
-        <p>Iteration-level batching 讓 request 在 token 粒度進出 batch；PagedAttention 再把每個 request 的 KV cache 動態映射到不連續 physical blocks，避免最大 decode length 的整段預配置。然而，新 request 進入 prefill 時仍需先取得其 prompt 所需的 KV blocks。作者描述 vLLM 初始化會在扣除模型與 activation 後，將剩餘 GPU memory 的固定比例（例示 90%）保留給 KV；最大 configured input 增大會讓 profiling activation 變大，使可用 KV blocks 反而下降。<a class="source-ref" href="#source-fig2-p3">§2.1.2–§2.2 · PDF pp.2–3 · Fig.2</a></p>
+        <h3>只需要三個前置概念</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>閱讀 LayerKV 所需的最小背景，以及它在後文扮演的角色。</caption>
+            <thead><tr><th>概念</th><th>最小定義</th><th>後文用途</th></tr></thead>
+            <tbody>
+              <tr><td>Prefill／decode</td><td>Prefill 平行處理整段 prompt、建立各層 KV 並產生首 token；decode 之後每輪只新增一個 token 及其 KV。</td><td>Prefill 是可插入的長工作，decode 是其 TPOT 會被干擾的既有工作。</td></tr>
+              <tr><td>TTFT／TPOT</td><td>Time to First Token（TTFT）包含排隊與 prefill；Time Per Output Token（TPOT）是同一 request 相鄰輸出 token 的平均間隔。</td><td>LayerKV 用降低 queueing 改善前者，以 scheduler 約束後者。</td></tr>
+              <tr><td>Paged KV blocks</td><td>PagedAttention 讓 request 的 KV 動態映射到不連續 GPU physical blocks，避免按最大生成長度整段預配置。</td><td>它降低 fragmentation，卻沒有解除 prefill 開始前的 GPU-capacity admission 條件。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Prefill 中 attention 工作量隨 prompt length 近似二次增長、FFN 近似線性，因此長 prompt 的 prefill latency 通常呈超線性；decode 則逐 token 重用已存 KV。<a class="source-ref" href="#background-motivation">§2.1.1 · PDF p.2</a></p>
+        <h3>PagedAttention 解了 fragmentation，卻未解 admission</h3>
+        <p>Iteration-level batching 讓 request 在 token 粒度進出 batch；PagedAttention 則把 KV 動態配置到不連續 blocks。然而，新 request 進入 prefill 時仍需一次取得整段 prompt 所需的 KV blocks。作者描述 vLLM 初始化會先扣除模型與 activation，再將剩餘 GPU memory 的固定比例（例示 90%）保留給 KV；最大 configured input 越長，profiling activation 越大，可留給 KV blocks 的容量反而可能越少。<a class="source-ref" href="#source-fig2-p3">§2.1.2–§2.2 · PDF pp.2–3 · Fig.2</a></p>
         <aside class="statement statement--fact" data-kind="experimental-fact">
           <span class="statement__label">實驗事實</span>
           <p>動機實驗使用 Llama-2-7B、單張 L20 48GB、1 req/s、每個長度 100 requests；input 從 128 增至 16,384 tokens，output 固定 512。Figure 1 使用對數 latency 軸；作者觀察 context 到 1,024 時 queueing 已成 TTFT 的主要部分。<a class="source-ref" href="#source-fig1-p1">§1 · PDF pp.1–2 · Fig.1</a></p>
         </aside>
         <aside class="statement statement--analysis" data-kind="analysis">
           <span class="statement__label">分析</span>
-          <p>這個觀察是特定 hardware、arrival rate、memory configuration 與 output length 的 operating point，不應解讀為「所有系統在 1,024 tokens 必然由 queueing 主導」。它真正建立的是後續設計假說：若能降低 prefill 的即時 GPU KV residency，就可能在不縮短 prefill compute 的情況下降低 TTFT。</p>
+          <p>1,024-token 轉折只屬於這組 hardware、arrival rate、memory configuration 與 output length，不是普遍常數。它把下一節的問題收斂為：<strong>如何讓長 prompt 不必等到整份 KV 的 GPU blocks 都空出，卻又不讓插入的 prefill 拖垮現有 decode 的 TPOT 與系統吞吐？</strong></p>
         </aside>
       </section>
 
       <section id="problem-definition" class="paper-section">
         <div class="section-heading"><span class="section-number">05</span><h2>問題定義</h2></div>
-        <h3>研究對象與輸入</h3>
+        <h3>從症狀推回成功條件</h3>
+        <div class="key-grid">
+          <article class="key-card"><p class="key-card__eyebrow">Observable symptom</p><p>短 prompt 尚能立刻進 prefill，長 prompt 卻因 free GPU KV blocks 不足而排隊；至少要等一個 decode request 完成並釋放 blocks。<a class="source-ref" href="#source-fig2-p3">§2.2 · PDF p.3 · Fig.2</a></p></article>
+          <article class="key-card"><p class="key-card__eyebrow">Root mechanism</p><p>Prefill admission 以整段 prompt 所需 KV blocks 與當下 free blocks 比較；prompt 越長，即時 GPU residency demand 越大，queueing 遂主導 TTFT。<a class="source-ref" href="#source-fig2-p3">§2.2 · PDF p.3 · Fig.2</a></p></article>
+          <article class="key-card"><p class="key-card__eyebrow">Nearest approach gap</p><p>vLLM 的 PagedAttention 解決不連續配置與 fragmentation，但管理／offload 仍以 request 為主，沒有讓單一 request 的部分 layers 暫駐 CPU。<a class="source-ref" href="#source-table1-p9">§2.1.2、§6.2 · PDF pp.2–3、9 · Table 1</a></p></article>
+          <article class="key-card"><p class="key-card__eyebrow">Required outcome</p><p>降低 prefill 當下所需的 GPU KV blocks 並提早 admission，同時限制既有 decode 的 TPOT、把 PCIe transfer 藏在 compute 後，避免明顯 QPS 損失。<a class="source-ref" href="#source-fig3-p4">§3 · PDF pp.3–4 · Fig.3</a></p></article>
+        </div>
+        <aside class="statement statement--claim" data-kind="author-claim">
+          <span class="statement__label">作者主張</span>
+          <p>LayerKV 的設計目標是在不增加硬體、不改模型輸出且不造成 starvation 的前提下降低 TTFT，並維持 TPOT SLO 與系統 QPS。<a class="source-ref" href="#source-fig3-p4">§1、§3 · PDF pp.2、3–4 · Fig.3</a></p>
+        </aside>
+
+        <h3>控制對象、決策與約束</h3>
         <p>系統面對兩群 request：等待 prefill 的佇列 \(Q=\{q_1,q_2,\ldots\}\)，以及正在 decode、各自帶有 TPOT SLO 的集合 \(D=\{d_1,d_2,\ldots\}\)。每次 scheduling event 前，runtime 收集 queueing time、decode progress、已產生 token 數與預測的完整輸出長度。<a class="source-ref" href="#source-eq1-p4">§3.1、§4 · PDF pp.4–6 · Eq.1</a></p>
         <div class="table-scroll">
           <table>
-            <caption>LayerKV 的控制變數與成功條件；「整體形式化」為本摘要依原文機制重組。</caption>
-            <thead><tr><th>項目</th><th>內容</th><th>原文狀態</th></tr></thead>
+            <caption>LayerKV 的控制變數與成功條件；整體形式化為本摘要依原文機制重組。</caption>
+            <thead><tr><th>決策</th><th>輸入／輸出</th><th>它回答的需求</th></tr></thead>
             <tbody>
-              <tr><td>Prefill admission</td><td>本輪從 queue prefix 可插入多少個 requests，記為 \(n\)。</td><td>Eq.1–2、Algorithm 1 明示</td></tr>
-              <tr><td>GPU residency</td><td>模型共 \(L\) 層時，每個 request 保留 \(x\) 層 KV 在 GPU、offload \(L-x\) 層至 CPU。</td><td>§3.1.1、Eq.4 明示</td></tr>
-              <tr><td>額外 offload</td><td>若預測可用 GPU blocks 低於 threshold，是否把原先保留的 \(x\) 層再卸載一半或全部。</td><td>§3.1.1、Eq.5 明示</td></tr>
-              <tr><td>主要目標</td><td>降低 queued requests 的 TTFT。</td><td>作者明示</td></tr>
-              <tr><td>約束</td><td>既有 decode requests 的平均 TPOT 不超過 SLO，且 transmission 儘量被 compute 遮蔽以維持 QPS。</td><td>Eq.1–4 與 §3 明示</td></tr>
+              <tr><td>Prefill admission \(n\)</td><td>由每個 decode request 的歷史／預測狀態與 queue 中各 prompt 的預估 prefill time，輸出本輪可取的 queue-prefix 長度。</td><td>只花費所有 active requests 都負擔得起的 TPOT slack。<a class="source-ref" href="#source-alg1-p5">§3.1 · PDF pp.4–5 · Eq.1–3 · Algorithm 1</a></td></tr>
+              <tr><td>初始 GPU residency \(x\)</td><td>模型共 \(L\) 層；保留 \(x\) 層 KV 在 GPU、offload \(L-x\) 層至 CPU。</td><td>盡量釋放 blocks，但要求 transfer time 不超過 prefill compute time。<a class="source-ref" href="#source-eq4-p5">§3.1.1 · PDF p.5 · Eq.4</a></td></tr>
+              <tr><td>二次 offload</td><td>Eq.5 預測 free blocks；低於 threshold 時，先卸載最近處理 request 的 \(x/2\) 層，仍不足再全卸載。</td><td>在「保留 KV 等於免費 prefetch」與「未來 admission 容量」間動態取捨。<a class="source-ref" href="#source-eq5-p5">§3.1.1 · PDF p.5 · Eq.5</a></td></tr>
+              <tr><td>Placement／transfer</td><td>均勻交錯 GPU/CPU layers、layer-aware block table、獨立 CUDA stream、CPU copy thread；多 GPU 時讓 PCIe all-reduce 優先。</td><td>把 D2H/H2D transfer 移出 critical path，保住 QPS。<a class="source-ref" href="#core-method">§3.1.2–§4 · PDF pp.5–6</a></td></tr>
             </tbody>
           </table>
         </div>
@@ -928,7 +946,7 @@
           <span class="statement__label">分析：原文沒有單一最佳化問題</span>
           <p>最準確的形式化是「TPOT slack admission heuristic＋offload overlap model＋KV capacity forecast」。Scheduler 的式子沒有納入 queued request 個別 TTFT deadline、P99 目標、fairness 或 host-memory/PCIe 成本，因此不宜把它描述為完整的 joint TTFT–TPOT optimizer。<a class="source-ref" href="#source-alg1-p5">§3.1 · PDF pp.4–5 · Eq.1–3 · Algorithm 1</a></p>
         </aside>
-        <h3>假設與隱含依賴</h3>
+        <h3>適用假設與隱含依賴</h3>
         <ul>
           <li>CPU 有足夠 host memory 承接精確 KV cache，CPU–GPU 路徑提供可預測的 PCIe bandwidth。</li>
           <li>Prefill compute 足夠長，可遮蔽非同步 KV offload；短 prompt 需保留更多 GPU-resident layers。</li>
@@ -939,6 +957,21 @@
 
       <section id="core-method" class="paper-section">
         <div class="section-heading"><span class="section-number">06</span><h2>核心方法</h2></div>
+        <h3>先走一遍端到端執行</h3>
+        <ol>
+          <li><strong>觀測：</strong>每次 scheduling event 前，runtime 取得每個 decode request 已花時間、已產生 tokens、當前 TPOT，並預測完整輸出長度；同時讀取等待 queue 的 prompts。<a class="source-ref" href="#source-eq1-p4">§3.1、§4 · PDF pp.4、6 · Eq.1</a></li>
+          <li><strong>Admission：</strong>scheduler 把每個 active request 尚可承受的平均-TPOT 餘裕換成時間 budget，取最小值；再依序累加 queue 前端 requests 的預估 prefill time，決定可插入的數量 \(n\)。<a class="source-ref" href="#source-alg1-p5">§3.1 · PDF pp.4–5 · Eq.1–3 · Algorithm 1</a></li>
+          <li><strong>初始配置：</strong>對獲准 prefill 的 request，Execution Engine 解出最小 GPU-resident layer 數 \(x\)，使其餘 \(L-x\) 層的 KV transfer 可被 prefill compute 遮蔽。<a class="source-ref" href="#source-eq4-p5">§3.1.1 · PDF p.5 · Eq.4</a></li>
+          <li><strong>逐層產生與卸載：</strong>prefill 依 layer 產生 KV；GPU/CPU layers 均勻交錯，dedicated CUDA stream 將要卸載的 KV 非同步送至 host，block table 同步記下每層位置。<a class="source-ref" href="#core-method">§3.1.2、§4 · PDF pp.5–6</a></li>
+          <li><strong>容量前瞻：</strong>系統用預測的 request 完成與新增配置更新未來 free-block 狀態；若低於 threshold，就先卸載最近 request 的部分保留層，必要時全部卸載。<a class="source-ref" href="#source-eq5-p5">§3.1.1 · PDF p.5 · Eq.5</a></li>
+          <li><strong>Decode 取回：</strong>後續 decode 到某 layer 前，Cache Engine 將其 CPU-resident KV 搬回 GPU；GPU-resident layers 等於省掉這次 prefetch。<a class="source-ref" href="#core-method">§3.1.2、§4 · PDF pp.5–6</a></li>
+          <li><strong>多 GPU 仲裁：</strong>若 tensor-parallel all-reduce 與 swap 共用 PCIe，swap 被切成 subunits，且每個 subunit 在 PCIe 忙時延後，避免 collective critical path 被搶頻寬。<a class="source-ref" href="#core-method">§3.1.3 · PDF p.6</a></li>
+        </ol>
+        <aside class="statement statement--analysis" data-kind="analysis">
+          <span class="statement__label">分析：控制迴路的因果關係</span>
+          <p>步驟 2 保護 decode 的 TPOT，步驟 3–5 解除 prefill 的 GPU-capacity admission barrier，步驟 4、6、7 則試圖把新增 PCIe traffic 移出 compute／collective critical path。三者缺一，便可能分別退化成排隊不降、TPOT 超標或吞吐下降。</p>
+        </aside>
+
         <h3>6.1 SLO-aware Scheduler：把 TPOT 餘裕變成 prefill budget</h3>
         <p>對每個正在 decode 的 request \(i\)，LayerKV 以已花費時間／已產生 tokens，加上預測的剩餘 tokens／時間，計算若要讓最終平均 TPOT 不超過 \(T_{\mathrm{tpot}}^i\)，尚可容忍多少額外 prefill stall。對所有 active requests 取最小 slack，再逐一累加 queue prefix 的預估 prefill latency；累計值仍小於該最小 slack 才可繼續 admission。<a class="source-ref" href="#source-eq1-p4">§3.1 · PDF p.4 · Eq.1–3</a> <a class="source-ref" href="#source-alg1-p5">PDF p.5 · Algorithm 1</a></p>
         <p>完整 output length \(N_{\max}^i\) 被建模成多分類問題：模型預測其 percentile range；計算 TPOT slack 時，\(N_{\mathrm{future}}^i\) 採該 range 的<strong>下界</strong>減去已產生 tokens，以較保守地估算可攤平的未來 token 數。預測器的模型、features、bins、訓練資料、準確率與成本均未提供，只引用前作。<a class="source-ref" href="#source-eq1-p4">§3.1 · PDF p.4 · Eq.1</a></p>
@@ -947,7 +980,7 @@
 for each queued request q_k:
     estimate prefill_time[k]
 n = 0
-while sum(prefill_time[1 : n+1]) &lt; min(allow_prefill):
+while sum(prefill_time[0 : n+1]) &lt; min(allow_prefill):
     n += 1
 return n  # 可在本輪插入的 queue-prefix 長度</code></pre>
         <p class="muted">語義整理自 Algorithm 1；原偽碼把 \(T_{\mathrm{prefill}}\) 誤指向 Eq.4，實際定義它的是 Eq.3。原文也沒有寫 queue 邊界、\(D=\varnothing\) 或負 slack 的處理。</p>
@@ -990,7 +1023,10 @@ return n  # 可在本輪插入的 queue-prefix 長度</code></pre>
           \]
           <p class="formula-block__meaning"><strong>意義：</strong>以秒或毫秒計的額外暫停預算。\(T_{\mathrm{past}}^i\) 包含已經歷的 decode waiting；\(N_{\mathrm{past}}^i\) 可監測；\(N_{\mathrm{future}}^i\) 與 \(T_{\mathrm{future}}^i\) 需預測。<a class="source-ref" href="#source-eq1-p4">§3.1 · PDF p.4 · Eq.1</a></p>
         </div>
-        <p>Eq.1 等價於要求 \(\frac{T_{\mathrm{past}}^i+T_{\mathrm{inserted}}+T_{\mathrm{future}}^i}{N_{\mathrm{past}}^i+N_{\mathrm{future}}^i}\le T_{\mathrm{tpot}}^i\)；這個重新排列是本摘要的推導，用來說明為何右側是可消耗的 stall budget。</p>
+        <aside class="statement statement--analysis" data-kind="analysis">
+          <span class="statement__label">分析：把 Eq.1 還原成平均 TPOT 約束</span>
+          <p>Eq.1 等價於要求 \(\frac{T_{\mathrm{past}}^i+T_{\mathrm{inserted}}+T_{\mathrm{future}}^i}{N_{\mathrm{past}}^i+N_{\mathrm{future}}^i}\le T_{\mathrm{tpot}}^i\)。這是本摘要依原式重新排列，用來說明右側為何是可消耗的 stall budget；也顯示它約束整段平均，而不是每個 token 間隔的上界。<a class="source-ref" href="#source-eq1-p4">§3.1 · PDF p.4 · Eq.1</a></p>
+        </aside>
 
         <h3>Eq.2：所有 decode requests 的共同安全條件</h3>
         <div id="source-eq2-p4" class="formula-block">
@@ -1052,11 +1088,15 @@ return n  # 可在本輪插入的 queue-prefix 長度</code></pre>
         </figure>
         <figure id="source-fig4-p7">
           <a href="assets/images/fig-04-p07-context-results.png"><img src="assets/images/fig-04-p07-context-results.png" alt="Figure 4：三種模型在固定 input output length 組合下的 mean TTFT 與 system throughput"></a>
-          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>三個模型皆在 1 req/s 下比較五組 input/output lengths。Length 增加時 vLLM mean TTFT 上升更陡，LayerKV 的差距擴大；下排 throughput 幾乎重合。官方 SVG 圖點在 Llama-2-7B、1,024/1,024 處約為 34,101ms 對 218ms（約 156×），與正文「最高一個數量級」及全文 headline 69× 不一致。最大 input 僅 4,096，亦未直接驗證 16K、200K 或 1M context。</span></figcaption>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>三個模型皆在 1 req/s 下比較五組 input/output lengths。Length 增加時 vLLM mean TTFT 上升更陡，LayerKV 的差距擴大；下排 throughput 幾乎重合。依圖點與刻度近似讀值，Llama-2-7B、1,024/1,024 約為 34,101ms 對 218ms（約 156×），與正文「最高一個數量級」及全文 headline 69× 不一致。最大 input 僅 4,096，亦未直接驗證 16K、200K 或 1M context。</span></figcaption>
+        </figure>
+        <figure id="source-fig5-p7">
+          <a href="assets/images/fig-05-p07-parallelism.png"><img src="assets/images/fig-05-p07-parallelism.png" alt="Figure 5：Yi-34B-200K 在 tensor parallelism 2 與 4 下的 mean TTFT 與 system throughput"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 5</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>先注意左右 TTFT 的 y 軸範圍不同，不能用斜率直接比較。DoP 從 2 增至 4 後，更多 compute 與 aggregate GPU memory 讓兩系統的 TTFT 差距明顯縮小；下排 throughput 幾乎重合。這支持收益依賴 memory pressure，但不是 PCIe guard 的獨立消融。</span></figcaption>
         </figure>
         <figure id="source-fig6-p8">
           <a href="assets/images/fig-06-p08-load-results.png"><img src="assets/images/fig-06-p08-load-results.png" alt="Figure 6：ShareGPT 不同 request arrival rate 下三種模型的 mean TTFT 與 throughput"></a>
-          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 6</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>低負載時兩系統相近；超過 saturation knee 後，vLLM queueing/TTFT 急升。69× 對應 Llama-2-7B、7 req/s 末點（約 10,800ms／156ms）。但作者宣稱 throughput gap 始終低於 3%，官方 SVG 讀值在部分點約 3.5–5.7%，不受圖完整支持。</span></figcaption>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 6</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>低負載時兩系統相近；超過 saturation knee 後，vLLM queueing/TTFT 急升。69× 對應 Llama-2-7B、7 req/s 末點（約 10,800ms／156ms）。但作者宣稱 throughput gap 始終低於 3%，依圖點近似讀值，部分條件約為 3.5–5.7%，不受圖完整支持。</span></figcaption>
         </figure>
         <figure id="source-fig7-p8">
           <a href="assets/images/fig-07-p08-p99.png"><img src="assets/images/fig-07-p08-p99.png" alt="Figure 7：Llama-2-7B 不同 arrival rate 下 LayerKV 與 vLLM 的 P99 TTFT"></a>
@@ -1070,6 +1110,22 @@ return n  # 可在本輪插入的 queue-prefix 長度</code></pre>
 
       <section id="experimental-setup" class="paper-section">
         <div class="section-heading"><span class="section-number">09</span><h2>實驗設計</h2></div>
+        <h3>每個主張如何被測試</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>Claim–test 對照：先看實驗想回答什麼，再看硬體與 workload 細節。</caption>
+            <thead><tr><th>待驗主張</th><th>測試與控制</th><th>量測</th><th>主要邊界</th></tr></thead>
+            <tbody>
+              <tr><td>長 context 的 TTFT 主要被 queueing 拉高</td><td>Llama-2-7B、1×L20、1 req/s；input 128–16,384，output 固定 512，每點 100 requests。</td><td>TTFT／TPOT 對 context，以及 TTFT 中 queueing／prefill 比例。</td><td>動機 microbenchmark，只有單一模型、GPU 與 arrival rate。<a class="source-ref" href="#source-fig1-p1">§1 · PDF pp.1–2 · Fig.1</a></td></tr>
+              <tr><td>Layer-wise offload 在 context 變長時擴大 TTFT 優勢且不明顯傷 throughput</td><td>三模型；LayerKV 對同版 vLLM；1 req/s；五組固定 input/output。</td><td>Mean TTFT、system throughput。</td><td>最大 input 4,096；沒有 tail latency 或 TPOT 圖。<a class="source-ref" href="#source-fig4-p7">§5.2.1 · PDF p.7 · Fig.4</a></td></tr>
+              <tr><td>增加 tensor parallel 資源後仍有收益</td><td>Yi-34B-200K；DoP=2 對 4；相同五組長度。</td><td>Mean TTFT、system throughput。</td><td>同時改變 compute 與 aggregate GPU memory，無法單獨歸因。<a class="source-ref" href="#source-fig5-p7">§5.2.2 · PDF p.7 · Fig.5</a></td></tr>
+              <tr><td>接近飽和時可大幅降低 mean／P99 TTFT，吞吐僅小幅下降</td><td>ShareGPT；三模型各自 sweep arrival rate；LayerKV 對 vLLM。</td><td>Mean TTFT、throughput；P99 TTFT 僅 Llama-2-7B。</td><td>Arrival process、duration、重複次數與誤差帶未提供。<a class="source-ref" href="#source-fig6-p8">§5.2.3 · PDF pp.7–8 · Fig.6–7</a></td></tr>
+              <tr><td>SLO-aware scheduler 能防止為 TTFT 犧牲 TPOT</td><td>Llama-2-7B；vLLM、LayerKV without/with scheduler；TTFT SLO 3,000ms、TPOT SLO 200ms。</td><td>任一門檻超標的 request 比例。</td><td>只消融 scheduler；沒有 TPOT 分布或 predictor-error sweep。<a class="source-ref" href="#source-fig8-p8">§5.2.4 · PDF p.8 · Fig.8</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>平台、模型與工作負載</h3>
         <div class="table-scroll">
           <table>
             <caption>Evaluation setup。所有列均來自 §5.1（PDF p.6）；未交代者明確標示。</caption>
@@ -1080,8 +1136,8 @@ return n  # 可在本輪插入的 queue-prefix 長度</code></pre>
               <tr><td>Models</td><td>Llama-2-7B：1 GPU／TP=1；Yi-34B-200K：2 GPUs／TP=2；Llama-3.1-70B：4 GPUs／TP=4。</td><td>Yi-34B-200K 與 Llama-3.1-70B 使用 GQA；weight/KV precision 未提供。<a class="source-ref" href="#experimental-setup">§5.1 · PDF p.6</a></td></tr>
               <tr><td>Fixed-length workload</td><td>1 req/s；input/output 為 256/512、1,024/512、1,024/1,024、4,096/1,024、4,096/2,048。</td><td><a class="source-ref" href="#source-fig4-p7">§5.2.1 · PDF p.7 · Fig.4</a></td></tr>
               <tr><td>Real-world workload</td><td>ShareGPT；sequence length 4–約 2.3K tokens。對三個模型 sweep request arrival rate。</td><td>Arrival process、抽樣／過濾與輸出截斷未提供。<a class="source-ref" href="#source-fig6-p8">§5.1–§5.2.3 · PDF pp.6–8 · Fig.6</a></td></tr>
-              <tr><td>Baseline</td><td>只有 vLLM 0.5.5 的同圖實測。</td><td>DistServe、DeepSpeed-FastGen、Sarathi 只做文字／Table 1 比較，沒有同硬體 benchmark。</td></tr>
-              <tr><td>Metrics</td><td>Mean TTFT、system throughput；Llama-2-7B 另有 P99 TTFT；SLO violation rate。</td><td>TPOT 本身的完整分布、goodput、host-memory footprint、PCIe bytes、CPU utilization、能耗與成本未報。</td></tr>
+              <tr><td>Baseline</td><td>只有 vLLM 0.5.5 的同圖實測。</td><td>DistServe、DeepSpeed-FastGen、Sarathi 只做文字／Table 1 比較，沒有同硬體 benchmark。<a class="source-ref" href="#experimental-setup">§5.1、§6.2 · PDF pp.6、9 · Table 1</a></td></tr>
+              <tr><td>Metrics</td><td>Mean TTFT、system throughput；Llama-2-7B 另有 P99 TTFT；SLO violation rate。</td><td>TPOT 本身的完整分布、goodput、host-memory footprint、PCIe bytes、CPU utilization、能耗與成本未報。<a class="source-ref" href="#source-fig4-p7">§5.2 · PDF pp.7–8 · Fig.4–8</a></td></tr>
               <tr><td>SLO experiment</td><td>僅 Llama-2-7B；TTFT SLO 3,000ms、TPOT SLO 200ms；任一超標即 violation。</td><td><a class="source-ref" href="#source-fig8-p8">§5.2.4 · PDF p.8 · Fig.8</a></td></tr>
             </tbody>
           </table>
@@ -1099,50 +1155,60 @@ return n  # 可在本輪插入的 queue-prefix 長度</code></pre>
 
       <section id="experimental-results" class="paper-section">
         <div class="section-heading"><span class="section-number">10</span><h2>實驗結果</h2></div>
-        <h3>10.1 Context length：TTFT gap 擴大，1 req/s 吞吐近似</h3>
+        <h3>主張—測試 1｜Context 變長：TTFT gap 擴大，1 req/s 吞吐近似</h3>
         <aside class="statement statement--fact" data-kind="experimental-fact">
           <span class="statement__label">實驗事實</span>
           <p>在 Figure 4 的五組 fixed input/output lengths 與 1 req/s 下，三種模型的 vLLM mean TTFT 隨長度急升；LayerKV 曲線較平，作者概括差距最高擴至約一個數量級。兩系統 throughput 幾乎相同。<a class="source-ref" href="#source-fig4-p7">§5.2.1 · PDF p.7 · Fig.4</a></p>
         </aside>
         <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析：正文與圖不一致</span>
-          <p>依 arXiv 官方 SVG tick／marker 座標近似數位化，Llama-2-7B 在 1,024/1,024 的 mean TTFT 約為 vLLM 34,101ms、LayerKV 218ms，即約 <strong>156×</strong>；Yi 同點亦約 74×。這不只超過「一個數量級」，也超過 Abstract／Conclusion 的全域「up to 69×」。因此 69× 應只視為作者挑出的 Figure 6 endpoint，不是圖集中可見的最大比值。<a class="source-ref" href="#source-fig4-p7">§5.2.1 · PDF p.7 · Fig.4</a></p>
+          <span class="statement__label">分析：正文與圖點不一致</span>
+          <p>依 Figure 4 圖點與座標刻度近似讀值，Llama-2-7B 在 1,024/1,024 的 mean TTFT 約為 vLLM 34,101ms、LayerKV 218ms，即約 <strong>156×</strong>；Yi 同點亦約 74×。這不只超過「一個數量級」，也超過 Abstract／Conclusion 的全域「up to 69×」。因此 69× 應只視為作者挑出的 Figure 6 endpoint，不是圖集中可見的最大比值。<a class="source-ref" href="#source-fig4-p7">§5.2.1 · PDF p.7 · Fig.4</a></p>
         </aside>
-        <p>這支持「當負載尚未造成 LayerKV 大量 decode swap 時，可釋放 admission capacity 而幾乎不減 throughput」。但最大 input 僅 4,096，不等於已驗證 16K、200K 或 1M-context serving。</p>
+        <aside class="statement statement--analysis" data-kind="analysis">
+          <span class="statement__label">分析：可支持的範圍</span>
+          <p>這支持「當負載尚未造成 LayerKV 大量 decode swap 時，可釋放 admission capacity 而幾乎不減 throughput」。但最大 input 僅 4,096，不等於已驗證 16K、200K 或 1M-context serving。<a class="source-ref" href="#source-fig4-p7">§5.2.1 · PDF p.7 · Fig.4</a></p>
+        </aside>
 
-        <h3>10.2 Tensor parallelism：更多資源縮小兩者差距</h3>
-        <p>Figure 5 以 Yi-34B-200K 比較 DoP=2 與 4。DoP 增加帶來更多 compute 與 aggregate GPU memory，兩系統 TTFT 都下降；LayerKV 仍有 TTFT 優勢，但 marginal throughput gap 變小。<a class="source-ref" href="#experimental-results">§5.2.2 · PDF p.7 · Fig.5</a></p>
+        <h3>主張—測試 2｜Tensor parallelism：更多資源縮小兩者差距</h3>
+        <aside class="statement statement--fact" data-kind="experimental-fact">
+          <span class="statement__label">實驗事實</span>
+          <p>Figure 5 以 Yi-34B-200K 比較 DoP=2 與 4。DoP 增加帶來更多 compute 與 aggregate GPU memory，兩系統 TTFT 都下降；LayerKV 仍有 TTFT 優勢，但 marginal throughput gap 變小。<a class="source-ref" href="#source-fig5-p7">§5.2.2 · PDF p.7 · Fig.5</a></p>
+        </aside>
         <aside class="statement statement--analysis" data-kind="analysis">
           <span class="statement__label">分析</span>
           <p>當 GPU memory 容量壓力被更多裝置緩解，LayerKV 解除 admission barrier 的相對價值自然下降；Figure 5 是資源敏感度，不是多 GPU PCIe guard 的獨立消融。</p>
         </aside>
 
-        <h3>10.3 Arrival rate：最大 69× mean、45× P99 TTFT</h3>
+        <h3>主張—測試 3｜Arrival rate：最大 69× mean、45× P99 TTFT</h3>
         <aside class="statement statement--fact" data-kind="experimental-fact">
           <span class="statement__label">實驗事實</span>
           <p>ShareGPT arrival-rate sweep 中，vLLM 超過容量門檻後 mean TTFT 急升，LayerKV 維持較低；作者報告最高 <strong>69× mean TTFT reduction</strong>。Llama-2-7B 的 P99 圖另報最高 <strong>45× reduction</strong>。<a class="source-ref" href="#source-fig6-p8">§5.2.3 · PDF pp.7–8 · Fig.6</a> <a class="source-ref" href="#source-fig7-p8">PDF p.8 · Fig.7</a></p>
         </aside>
         <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析：最大值稽核</span>
+          <span class="statement__label">分析：P99 headline 與圖點</span>
           <p>Figure 6 的 69× 可由 Llama-2-7B、7 req/s 末點約 10,800／156ms 重現。Figure 7 的 45× 也可由 7 req/s 約 28,412／627ms 重現，但 sweep 中 6.5 req/s 約 18,698／359ms，比例約 <strong>52×</strong>，才是圖上的最大 P99 ratio。本文「up to 45×」用語因而不精確。<a class="source-ref" href="#source-fig6-p8">§5.2.3 · PDF p.8 · Fig.6</a> <a class="source-ref" href="#source-fig7-p8">PDF p.8 · Fig.7</a></p>
         </aside>
         <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析：throughput 宣稱稽核</span>
-          <p>低負載時 throughput 隨 arrival rate 增加；過載後達瓶頸。LayerKV 需在 decode 從 CPU swap 部分 KV，因此吞吐略低於 vLLM。作者稱在所測範圍差距始終低於 <strong>3%</strong>，但 SVG 讀值不完全支持：例如 Llama-3.1-70B、4.5 req/s 約為 2.81 對 2.65 req/s，若相對 vLLM 計算 gap 約 <strong>5.7%</strong>；Llama-2-7B 的 6.5 req/s 亦約 4.5%。<a class="source-ref" href="#source-fig6-p8">§5.2.3 · PDF p.8 · Fig.6</a></p>
+          <span class="statement__label">分析：吞吐差的證據邊界</span>
+          <p>低負載時 throughput 隨 arrival rate 增加；過載後達瓶頸。LayerKV 需在 decode 從 CPU swap 部分 KV，因此吞吐略低於 vLLM。作者稱在所測範圍差距始終低於 <strong>3%</strong>，但 Figure 6 圖點不完全支持：例如 Llama-3.1-70B、4.5 req/s 約為 2.81 對 2.65 req/s，若相對 vLLM 計算 gap 約 <strong>5.7%</strong>；Llama-2-7B 的 6.5 req/s 亦約 4.5%。<a class="source-ref" href="#source-fig6-p8">§5.2.3 · PDF p.8 · Fig.6</a></p>
         </aside>
         <aside class="statement statement--analysis" data-kind="analysis">
           <span class="statement__label">分析：倍數的真正含義</span>
           <p>69× 很可能主要反映 LayerKV 把 saturation knee 往右移：同一 offered load 下，vLLM 已進入長 queue，LayerKV 尚未或較輕。這是線上容量的重要收益，但不表示單一 request 的 service time 被加速 69×；更完整的比較應同時固定 achieved goodput 或 SLO-feasible load。</p>
         </aside>
 
-        <h3>10.4 SLO：scheduler 避免為 TTFT 犧牲 TPOT</h3>
+        <h3>主張—測試 4｜SLO：scheduler 避免為 TTFT 犧牲 TPOT</h3>
         <aside class="statement statement--fact" data-kind="experimental-fact">
           <span class="statement__label">實驗事實</span>
-          <p>在 Llama-2-7B、TTFT/TPOT 閾值 3,000/200ms 下，作者稱 LayerKV 的 violation rate 比 vLLM 低 <strong>17.7–28.7%</strong>。無 SLO-aware Scheduler 時，LayerKV 因 TPOT 增加而出現更多 violations；5.5 req/s 時甚至偶爾不如 vLLM。<a class="source-ref" href="#source-fig8-p8">§5.2.4 · PDF p.8 · Fig.8</a></p>
+          <p>在 Llama-2-7B、TTFT/TPOT 閾值 3,000/200ms 下，作者報告 LayerKV 的 violation rate 比 vLLM 低 <strong>17.7–28.7%</strong>。Figure 8 也顯示無 SLO-aware Scheduler 的 LayerKV 在 5.5 req/s 時不如 vLLM。<a class="source-ref" href="#source-fig8-p8">§5.2.4 · PDF p.8 · Fig.8</a></p>
+        </aside>
+        <aside class="statement statement--claim" data-kind="author-claim">
+          <span class="statement__label">作者主張</span>
+          <p>作者把無 scheduler 時增加的 violations 歸因於 TPOT 上升；但 Figure 8 只報 TTFT 或 TPOT 任一超標的合併比例，沒有分開呈現兩者。<a class="source-ref" href="#source-fig8-p8">§5.2.4 · PDF p.8 · Fig.8</a></p>
         </aside>
         <aside class="statement statement--analysis" data-kind="analysis">
-          <span class="statement__label">分析：SLO 單位稽核</span>
-          <p>Figure 8 y 軸名為「Violation Rate (%)」，刻度卻顯示 0.0–0.6 fraction。官方 SVG 讀值顯示 6 req/s 為 0.365 對 0.188、6.5 req/s 為 0.584 對 0.297，差值正是 17.7 與 28.7 個 percentage points；若算相對 reduction 則約 48.5% 與 49.1%。因此原文的「17.7–28.7% lower」單位表達不精確。<a class="source-ref" href="#source-fig8-p8">§5.2.4 · PDF p.8 · Fig.8</a></p>
+          <span class="statement__label">分析：SLO 單位歧義</span>
+          <p>Figure 8 y 軸名為「Violation Rate (%)」，刻度卻顯示 0.0–0.6 fraction。依圖點近似讀值，6 req/s 為 0.365 對 0.188、6.5 req/s 為 0.584 對 0.297，差值正是 17.7 與 28.7 個 percentage points；若算相對 reduction 則約 48.5% 與 49.1%。因此原文的「17.7–28.7% lower」單位表達不精確。<a class="source-ref" href="#source-fig8-p8">§5.2.4 · PDF p.8 · Fig.8</a></p>
         </aside>
 
         <div class="table-scroll">
@@ -1163,15 +1229,22 @@ return n  # 可在本輪插入的 queue-prefix 長度</code></pre>
       <section id="ablation-sensitivity" class="paper-section">
         <div class="section-heading"><span class="section-number">11</span><h2>Ablation 與敏感度分析</h2></div>
         <h3>唯一明確元件消融：有／無 SLO-aware Scheduler</h3>
-        <p>Figure 8 同時畫出 vLLM、LayerKV without scheduler、LayerKV with scheduler。它直接證明「只做 layer-wise offload、放任 prefill 插入」會傷害 TPOT SLO；scheduler 在 5.5–7 req/s 的曲線低於無 scheduler 版本。<a class="source-ref" href="#source-fig8-p8">§5.2.4 · PDF p.8 · Fig.8</a></p>
+        <aside class="statement statement--fact" data-kind="experimental-fact">
+          <span class="statement__label">實驗事實</span>
+          <p>Figure 8 同時畫出 vLLM、LayerKV without scheduler、LayerKV with scheduler；scheduler 在 5.5–7 req/s 的合併 violation-rate 曲線都低於無 scheduler 版本。<a class="source-ref" href="#source-fig8-p8">§5.2.4 · PDF p.8 · Fig.8</a></p>
+        </aside>
+        <aside class="statement statement--analysis" data-kind="analysis">
+          <span class="statement__label">分析：圖能支持到哪裡</span>
+          <p>這直接支持 scheduler 能降低「TTFT 或 TPOT 任一超標」的合併 violation rate；但 Figure 8 沒有分開報 TTFT／TPOT violation 或 TPOT 分布，因此「差距由 TPOT 上升造成」仍是作者的機制解釋，不是圖本身可單獨驗證的結果。</p>
+        </aside>
         <h3>工作負載／資源敏感度</h3>
         <div class="table-scroll">
           <table>
             <thead><tr><th>Sweep</th><th>觀察</th><th>能回答什麼</th></tr></thead>
             <tbody>
-              <tr><td>Context length（Fig.4）</td><td>Length 越大，TTFT gap 越明顯；1 req/s throughput 接近。</td><td>容量需求增加時方法較有價值。</td></tr>
-              <tr><td>DoP=2/4（Fig.5）</td><td>更多 compute/memory 降低 TTFT，縮小 throughput 差距。</td><td>收益與資源壓力相關。</td></tr>
-              <tr><td>Arrival rate（Fig.6–8）</td><td>接近 saturation 時 TTFT、tail 與 SLO 差距快速擴大。</td><td>方法主要改善 queueing regime。</td></tr>
+              <tr><td>Context length（Fig.4）</td><td>Length 越大，TTFT gap 越明顯；1 req/s throughput 接近。</td><td>容量需求增加時方法較有價值。<a class="source-ref" href="#source-fig4-p7">§5.2.1 · PDF p.7 · Fig.4</a></td></tr>
+              <tr><td>DoP=2/4（Fig.5）</td><td>更多 compute/memory 降低 TTFT，縮小 throughput 差距。</td><td>收益與資源壓力相關。<a class="source-ref" href="#source-fig5-p7">§5.2.2 · PDF p.7 · Fig.5</a></td></tr>
+              <tr><td>Arrival rate（Fig.6–8）</td><td>接近 saturation 時 TTFT、tail 與 SLO 差距快速擴大。</td><td>方法主要改善 queueing regime。<a class="source-ref" href="#source-fig6-p8">§5.2.3–§5.2.4 · PDF pp.7–8 · Fig.6–8</a></td></tr>
             </tbody>
           </table>
         </div>
@@ -1198,11 +1271,11 @@ return n  # 可在本輪插入的 queue-prefix 長度</code></pre>
         <h3>證據與重現限制</h3>
         <ul>
           <li><strong>Baseline 狹窄：</strong>實測只有 vLLM 0.5.5；與 DistServe、DeepSpeed-FastGen、Sarathi、FlexGen、InfiniGen 的比較僅為文字或作者自製 Table 1。<a class="source-ref" href="#source-table1-p9">§5.1、§6.2 · PDF pp.6、9 · Table 1</a></li>
-          <li><strong>Long-context gap：</strong>動機到 16K，但主要 Figure 4 最大 4,096 input；ShareGPT 約 2.3K。模型名「Yi-34B-200K」不等於跑過 200K context。</li>
-          <li><strong>單一平台：</strong>只測 NVIDIA L20／PCIe／2TB host RAM；未測不同 PCIe generation、NVLink、NUMA、較小 DRAM、異質或多租戶環境。</li>
-          <li><strong>統計資訊不足：</strong>主要 evaluation 無 error bars、run counts、warmup、arrival process 或 confidence intervals。</li>
-          <li><strong>核心參數未披露：</strong>predictor、\(\alpha,\beta\)、block threshold、transfer chunk 與 PCIe check 細節不足以重現。</li>
-          <li><strong>Quality 主張未實測：</strong>「不犧牲 output performance／lossless precision」在機制上合理，但沒有 accuracy 或 bitwise equivalence 驗證。</li>
+          <li><strong>Long-context gap：</strong>動機到 16K，但主要 Figure 4 最大 4,096 input；ShareGPT 約 2.3K。模型名「Yi-34B-200K」不等於跑過 200K context。<a class="source-ref" href="#source-fig4-p7">§1、§5.1–§5.2.1 · PDF pp.1、6–7 · Fig.1、4</a></li>
+          <li><strong>單一平台：</strong>只測 NVIDIA L20／PCIe／2,048GB host RAM；未測不同 PCIe generation、NVLink、NUMA、較小 DRAM、異質或多租戶環境。<a class="source-ref" href="#experimental-setup">§5.1 · PDF p.6</a></li>
+          <li><strong>統計資訊不足：</strong>主要 evaluation 無 error bars、run counts、warmup、arrival process 或 confidence intervals。<a class="source-ref" href="#experimental-setup">§5 · PDF pp.6–8</a></li>
+          <li><strong>核心參數未披露：</strong>predictor、\(\alpha,\beta\)、block threshold、transfer chunk 與 PCIe check 細節不足以重現。<a class="source-ref" href="#source-eq1-p4">§3.1–§4 · PDF pp.4–6 · Eq.1–5</a></li>
+          <li><strong>Quality 主張未實測：</strong>「不犧牲 output performance／lossless precision」在機制上合理，但沒有 accuracy 或 bitwise equivalence 驗證。<a class="source-ref" href="#strengths-limitations-risks">§1、§6.1 · PDF pp.2、9</a></li>
         </ul>
 
         <h3>系統風險</h3>
@@ -1260,8 +1333,8 @@ return n  # 可在本輪插入的 queue-prefix 長度</code></pre>
               <tr><td>KV quantization、window attention、KV pruning、GQA/MQA</td><td>壓縮或減少 KV entries；作者概括部分方法可能有 accuracy loss。</td><td>LayerKV 搬移完整 KV，不壓縮；代價轉為 host memory 與 PCIe traffic。量化被列為 future work。<a class="source-ref" href="#related-work">§6.1、§8 · PDF pp.8–9</a></td></tr>
               <tr><td>InfiniGen、FlexGen 等 CPU／disk offload</td><td>作者認為較偏 offline throughput。</td><td>LayerKV 的主張是 layer-wise transfer 加上線上 TTFT/TPOT 控制；本文沒有直接 benchmark。<a class="source-ref" href="#related-work">§6.1 · PDF p.9</a></td></tr>
               <tr><td>vTensor</td><td>CUDA virtual-memory abstraction，支援 defragmentation 與 allocation flexibility。</td><td>作者稱兩者 orthogonal，但沒有實驗整合。<a class="source-ref" href="#related-work">§6.1 · PDF p.9</a></td></tr>
-              <tr><td>vLLM／PagedAttention</td><td>動態 non-contiguous blocks，提升 batch capacity 與 throughput。</td><td>LayerKV 基於 vLLM 0.5.5，將管理單位從 request 擴成 layer；也是唯一實測 baseline。</td></tr>
-              <tr><td>DistServe</td><td>把 prefill／decode 放到不同 GPU，隔離兩階段干擾。</td><td>需要不同資源配置；LayerKV 用同一 serving stack 的 memory movement。只有文字比較。</td></tr>
+              <tr><td>vLLM／PagedAttention</td><td>動態 non-contiguous blocks，提升 batch capacity 與 throughput。</td><td>LayerKV 基於 vLLM 0.5.5，將管理單位從 request 擴成 layer；也是唯一實測 baseline。<a class="source-ref" href="#source-table1-p9">§4、§6.2 · PDF pp.6、9 · Table 1</a></td></tr>
+              <tr><td>DistServe</td><td>把 prefill／decode 放到不同 GPU，隔離兩階段干擾。</td><td>需要不同資源配置；LayerKV 用同一 serving stack 的 memory movement。只有文字比較。<a class="source-ref" href="#source-table1-p9">§6.2 · PDF p.9 · Table 1</a></td></tr>
               <tr><td>Sarathi、DeepSpeed-FastGen</td><td>Chunked prefill，把 prompt chunks 與 decode tokens 混排，改善 responsiveness／tail latency。</td><td>最直接的 scheduling alternatives／complements，卻沒有實測比較。<a class="source-ref" href="#source-table1-p9">§6.2 · PDF p.9 · Table 1</a></td></tr>
               <tr><td>Response-length prediction scheduler</td><td>以前作的 multi-class／percentile range 預測完整 generation length。</td><td>LayerKV 讓同一預測同時影響 TPOT slack 與預期 KV block release。<a class="source-ref" href="#source-eq1-p4">§3.1 · PDF pp.4–5 · Eq.1–5</a></td></tr>
             </tbody>
@@ -1353,6 +1426,7 @@ return n  # 可在本輪插入的 queue-prefix 長度</code></pre>
           <li><span><a href="#source-eq4-p5">Layer-wise offload model</a>：§3.1.1，PDF p.5，Equation 4。</span></li>
           <li><span><a href="#source-eq5-p5">KV block capacity forecast</a>：§3.1.1，PDF p.5，Equation 5。</span></li>
           <li><span><a href="#source-fig4-p7">Fixed-length results</a>：§5.2.1，PDF p.7，Figure 4。</span></li>
+          <li><span><a href="#source-fig5-p7">Tensor-parallel resource sensitivity</a>：§5.2.2，PDF p.7，Figure 5。</span></li>
           <li><span><a href="#source-fig6-p8">Arrival-rate mean TTFT／throughput</a>：§5.2.3，PDF pp.7–8，Figure 6。</span></li>
           <li><span><a href="#source-fig7-p8">P99 TTFT</a>：§5.2.3，PDF p.8，Figure 7。</span></li>
           <li><span><a href="#source-fig8-p8">SLO violation／scheduler ablation</a>：§5.2.4，PDF p.8，Figure 8。</span></li>
@@ -1364,7 +1438,7 @@ return n  # 可在本輪插入的 queue-prefix 長度</code></pre>
   </div>
 
   <footer class="page-footer">
-    <p>Paper Reading · LayerKV: Optimizing Large Language Model Serving with Layer-wise KV Cache Management · 最後更新 2026-09-06</p>
+    <p>Paper Reading · LayerKV: Optimizing Large Language Model Serving with Layer-wise KV Cache Management · 最後更新 2026-09-08</p>
     <p>模板版本 1.2.0。頁面中的分析與推測不代表原論文作者立場。</p>
   </footer>
 

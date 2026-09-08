@@ -864,9 +864,11 @@
         <div class="section-heading"><span class="section-number">03</span><h2>Executive Summary</h2></div>
         <div class="key-grid">
           <article class="key-card"><p class="key-card__eyebrow">Problem</p><p>PD-disaggregated 系統把命中 KV-Cache 的外部讀取集中在 PE 的 storage NIC（SNIC）；PE 飽和時，DE 的 SNIC 卻可能閒置。</p></article>
-          <article class="key-card"><p class="key-card__eyebrow">Insight</p><p>命中 KV 不必先到 PE。若先讀到 DE host buffer，再經高聚合頻寬的 compute network 傳給 PE，就能同時利用兩側 SNIC。</p></article>
+          <article class="key-card"><p class="key-card__eyebrow">Root cause</p><p>Agent 每輪重讀很長的舊 context，卻只計算很短的 append；既有 PE-only ingress 因而把大量 I/O 壓在少數 SNIC，而不是算力上。</p></article>
+          <article class="key-card"><p class="key-card__eyebrow">Gap</p><p>DRAM cache、減少 KV bytes 與單一路徑 I/O 優化能降低讀量，卻沒有把 DE 節點原本閒置的 SNIC 變成可用 ingress。</p></article>
+          <article class="key-card"><p class="key-card__eyebrow">Insight</p><p>命中 KV 不必先到 PE。若先讀到 DE host buffer，再經高聚合頻寬的 compute network 傳給 PE，就能池化兩側 SNIC。</p></article>
           <article class="key-card"><p class="key-card__eyebrow">Mechanism</p><p>雙讀取路徑、Full／Layer Block、CNIC-centric RDMA copy、InfiniBand virtual-lane QoS，以及同時平衡 token、disk queue、HBM 的兩層 scheduler。</p></article>
-          <article class="key-card"><p class="key-card__eyebrow">Evidence</p><p>3 個模型與 production RL coding traces；offline JCT、online TTFT／TTST／TPOT、累積式 ablation，以及最高 1,152 GPU 的 weak-scaling 實驗。</p></article>
+          <article class="key-card"><p class="key-card__eyebrow">Evidence</p><p>3 個模型與 production-derived RL coding traces；offline JCT、online TTFT／TTST／TPOT、累積式 ablation，以及最高 1,152 GPU 的 weak scaling。</p></article>
         </div>
         <h3>最重要的閱讀結論</h3>
         <ol>
@@ -875,22 +877,29 @@
           <li><strong>headline 數字需帶條件。</strong>1.87× 是 DS 660B 對同一 in-house stack 的 Basic 最佳 offline speedup；1.96× 是 DS 27B 的 1.67× 與 DS 660B 的 2.25× online capacity gain 的平均，不含 Qwen 32B。 <a class="source-ref" href="#source-offline-p10">§7.3 · PDF p.10 · Fig. 7</a> <a class="source-ref" href="#source-online-p12">§7.4 · PDF pp.11–12 · Fig. 10</a></li>
           <li><strong>完整系統不只 DualPath。</strong>累積 ablation 顯示 layerwise prefill、dual-path loading 與 scheduler 都貢獻 JCT 降幅；把完整 45.62% 降幅全歸因於雙路徑會過度解讀。 <a class="source-ref" href="#source-ablation-p12">§7.5 · PDF p.12 · Fig. 12</a></li>
         </ol>
-        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>論文最有價值之處，是把「decode engine 的 storage NIC 為何閒著」轉成一個跨 storage／compute fabric 的資料面設計；最需要保留懷疑之處，則是內部系統 baseline、理想化 replay 與拓撲前提，讓結果較像 production design case study，而非已證明可普遍移植的 serving 定律。</p></aside>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p><strong>因果主線：</strong>短 append 使 prefill compute 下降 → 長命中前綴仍須由 storage 回載 → PE-only ingress 先耗盡 PE SNIC → DE SNIC 與 compute-fabric 空檔成為可回收資源 → DualPath 以 DE-read、QoS 與負載感知排程池化頻寬。這條鏈在目標 traces 上獲得端到端與 load-balance 證據，但內部系統 baseline、理想化 replay 與拓撲前提，仍使結果更像 production design case study，而非已證明可普遍移植的 serving 定律。</p></aside>
       </section>
 
       <section id="background-motivation" class="paper-section">
         <div class="section-heading"><span class="section-number">04</span><h2>背景與動機</h2></div>
-        <h3>為什麼 agent workload 會把 KV-Cache 變成 I/O 問題？</h3>
-        <p>傳統聊天常只有少數回合；agent 則反覆呼叫工具、接收短輸出並把既有上下文全部帶到下一輪。舊 token 的 key/value 多半已計算過，可直接命中持久化 KV-Cache；新追加 token 很少，真正要做的 prefill 計算反而不多。這形成「長 context、短 append、高 reuse」的工作負載。作者的 64K coding trace 平均 context 為 32,721、append 為 429、generation 為 176、共 157 輪。 <a class="source-ref" href="#source-background-p3">§2.2 · PDF p.3 · Fig. 2</a> <a class="source-ref" href="#source-setup-p9">§7.2 · PDF p.9 · Table 2</a></p>
-        <h3>既有 serving stack 的三個結構</h3>
-        <ul>
-          <li><strong>Prefill–Decode disaggregation（PD 分離）</strong>：PE 負責 prefill，DE 負責自回歸 decode；PE 完成後把完整 prompt KV 傳到 DE。</li>
-          <li><strong>Layerwise prefill</strong>：一次只讓一層所需的 KV 常駐 HBM，釋放 batch-size 的容量上限，並讓傳輸與計算逐層重疊。</li>
-          <li><strong>外部 KV 儲存</strong>：長 trajectory 的 working set 超過 HBM／DRAM 經濟容量，故用 SSD 型分散式儲存保存跨回合 KV。</li>
-        </ul>
-        <p><a class="source-ref" href="#source-background-p3">§2.1–2.2 · PDF pp.2–3</a></p>
-        <h3>硬體不對稱</h3>
-        <p>論文以典型 8-GPU 節點說明：每張 GPU 可配一張 400 Gbps compute NIC（CNIC），但整台機器通常只共享一張最高 400 Gbps SNIC；compute 與 storage network 又彼此隔離。既有資料流讓命中 KV 一律由 PE 的 SNIC 讀入，造成 PE SNIC 飽和、DE SNIC 閒置。作者另觀察 collective traffic 呈 sub-millisecond burst，因而推論 compute fabric 的空檔可承載低優先 KV traffic。 <a class="source-ref" href="#source-background-p3">§2.3 · PDF p.3</a> <a class="source-ref" href="#source-motivation-p4">§3 · PDF p.4 · Fig. 3</a></p>
+        <h3>先建立後文會反覆用到的四個概念</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>最小先備地圖：每個概念都對應後續一個設計決策</caption>
+            <thead><tr><th scope="col">概念</th><th scope="col">本篇所需理解</th><th scope="col">後文用途</th></tr></thead>
+            <tbody>
+              <tr><td>KV-Cache 命中</td><td>舊 token 的 attention keys／values 可重用，省掉重算；但若不在 HBM，仍要把命中 bytes 從外部 storage 搬回來。</td><td>解釋為何「少算」可能反而讓 I/O 成為主瓶頸。</td></tr>
+              <tr><td>Prefill–Decode disaggregation（PD 分離）</td><td>Prefill engine（PE）處理 prompt；decode engine（DE）自回歸產生 token。傳統流程由 PE 載入命中 KV，prefill 後再把完整 prompt KV 給 DE。</td><td>界定 PE-read 與新增 DE-read 的角色和方向。</td></tr>
+              <tr><td>Layerwise prefill</td><td>一次只讓當前 layer 的 KV 常駐 HBM，擴大 token batch，並讓 transfer 與 compute 逐層重疊。</td><td>解釋 Layer Block、compute quota 與細粒度 copy 開銷。</td></tr>
+              <tr><td>分離的 SNIC／CNIC fabrics</td><td>Storage NIC（SNIC）連 3FS；compute NIC（CNIC）承載 GPU collective／RDMA。兩個網路原本隔離，頻寬也不對稱。</td><td>解釋如何借 DE SNIC 載入，再用 CNIC 把 KV 送回 PE，以及為何必須做 QoS。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-background-p3">§2.1–2.3 · PDF pp.2–3</a> <a class="source-ref" href="#source-fig4-p5">§4.1 · PDF p.5 · Fig. 4</a></p>
+        <h3>從多輪 agent 行為到 I/O 壓力</h3>
+        <p>Agent 反覆呼叫工具、接收短輸出，下一輪 prompt 又帶上全部既有上下文。舊 token 的 KV 大多命中，新 append 才需 prefill 計算，形成「長 context、短 append、高 reuse」。64K coding trace 平均有 157 輪、context 32,721 tokens、每輪 append 429、generation 176；以 context 與 append 的比例估算，作者報告約 98.7% KV-Cache hit rate。 <a class="source-ref" href="#source-background-p3">§2.2 · PDF p.3 · Fig. 2</a> <a class="source-ref" href="#source-motivation-p4">§3 · PDF pp.3–4</a> <a class="source-ref" href="#source-setup-p9">§7.2 · PDF p.9 · Table 2</a></p>
+        <h3>從 I/O 壓力到資源不平衡</h3>
+        <p>論文以典型 8-GPU 節點說明：每張 GPU 可配一張 400 Gbps CNIC，但整台機器只共享一張最高 400 Gbps SNIC，compute 與 storage network 又彼此隔離。既有 PE-only ingress 使 PE SNIC 持續飽和、DE SNIC 閒置；GPU 因等 KV 而 underutilized。作者另觀察 model collectives 是 sub-millisecond bursts，遂把 compute fabric 的空檔視為把 DE-read KV 串回 PE 的機會。 <a class="source-ref" href="#source-background-p3">§2.3 · PDF p.3</a> <a class="source-ref" href="#source-motivation-p4">§3 · PDF p.4 · Figs. 1、3</a></p>
         <div class="table-scroll">
           <table>
             <caption>Table 1 重整：append=429、context 16K–64K 時的 cache-compute ratio；除另註者外，KV-Cache 為 FP8</caption>
@@ -906,21 +915,33 @@
         </div>
         <p><a class="source-ref" href="#source-motivation-p4">§3 · PDF p.4 · Table 1</a></p>
         <aside class="statement statement--claim" data-kind="author-claim"><span class="statement__label">作者主張</span><p>從 NVIDIA Ampere 到 Blackwell，圖中的 dense FLOPS 成長 28.8×，PCIe bandwidth 僅 2.0×、HBM capacity 僅 2.4×；作者把 I/O-to-compute ratio 的 14.4× 下降視為 agentic inference storage bottleneck 會加劇的硬體趨勢。 <a class="source-ref" href="#source-motivation-p4">§3 · PDF p.4 · Fig. 3</a></p></aside>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p><strong>通往問題定義的橋：</strong>因此下一節真正要解的不是「怎麼讓 prefill kernel 更快」，而是「已知一輪有大量命中 KV 必須回載時，如何解除 PE SNIC 的單點 ingress 限制，同時不把瓶頸移到 CNIC、DRAM、HBM 或 collective tail latency」。</p></aside>
       </section>
 
       <section id="problem-definition" class="paper-section">
         <div class="section-heading"><span class="section-number">05</span><h2>問題定義</h2></div>
-        <h3>系統目標</h3>
-        <p>給定一批會重用長前綴 KV-Cache 的多輪 agent requests，以及一組 PD-disaggregated PE／DE 節點，DualPath 要在不讓 latency-sensitive model communication 顯著退化的前提下，使用所有節點的 SNIC 共同回載命中 KV。Offline 以整批 rollout 的 job completion time（JCT）為主；online 以在 TTFT／TPOT SLO 內可承載的 agents per second（APS）為主。 <a class="source-ref" href="#source-intro-p2">§1 · PDF pp.1–2</a> <a class="source-ref" href="#source-setup-p9">§7.2 · PDF p.9</a></p>
-        <h3>每個 request 的決策</h3>
-        <ol>
-          <li>選擇 PE 與 DE engine group／engine，使 GPU token load、HBM 容量與 node disk queue 盡量平衡。</li>
-          <li>比較 PE node 與 DE node 的讀取 queue，整個 request 選其中一側載入命中 KV。</li>
-          <li>PE 端以預估 attention layer time 的 compute quota 決定本輪 batch，必要時對 request 做 chunked prefill。</li>
-          <li>以 Full Block 與 storage 互動；以 Layer Block 在 PE HBM、PE buffer、DE buffer 間逐層串流。</li>
-        </ol>
-        <p><a class="source-ref" href="#source-scheduler-p8">§6.1–6.2 · PDF pp.7–9 · Alg. 1、Figs. 5–6</a> <a class="source-ref" href="#source-appendix-p16">§A.4–A.5 · PDF pp.16–17</a></p>
-        <h3>輸入、狀態、輸出與限制</h3>
+        <h3>5.1 可觀測症狀：GPU 在等一張已飽和的 PE SNIC</h3>
+        <p>在長 context、短 append 的多輪 workload 中，每輪 prefill 的新計算量很小，但必須回載幾乎整段命中 KV。PD 架構又只允許 PE 從 storage 讀取，於是 throughput 隨 PE SNIC 飽和而封頂，即使 DE SNIC 與 GPU 尚有餘裕。Figure 1 將既有系統示意為 PE SNIC 100% utilization、GPU 約 40% utilization；這是作者的瓶頸示意，不是 §7 的量測表。 <a class="source-ref" href="#source-intro-p2">§1 · PDF pp.1–2 · Fig. 1</a> <a class="source-ref" href="#source-motivation-p4">§3 · PDF pp.3–4</a></p>
+        <h3>5.2 根因：需要搬的 bytes 與能提供 ingress 的角色錯配</h3>
+        <p>對每個 request，cache hit 增加會降低 prefill FLOPs，卻不會消除命中 KV 的 storage bytes；而現行角色規則把這些 bytes 全部綁在 PE ingress。問題因而不是 aggregate cluster storage bandwidth 不足，而是可用 bandwidth 沒有被同時動員。 <a class="source-ref" href="#source-motivation-p4">§3 · PDF pp.3–4 · Table 1</a></p>
+        <h3>5.3 最近的既有解法為何仍不夠</h3>
+        <p>Mooncake 類 distributed DRAM pool 可提高 memory-tier hit rate，但 RL rollout 的 host DRAM 需容納 offloaded training state，online working set 又可能大到 SSD 更具成本優勢；HCache／TARDIS／Phoenix 等方向則減少讀量或 retrieval overhead。作者指出，這些方法仍沿用單一 ingress，沒有解除 PE／DE SNIC 之間的結構性不平衡。 <a class="source-ref" href="#source-intro-p2">§1 · PDF p.2</a> <a class="source-ref" href="#source-related-p13">§9 · PDF pp.13–14</a></p>
+        <h3>5.4 由根因推導出的成功條件</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>需求不是功能清單；每項都對應前述失敗機制</caption>
+            <thead><tr><th scope="col">需求</th><th scope="col">要避免的失敗</th><th scope="col">可驗證指標</th></tr></thead>
+            <tbody>
+              <tr><td><strong>R1｜池化 ingress</strong></td><td>PE SNIC 飽和、DE SNIC 閒置</td><td>Offline JCT、online APS capacity、各 SNIC max/avg traffic ratio</td></tr>
+              <tr><td><strong>R2｜逐層串流</strong></td><td>完整 prompt KV 佔滿 HBM，或 transfer 無法與 prefill overlap</td><td>Layerwise 累積 ablation、Oracle gap</td></tr>
+              <tr><td><strong>R3｜隔離 model communication</strong></td><td>新增 KV traffic 阻塞 EP／TP／CP collectives</td><td>TTST／TPOT 不劣化；理想上還需 QoS on/off tail test</td></tr>
+              <tr><td><strong>R4｜聯合平衡 GPU、SNIC、HBM</strong></td><td>雙路徑只把 hotspot 搬到另一側，或 DP peers 互等</td><td>Storage-traffic 與 attention-time max/avg ratio</td></tr>
+              <tr><td><strong>R5｜部署範圍內可擴展</strong></td><td>CNIC、DRAM、central scheduler 成為新瓶頸</td><td>Bandwidth inequalities、weak scaling、scheduler CPU</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-theory-p6">§4.2–4.3 · PDF pp.5–6 · Eqs. 1–9</a> <a class="source-ref" href="#source-ablation-p12">§7.5 · PDF p.12 · Figs. 12–14</a> <a class="source-ref" href="#source-scale-p13">§7.6 · PDF p.13 · Table 3</a></p>
+        <h3>5.5 輸入、狀態、決策與約束</h3>
         <div class="table-scroll">
           <table>
             <caption>問題形式化（論文敘述與摘要者重組）</caption>
@@ -928,25 +949,44 @@
             <tbody>
               <tr><th scope="row">Request 輸入</th><td>cached token 數、新增 prefill token 數 (bsz)、預計 context／request length、decode 生成長度與 KV 命中位置</td></tr>
               <tr><th scope="row">Engine 狀態</th><td>未完成 request 數 <code>seq_e</code>、未完成 token 數 <code>tok_e</code>、node 讀取 queue <code>read_q[n(e)]</code>、DE 可用 HBM</td></tr>
-              <tr><th scope="row">控制輸出</th><td>PE／DE 指派、KV 由 PE 或 DE 讀取、PE forward batch 與 chunk size</td></tr>
+              <tr><th scope="row">控制輸出</th><td>PE／DE 指派、KV 由 PE 或 DE 讀取、PE forward batch 與 chunk size；目前不把單一 request 拆到兩路同讀</td></tr>
               <tr><th scope="row">硬限制</th><td>HBM capacity、每張 CNIC 與每 node SNIC／DRAM bandwidth、可配置硬體 QoS、PE／DE ratio</td></tr>
-              <tr><th scope="row">成功條件</th><td>SNIC 高利用率、較短 JCT／TTFT、TPOT 不劣化、engine 間 max/avg load ratio 接近 1</td></tr>
+              <tr><th scope="row">最佳化目標</th><td>Offline 降低整批 rollout 的 job completion time（JCT）；online 提高在 TTFT ≤ 4 s、TPOT ≤ 50 ms 下可承載的 agents per second（APS）</td></tr>
             </tbody>
           </table>
         </div>
+        <p><a class="source-ref" href="#source-scheduler-p8">§6.1–6.2 · PDF pp.7–9 · Algorithm 1、Figs. 5–6</a> <a class="source-ref" href="#source-online-p12">§7.4 · PDF p.11</a> <a class="source-ref" href="#source-appendix-p16">§A.4 · PDF p.16</a></p>
         <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>DualPath 解的不是通用 KV eviction／placement 問題。評估中 DualPath、Basic 與 Oracle 的 hit length 由 client 端直接計算，只允許 trajectory 內命中且假設不需 eviction；因此其核心問題可更精確地描述為「已知命中長度後的 KV 回載路徑與執行負載平衡」。 <a class="source-ref" href="#source-appendix-p16">§A.4 · PDF p.16</a></p></aside>
       </section>
 
       <section id="core-method" class="paper-section">
         <div class="section-heading"><span class="section-number">06</span><h2>核心方法</h2></div>
-        <h3>6.1 元件與端到端流程</h3>
-        <ul>
-          <li><strong>Inference engines</strong>：每個 engine 管理一張 GPU；PE 做 prefill，DE 做 decode。</li>
-          <li><strong>Traffic manager</strong>：負責 host↔device copy、PE↔DE KV 傳輸、storage read／write，並把 GPU I/O 統一交由 paired CNIC 仲裁。</li>
-          <li><strong>Central request scheduler</strong>：選 PE／DE、選讀取路徑，再由 PE 的 intra-engine scheduler 決定 forward batch。</li>
-        </ul>
-        <p><a class="source-ref" href="#source-system-p4">§4 · PDF p.4</a></p>
-        <h3>6.2 兩條 KV-Cache 載入路徑</h3>
+        <h3>6.1 先跑一遍：一個新回合如何穿過 DualPath</h3>
+        <ol>
+          <li><strong>回報狀態：</strong>PE／DE engine 以 group 為單位拉取任務，向 central scheduler 回報未完成 requests、token load、node storage-read queue；DE 另受剩餘 HBM 約束。</li>
+          <li><strong>選 engine：</strong>scheduler 先挑 PE 與 DE，使 token、request count、HBM 與 read queue 不集中在少數 engines。</li>
+          <li><strong>選 ingress：</strong>比較已選 PE node 與 DE node 的 read queue；整個 request 的命中 KV 由較短的一側載入。這一步才決定走 PE-read 或 DE-read。</li>
+          <li><strong>逐層 prefill：</strong>storage 使用 Full Blocks，PE HBM 只接收當前 layer 的 Layer Blocks；命中 KV transfer 與新 append 的 attention computation overlap。</li>
+          <li><strong>組成 DE state：</strong>PE-read 把 hit+miss KV 送往 DE；DE-read 已持有 hit KV，PE 只回傳新 append 的 miss KV。DE 將完整 prompt KV 搬入 HBM 後開始 decode。</li>
+          <li><strong>保護 latency：</strong>所有 GPU 進出流量由 paired CNIC 執行 RDMA copy；model collectives 走高優先 VL，KV traffic 走低優先 VL。Decode 每累積一個 full block（文中例為 64 tokens）就持久化。</li>
+        </ol>
+        <p><a class="source-ref" href="#source-fig4-p5">§4.1 · PDF p.5 · Fig. 4</a> <a class="source-ref" href="#source-traffic-p7">§5 · PDF pp.6–7</a> <a class="source-ref" href="#source-scheduler-p8">§6 · PDF pp.7–9</a></p>
+        <h3>6.2 元件如何回答需求</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>訊號 → 決策／狀態 → 動作 → 預期效果</caption>
+            <thead><tr><th scope="col">元件</th><th scope="col">輸入／訊號</th><th scope="col">決策與動作</th><th scope="col">對應需求</th></tr></thead>
+            <tbody>
+              <tr><td>Dual-path data plane</td><td>PE／DE read queue、命中 KV blocks</td><td>選 PE-read 或 DE-read，逐層把 KV 串到 PE，再在 DE 合併完整 prompt state</td><td>R1 ingress 池化、R2 逐層串流</td></tr>
+              <tr><td>Traffic manager</td><td>H2D／D2H、PE↔DE、storage I/O</td><td>把 GPU I/O 收斂到 paired CNIC，以硬體 VL QoS 排優先級</td><td>R3 collective 隔離、R5 避免新瓶頸</td></tr>
+              <tr><td>Inter-engine scheduler</td><td><code>seq_e</code>、<code>tok_e</code>、<code>read_q[n(e)]</code>、DE HBM</td><td>挑 PE／DE 與讀取側，抑制 overloaded engines</td><td>R1、R4 聯合平衡</td></tr>
+              <tr><td>Intra-engine scheduler</td><td><code>(cached, bsz)</code> 與 profile-based layer time</td><td>依 compute quota 做 FIFO packing／chunked prefill</td><td>R2 overlap、R4 減少 DP bubble</td></tr>
+              <tr><td>Full／Layer Blocks</td><td>Storage trie 與當前 layer</td><td>Storage 端維持 Full Block，執行時直接切成／串接 Layer Blocks</td><td>R2 降低 HBM footprint</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-system-p4">§4 · PDF p.4</a> <a class="source-ref" href="#source-appendix-p16">§A.5 · PDF pp.16–17</a></p>
+        <h3>6.3 兩條 KV-Cache 載入路徑（R1、R2）</h3>
         <h4>路徑 A：PE read（既有路徑）</h4>
         <ol>
           <li>SNIC 把命中 token 的 Full Blocks 讀到 PE host DRAM buffer。</li>
@@ -963,16 +1003,16 @@
         </ol>
         <p><a class="source-ref" href="#source-fig4-p5">§4.1 · PDF p.5 · Fig. 4</a></p>
         <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>DE-read 之所以有用，是它把 PE SNIC 的工作轉移到 DE SNIC；代價不是消失，而是增加 DE DRAM、CNIC 與一次 H2D 壓力。作者選 host buffer 而非讓完整 KV 直接常駐 DE HBM，是以額外搬移換取較低 HBM 佔用與較低 preemption 風險。</p></aside>
-        <h3>6.3 CNIC-centric traffic manager</h3>
+        <h3>6.4 CNIC-centric traffic manager（R3）</h3>
         <p>DualPath 不直接讓 CUDA copy engine 或 GPUDirect Storage 自行穿越 PCIe，而是先把 storage data 放到 host DRAM，再向 GPU 的 paired CNIC 提交 local RDMA Write；D2H／store 則反向操作。如此一來，H2D、D2H、PE↔DE KV 與 model collective 都經過 CNIC，可使用同一組硬體 QoS。 <a class="source-ref" href="#source-traffic-p7">§5、§5.2 · PDF p.7</a></p>
         <p>在 InfiniBand 上，model collective 被放入高優先 virtual lane（VL），KV traffic 放入低優先 VL；weighted round robin 約為高優先保留 99% bandwidth，低優先保有少量配額避免 starvation。論文主張 RoCE 可用 DSCP、traffic class 與 PFC 實作相同概念，但沒有 RoCE 實驗。 <a class="source-ref" href="#source-traffic-p7">§5.1 · PDF p.7</a> <a class="source-ref" href="#source-appendix-p16">§A.1 · PDF p.16</a></p>
         <aside class="statement statement--claim" data-kind="author-claim"><span class="statement__label">作者主張</span><p>對大量小 chunks，單次 <code>cudaMemcpyAsync</code> submission 約需 5–7 μs，RDMA Write work request 約 1 μs，且後者可用 doorbell batching 攤提。這是提交開銷比較，不是完整 copy latency 或 throughput 曲線。 <a class="source-ref" href="#source-traffic-p7">§5.2 · PDF p.7</a></p></aside>
-        <h3>6.4 Inter-engine scheduler</h3>
+        <h3>6.5 Inter-engine scheduler（R1、R4）</h3>
         <p>每個 engine 回報 <code>seq_e</code>、<code>tok_e</code> 與 node 級 <code>read_q[n(e)]</code>。PE 被分成：<code>tok_e &gt; β</code> 的 overloaded 類別、queue 短且 token 未超標的首選類別、queue 長但 token 未超標的備選類別；scheduler 保持 request FIFO，先在首選類別選 <code>tok_e</code> 最小者，再退到備選類別。 <a class="source-ref" href="#source-scheduler-p8">§6.1 · PDF p.8 · Fig. 5、Alg. 1</a></p>
         <p>DE 先在 engine groups 間以總 <code>tok_e</code> 最小者分流，再在 group 內排除 HBM 不足者；以閾值 <code>Z</code> 區分高 token DE，優先在低 token 類別中選 <code>seq_e</code> 最小者。PE／DE 選定後，整個 request 由兩側 node 中 read queue 較短的一側讀取；單一 request 同時拆成雙路讀取被留作 future work。</p>
-        <h3>6.5 Intra-engine scheduler</h3>
+        <h3>6.6 Intra-engine scheduler（R2、R4）</h3>
         <p>PE 將每個 request 表成 <code>(cached, bsz)</code>，用理論 attention 工作量與預先 profiling 的映射估計 layer time。它依 FIFO 填入 request，直到預測時間碰到 compute quota；下一個 request 若放不下，就二分搜尋較小的 <code>bsz′</code> 做 chunked prefill。這讓 data-parallel GPUs 的 attention time 更接近，減少同步進入 FFN 前的 bubble。 <a class="source-ref" href="#source-scheduler-p8">§6.2 · PDF pp.8–9 · Fig. 6</a></p>
-        <h3>6.6 Block layout</h3>
+        <h3>6.7 Block layout（R2）</h3>
         <p>Layer Block 形狀為 <code>[1, tokens, bytes]</code>，只存一層；Full Block 為 <code>[layer, tokens, bytes]</code>，用於 storage trie。將 <code>n</code> 個 Layer Blocks 直接串接即可形成 Full Block，避免額外 layout conversion；代價是 layerwise prefill 讓 block 數量增加約 layer 倍，要求高效的小 block 傳輸。 <a class="source-ref" href="#source-appendix-p16">§A.5 · PDF pp.16–17</a></p>
       </section>
 
@@ -998,8 +1038,9 @@
           \frac{M/(Bs)-3}{2}
           \right\}.
           \]
-          <p class="formula-block__meaning">下界避免 PE write 壅塞；三個上界依序來自 DE read、DE write 與 DE DRAM。代入 <code>g=8, s=1, M≈500 GB/s</code>、<code>Bs≈50 GB/s</code>，作者得到 <code>1/7 ≤ P/D ≤ 7/2</code>。</p>
+          <p class="formula-block__meaning">下界避免 PE write 壅塞；三個上界依序來自 DE read、DE write 與 DE DRAM。<code>P/D</code> 太小會讓 PE 端承受過多 DE-read 回流，太大則把壓力推到 DE CNIC／DRAM。代入 <code>g=8, s=1, M≈500 GB/s</code>、<code>Bs≈50 GB/s</code>，作者得到 <code>1/7 ≤ P/D ≤ 7/2</code>。</p>
         </div>
+        <p>這個範圍用來檢查部署配置是否在端點頻寬模型內可行；runtime scheduler 並不求解此不等式，而是在固定 P／D 配置下盡量維持推導所需的 load balance。 <a class="source-ref" href="#source-theory-p6">§4.2–4.3 · PDF pp.5–6 · Eq. 9</a> <a class="source-ref" href="#source-scheduler-p8">§6 · PDF pp.7–9</a></p>
         <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>此式是理想化 capacity accounting，不是 arbitrary workload 下的 latency 保證。推導先假設 GPU–NIC 位於相同 PCIe switch、task 已負載平衡、storage read 可滿載，且 compute network 無 congestion；未建模 switch bisection、burst queueing、storage jitter 或 tail latency。</p></aside>
         <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p><strong>Eq. (1) 有條件缺口：</strong>PE CNIC read 壓力被寫為 <code>2T_pDg=2Bs/g ≤ B</code>，實際需要 <code>s ≤ g/2</code>；正文卻以「<code>s ≤ g</code> 在實務上成立」就推論永不成瓶頸。作者的 <code>g=8, s=1</code> 範例仍滿足較強條件，但「always bottleneck-free」的一般化並未由該代數支持。 <a class="source-ref" href="#source-theory-p6">§4.2 · PDF p.6 · Eq. 1</a></p></aside>
         <h3>7.3 DE group 的負載閾值</h3>
@@ -1016,14 +1057,15 @@
           \[
           W\approx\lambda\bar{T}\times\frac{total\_len_{avg}}{2}.
           \]
-          <p class="formula-block__meaning"><code>λ</code> 為新 trajectories／秒，<code>T̄</code> 為平均 JCT（秒），<code>total_len_avg</code> 為平均總序列長度；除以 2 是作者對 trajectory 逐步成長的平均化近似。DS 660B 的評估範圍約由 APS 0.1 時 69 GB 增至 APS 0.45 時 681 GB。</p>
+          <p class="formula-block__meaning"><code>λ</code> 為新 trajectories／秒，<code>T̄</code> 為平均 JCT（秒），<code>total_len_avg</code> 為平均總序列長度；除以 2 是作者對 trajectory 逐步成長的平均化近似。這個乘積先得到 working-set tokens；換算 bytes 尚需模型的 KV bytes／token。作者對 DS 660B 報告的結果由 APS 0.1 時 69 GB 增至 APS 0.45 時 681 GB。</p>
         </div>
         <p><a class="source-ref" href="#source-discussion-p13">§8.2 · PDF p.13</a></p>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p><strong>Working-set 公式少了一個明示因子：</strong>正文的右式量綱是 tokens，而報告值是 GB；要維度一致，應再乘模型的 KV bytes／token。論文沒有在 §8.2 寫出該因子或換算細節，因此 69–681 GB 可視為作者報告值，但不能只由顯示的公式獨立重算。</p></aside>
       </section>
 
       <section id="figures-guide" class="paper-section">
         <div class="section-heading"><span class="section-number">08</span><h2>圖片與圖表導讀</h2></div>
-        <p>以下保留理解資料流、排程與主要證據所需的五張圖。頁面定位另列於每張圖前的來源標記。</p>
+        <p>以下五張圖依序回答：資料怎麼走、PE batch 怎麼收斂、offline gain 在哪些模型／長度出現、online capacity 如何失穩，以及各元件貢獻多少。頁面定位列於每張圖前的來源標記。</p>
         <p><a class="source-ref" href="#source-fig4-p5">§4.1 · PDF p.5 · Fig. 4</a></p>
         <figure>
           <a href="assets/images/fig-04-p05-dual-path-loading.png"><img src="assets/images/fig-04-p05-dual-path-loading.png" alt="DualPath 的 PE read 與 DE read 兩條 KV-Cache 載入路徑，標示 storage、SNIC、DRAM、CNIC、GPU 與 Full Block、Layer Block 的傳輸方向"></a>
@@ -1044,7 +1086,7 @@
           <a href="assets/images/fig-10-p12-online-latency.png"><img src="assets/images/fig-10-p12-online-latency.png" alt="DS 27B 與 DS 660B 的 TTFT、TTST、TPOT 隨 agent arrival rate 變化的六個折線圖，比較 Basic、DualPath、Oracle 與 SGLang Mooncake"></a>
           <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 10</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>上排是 DS 27B、下排是 DS 660B；最先急升的是 TTFT，說明排隊／KV read 才是容量崩潰的訊號。TTST 與 TPOT 沒明顯惡化支持「decode 未被額外 KV traffic 拖慢」，但超過 SLO 的 TTST／TPOT 點被作者省略。</span></figcaption>
         </figure>
-        <p><a class="source-ref" href="#source-ablation-p12">§7.5 · PDF p.12 · Fig. 12</a></p>
+        <p><a class="source-ref" href="#source-ablation-p12">§7.4–7.5 · PDF p.12 · Fig. 12</a></p>
         <figure>
           <a href="assets/images/fig-12-p12-ablation.png"><img src="assets/images/fig-12-p12-ablation.png" alt="DualPath 的 online TTFT 組成與 offline 累積式消融圖，分解 scheduling、allocation、KV reading、prefill 以及 Layerwise、Dual-path、Scheduler 的 JCT 貢獻"></a>
           <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 12</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>左圖看 Basic 隨 APS 增加時 scheduling／queue 部分膨脹；右圖依序加入 Layerwise、DPL、Scheduler，是累積配置而非三個互斥單因子，因此各柱與 Basic 的差不能直接相加。</span></figcaption>
@@ -1053,6 +1095,21 @@
 
       <section id="experimental-setup" class="paper-section">
         <div class="section-heading"><span class="section-number">09</span><h2>實驗設計</h2></div>
+        <h3>先看 claim–test 對照</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>每組實驗究竟在檢驗哪一段因果鏈</caption>
+            <thead><tr><th scope="col">待檢驗主張</th><th scope="col">對照與控制</th><th scope="col">指標／判準</th><th scope="col">主要缺口</th></tr></thead>
+            <tbody>
+              <tr><td>C1｜PE-side SNIC 是主要瓶頸</td><td>DS 27B；在每組 MAL／agent count 內固定 workload，比較 1P1D、1P2D、2P1D；觀察「可用 SNIC 數近似」的配置配對</td><td>Offline JCT 是否近似</td><td>只測一個模型、三種 P/D 比，未直接量 GPU stall 與端到端 bytes</td></tr>
+              <tr><td>C2｜DualPath 提高 offline throughput</td><td>同一 in-house stack 的 Basic／Ours／zero-I/O Oracle；三模型、三個 MAL、多種 agent counts</td><td>整批 trajectories 的 JCT</td><td>Basic 同時缺 layerwise、DPL、新 scheduler，不能把全部 gain 歸因於 DPL</td></tr>
+              <tr><td>C3｜提高 online capacity 且不傷 decode</td><td>Poisson arrivals、固定 traces；Basic／Ours／Oracle，另列非公平 SGL(MC)</td><td>TTFT ≤ 4 s、TPOT ≤ 50 ms 下的 APS；TTST／TPOT 趨勢</td><td>沒有 tail percentiles，超過 SLO 的 TTST／TPOT 點不顯示</td></tr>
+              <tr><td>C4｜各機制確實改善負載</td><td>Basic 依序加入 Layerwise、DPL、Scheduler；另以 round-robin／without scheduling 比 max/avg</td><td>JCT 降幅、SNIC traffic 與 attention time max/avg</td><td>累積式而非完整 factorial；QoS、CNIC copy 沒有獨立 ablation</td></tr>
+              <tr><td>C5｜控制面可擴展到大叢集</td><td>資源與 workload 同比例放大</td><td>JCT／latency 是否維持、scheduler CPU</td><td>只證明 weak scaling；不證明單一大 pool 優於同成本小 units</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-offline-p10">§7.3 · PDF pp.10–11 · Figs. 7–9</a> <a class="source-ref" href="#source-online-p12">§7.4 · PDF pp.11–12 · Figs. 10–12</a> <a class="source-ref" href="#source-ablation-p12">§7.5 · PDF p.12 · Figs. 12–14</a> <a class="source-ref" href="#source-scale-p13">§7.6 · PDF p.13 · Table 3</a></p>
         <h3>實作</h3>
         <p>DualPath 建在 DeepSeek 的 in-house inference framework 上，約修改 5K lines；GPU kernels 組合使用 FlashMLA、DeepGEMM、DeepEP，storage backend 為 3FS，介面類似 <code>io_uring</code> 並採 kernel bypass。 <a class="source-ref" href="#source-setup-p9">§7.1 · PDF p.9</a></p>
         <h3>Testbed 與模型</h3>
@@ -1096,7 +1153,7 @@
             </tbody>
           </table>
         </div>
-        <p>SGL(MC) 不支援 DS 27B；Qwen 32B 上 DualPath 使用 DP，而 SGL(MC) 因不支援 DP attention 使用 TP=8；SGL(MC) 在部分大配置執行失敗。這些差異使 Figure 7 的藍柱只適合作背景，不適合作 headline 相對比較。 <a class="source-ref" href="#source-setup-p9">§7.2 · PDF p.9</a> <a class="source-ref" href="#source-offline-p10">§7.3 · PDF p.10 · Fig. 7</a></p>
+        <p>SGL(MC) 不支援 DS 27B；Qwen 32B 上 DualPath 使用 DP，而 SGL(MC) 因不支援 DP attention 使用 TP=8；SGL(MC) 在部分大配置執行失敗。這些差異使 Figure 7 的藍柱只適合作背景，不適合作 headline 相對比較。 <a class="source-ref" href="#source-setup-p9">§7.2 · PDF pp.9–10</a> <a class="source-ref" href="#source-offline-p10">§7.3 · PDF p.10 · Fig. 7</a></p>
         <h3>Resource 與 scheduler 設定</h3>
         <ul>
           <li>預設 P/D：DS 660B 為 2P4D、Qwen 32B 為 1P2D、DS 27B 為 1P1D；DS models 使用 EP+DP，Qwen 在 DualPath 中使用 DP。</li>
@@ -1104,7 +1161,7 @@
           <li><code>α</code>：3 秒可讀 tokens；<code>β</code>：單 GPU 5 秒可處理 tokens；compute quota：300 ms。</li>
           <li>Speculative decoding 全部關閉，所有組別都以 3FS 為 storage backend。</li>
         </ul>
-        <p><a class="source-ref" href="#source-setup-p9">§7.2 · PDF p.9</a> <a class="source-ref" href="#source-appendix-p16">§A.4 · PDF p.16</a></p>
+        <p><a class="source-ref" href="#source-setup-p9">§7.2 · PDF p.10</a> <a class="source-ref" href="#source-appendix-p16">§A.4 · PDF p.16</a></p>
         <h3>Offline／online 方法與指標</h3>
         <p><strong>Offline：</strong>(n) 個 agents 同時開始 replay，測所有 trajectories 完成的 JCT。<strong>Online：</strong>agents 依 Poisson process 以指定 APS 到達，從第 0 輪連續 replay；SLO 設為 TTFT ≤ 4 s、TPOT ≤ 50 ms。實驗在 TTFT 超過 4 s，或 150 秒 sliding window 的 TTFT 相對 30 分鐘前變化低於 5% 時停止；TTST／TPOT 超過 SLO 的資料點不畫。 <a class="source-ref" href="#source-offline-p10">§7.3 · PDF p.10</a> <a class="source-ref" href="#source-online-p12">§7.4 · PDF pp.11–12 · Fig. 10</a></p>
         <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>論文未提供重複次數、error bars、warmup、信賴區間／顯著性、percentile latency 定義、功耗與成本。線上 replay 還假設回合間 tool latency 為零，故不能直接等同真實 closed-loop agent serving。</p></aside>
@@ -1112,32 +1169,27 @@
 
       <section id="experimental-results" class="paper-section">
         <div class="section-heading"><span class="section-number">10</span><h2>實驗結果</h2></div>
-        <h3>Offline JCT</h3>
+        <h3>C1／C2｜Storage bottleneck 與 offline throughput</h3>
         <div class="table-scroll">
           <table>
-            <caption>主要量化結果與支持邊界</caption>
-            <thead><tr><th scope="col">實驗</th><th scope="col">結果</th><th scope="col">正確解讀</th></tr></thead>
+            <caption>主張 → 測試 → 觀察 → 可支持結論 → 邊界</caption>
+            <thead><tr><th scope="col">主張</th><th scope="col">測試與控制</th><th scope="col">觀察</th><th scope="col">可支持結論</th><th scope="col">邊界</th></tr></thead>
             <tbody>
-              <tr><td>DS 660B offline</td><td>對 Basic 最高 1.87×</td><td>headline best case；不是對 SGL(MC) 的公平比較</td></tr>
-              <tr><td>DS 27B offline</td><td>對 Basic 最高 1.78×；仍比 Oracle 慢 1.09–1.85×</td><td>1P1D storage bandwidth 仍不足，未消除全部 I/O gap</td></tr>
-              <tr><td>Append scale sensitivity</td><td>對 Basic 報告 1.82–1.99×</td><td>append 變長時 Basic 趨近 DualPath／Oracle，優勢來源逐漸由 I/O 轉向 compute</td></tr>
-              <tr><td>P/D ratio sensitivity</td><td>平均 1.64×、最高 2.46×</td><td>僅 DS 27B 的 1P1D、2P1D、1P2D</td></tr>
+              <tr><td>C2｜完整系統降低 DS 660B JCT</td><td>相同 in-house framework；Basic 對 Ours，改變 agent count／MAL</td><td>最高 1.87× throughput improvement</td><td>在測試配置中，完整 DualPath stack 顯著縮短 offline rollout</td><td>Headline best case；不是對 SGL(MC) 的公平比較，也不能只歸因於 DPL</td></tr>
+              <tr><td>C2｜小模型仍受 I/O 限制</td><td>DS 27B；Basic／Ours／zero-I/O Oracle</td><td>對 Basic 最高 1.78×；Ours 仍比 Oracle 慢 1.09–1.85×</td><td>池化兩張 SNIC 有效，但 1P1D 尚未消除 I/O gap</td><td>作者稱 Qwen 趨勢相近，卻未報一個可引用的最高值</td></tr>
+              <tr><td>C1｜優勢應隨 append／generation 變長而縮小</td><td>DS 660B、64K、1024 agents；分別縮放每輪 append 或 generation</td><td>作者報告不同 append scales 對 Basic 為 1.82–1.99×；Basic 逐步追近 Ours／Oracle</td><td>效益確與 compute／I/O 比和兩次 prefill 的間隔相關</td><td>圖上只是一個模型與一組 workload；沒有 hit-rate sweep</td></tr>
+              <tr><td>C1｜Aggregate SNIC bandwidth 是關鍵資源</td><td>DS 27B；1P1D、1P2D、2P1D</td><td>平均 1.64×、最高 2.46×；可用 SNIC 數相近的配置有近似 JCT</td><td>相較單看 PE／DE 數量，available SNIC count 更能解釋該實驗</td><td>只覆蓋三個 P/D configurations</td></tr>
             </tbody>
           </table>
         </div>
         <p><a class="source-ref" href="#source-offline-p10">§7.3 · PDF p.10 · Fig. 7</a> <a class="source-ref" href="#source-sensitivity-p11">§7.3 · PDF p.11 · Figs. 8–9</a></p>
         <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p><strong>作者文字與 Figure 7 有疑似不一致：</strong>Abstract／§7.3 把 offline 最大值寫成 1.87×，但依 Figure 7 同一座標軸的 Basic／Ours 柱高比估算，Qwen 32B 至少有三個 panel 超過 1.87×：32K／512 agents 約 2.13×、48K／256 約 2.01×、48K／512 約 2.04×。圖上沒有柱值標籤，因此這些只能視為幾何估算，不能取代作者表列數字；它表示「up to 1.87×」應理解為作者明確報告的 DS 660B 最大值，而非 Figure 7 全部模型的可驗證全域最大值。 <a class="source-ref" href="#source-offline-p10">§7.3 · PDF p.10 · Fig. 7</a></p></aside>
         <aside class="statement statement--fact" data-kind="experimental-fact"><span class="statement__label">實驗事實</span><p>Figure 8 中，Basic 1P1D≈Basic 1P2D、DualPath 1P1D≈Basic 2P1D、DualPath 2P1D≈DualPath 1P2D。這些配對具有近似可用 SNIC 數，支持「aggregate storage bandwidth 是此 workload 的主瓶頸」；但證據只覆蓋 DS 27B 與三個 P/D configurations。 <a class="source-ref" href="#source-sensitivity-p11">§7.3 · PDF p.11 · Fig. 8</a></p></aside>
-        <h3>Online serving capacity 與 latency</h3>
-        <ul>
-          <li>DS 27B：在作者 SLO 下，DualPath 的 APS capacity 為 Basic 的 1.67×。</li>
-          <li>DS 660B：APS capacity 為 Basic 的 2.25×。</li>
-          <li>兩者算術平均為 1.96×，即 Abstract 的 online headline；Qwen 32B 沒有 online 結果。</li>
-          <li>DualPath 的 TTST 與 Basic 相近，TPOT 未呈現額外 decode overhead；但 Basic／DualPath 的 TPOT 都明顯高於 Oracle，作者認為小模型上的基本 P→D transfer 仍有可觀成本。</li>
-        </ul>
-        <p><a class="source-ref" href="#source-online-p12">§7.4 · PDF pp.11–12 · Figs. 10–12</a></p>
+        <h3>C3｜Online capacity 與 decode interference</h3>
+        <aside class="statement statement--fact" data-kind="experimental-fact"><span class="statement__label">實驗事實</span><p>在 TTFT ≤ 4 s、TPOT ≤ 50 ms 的作者 SLO 下，DualPath 相對 Basic 的 APS capacity 為 DS 27B 1.67×、DS 660B 2.25×；兩者算術平均 1.96×，即 Abstract 的 online headline，Qwen 32B 沒有 online 結果。DualPath 的 TTST 與 Basic 相近，TPOT 曲線未顯示額外 decode overhead。 <a class="source-ref" href="#source-online-p12">§7.4 · PDF pp.11–12 · Fig. 10</a></p></aside>
+        <p><strong>能支持：</strong>在這兩個模型、Poisson replay 與顯示的負載點中，額外 KV traffic 沒讓穩態 decode 指標明顯劣化，且 TTFT capacity 提高。<strong>不能支持：</strong>沒有 QoS on/off、tail percentiles 或 fabric-stress 對照，故不能把「不干擾 collective」提升為所有負載下的保證；作者還省略超過 SLO 的 TTST／TPOT 點。Basic／DualPath 的 TPOT 均明顯高於 Oracle，作者認為小模型的基本 P→D transfer 仍有可觀成本。</p>
         <aside class="statement statement--fact" data-kind="experimental-fact"><span class="statement__label">實驗事實</span><p>TTFT breakdown 顯示 DualPath 各部分隨 APS 大致穩定，而 Basic 的 scheduling／queueing time 隨負載急升；這比單看平均 TTFT 更直接支持「PE-side storage bandwidth 造成排隊」。 <a class="source-ref" href="#source-ablation-p12">§7.4 · PDF p.12 · Fig. 12（左）</a></p></aside>
-        <h3>大規模 weak scaling</h3>
+        <h3>C5｜大規模 weak scaling</h3>
         <div class="table-scroll">
           <table>
             <caption>Table 3 重整：小配置與最高 1,152 GPU 配置</caption>
@@ -1150,12 +1202,13 @@
             </tbody>
           </table>
         </div>
-        <p>Offline 將資源與 agents 同增 24×而 JCT 近似；online 將資源與 APS 同增 22×而 latency 近似。Scheduler CPU 使用低於 10 cores。這證明接近線性的 <em>weak scaling</em>，不是固定資源下的 22× speedup。作者也明言，因未細調 parallelism 與 P/D ratio，大配置相較等成本多個小 units 沒有額外 JCT／capacity gain。 <a class="source-ref" href="#source-scale-p13">§7.6 · PDF p.13 · Table 3、Fig. 15</a></p>
+        <aside class="statement statement--fact" data-kind="experimental-fact"><span class="statement__label">實驗事實</span><p>Offline 將資源與 agents 同增 24×而 JCT 由 3,167 s 變為 3,201 s；online 將資源與 APS 同增 22×，TTFT 由 1.739 s 變為 1.847 s，TTST／TPOT 近似。Scheduler CPU 使用低於 10 cores。 <a class="source-ref" href="#source-scale-p13">§7.6 · PDF p.13 · Table 3、Fig. 15</a></p></aside>
+        <p><strong>能支持：</strong>控制面與資料路徑在最高 1,152 GPUs 下呈接近線性的 weak scaling。<strong>不能支持：</strong>這不是固定 workload 的 22× speedup；作者也明言，因未細調 parallelism 與 P/D ratio，大配置相較等成本多個小 units 沒有額外 JCT／capacity gain。</p>
       </section>
 
       <section id="ablation-sensitivity" class="paper-section">
         <div class="section-heading"><span class="section-number">11</span><h2>Ablation 與敏感度分析</h2></div>
-        <h3>累積式元件消融</h3>
+        <h3>C4｜累積式元件消融：改善來自哪一段機制？</h3>
         <div class="table-scroll">
           <table>
             <caption>DS 660B、64K MAL、1024／2048 agents；每列在前一列上再加入元件</caption>
@@ -1169,7 +1222,7 @@
         </div>
         <p><a class="source-ref" href="#source-ablation-p12">§7.5 · PDF p.12 · Fig. 12（右）</a></p>
         <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>上述百分比是各累積配置相對 Basic 的總降幅，不是三個獨立 effect sizes。若換算增量，dual-path 是從 17.21% 降幅推進到 38.19%，scheduler 再推進到 45.62%；仍需 factorial ablation 才能分離元件互動。</p></aside>
-        <h3>Load-balance 證據</h3>
+        <h3>C4｜Load-balance 證據：scheduler 有沒有讓模型前提成立？</h3>
         <ul>
           <li>Storage NIC traffic 的 max/avg ratio：round-robin 1.53，DualPath scheduler 1.18；1.0 為完美平衡。</li>
           <li>Attention execution time 的 max/avg ratio：task 前 5% 最低可達 1.06，支持 compute quota 減少 data-parallel bubbles。</li>
@@ -1204,6 +1257,7 @@
               <tr><td>單一硬體／storage 生態</td><td>僅 NVIDIA Hopper + InfiniBand + 3FS</td><td>AMD／ROCm、RoCE、其他 GPU 與 storage backend 未驗證</td></tr>
               <tr><td>Host DRAM 並非極小</td><td>DeepSeek 80 GB／node、Qwen 320 GB／node</td><td>雖低於 SGL(MC) 1.5 TB，仍可能與 RL rollout 的 DRAM 壓力衝突</td></tr>
               <tr><td>Latency 統計不足</td><td>無重複次數、error bars、percentiles；超過 SLO 的 TTST／TPOT 點省略，但方法只定義 TTFT／TPOT SLO，未定義 TTST SLO</td><td>tail risk、穩定性與圖點篩選規則難判斷</td></tr>
+              <tr><td>Working-set 換算不完整</td><td>§8.2 顯示的公式得到 tokens，未明示轉成 GB 所需的 KV bytes／token</td><td>69–681 GB 只能採作者報告值，讀者無法由文中式子獨立重算</td></tr>
               <tr><td>效益依賴 I/O-bound regime</td><td>append／generation 變長時 Basic 追近</td><td>低 reuse、長輸出、compute-bound workload 的增益有限</td></tr>
             </tbody>
           </table>
@@ -1300,12 +1354,12 @@
           <li id="source-theory-p6"><span><strong>CNIC／DRAM bandwidth 模型</strong>：§4.2，PDF pp.5–6；Equations 1–9。</span></li>
           <li id="source-traffic-p7"><span><strong>CNIC-centric copy 與流量隔離</strong>：§5–5.2，PDF pp.6–7。</span></li>
           <li id="source-scheduler-p8"><span><strong>Inter／intra-engine scheduling</strong>：§6–6.2，PDF pp.7–9；Figures 5–6、Algorithm 1。</span></li>
-          <li id="source-setup-p9"><span><strong>實作、testbed、模型、traces 與 baselines</strong>：§7.1–7.2，PDF p.9；Table 2。</span></li>
+          <li id="source-setup-p9"><span><strong>實作、testbed、模型、traces 與 baselines</strong>：§7.1–7.2，PDF pp.9–10；Table 2。</span></li>
           <li id="source-offline-p10"><span><strong>Offline 主結果</strong>：§7.3，PDF p.10；Figure 7。</span></li>
           <li id="source-sensitivity-p11"><span><strong>P/D、append 與 generation sensitivity</strong>：§7.3，PDF p.11；Figures 8–9。</span></li>
           <li id="source-online-p12"><span><strong>Online TTFT／TTST／TPOT 與 capacity</strong>：§7.4，PDF pp.11–12；Figures 10–11。</span></li>
           <li id="source-ablation-p12"><span><strong>Ablation 與 load balance</strong>：§7.4–7.5，PDF p.12；Figures 12–14。</span></li>
-          <li id="source-scale-p13"><span><strong>最高 1,152 GPU weak scaling</strong>：§7.6，PDF pp.12–13；Table 3、Figure 15。</span></li>
+          <li id="source-scale-p13"><span><strong>最高 1,152 GPU weak scaling</strong>：§7.6，PDF p.13；Table 3、Figure 15。</span></li>
           <li id="source-discussion-p13"><span><strong>Future work 與 working set</strong>：§8.1–8.2，PDF p.13。</span></li>
           <li id="source-related-p13"><span><strong>相關工作定位</strong>：§9，PDF pp.13–14。</span></li>
           <li id="source-appendix-p16"><span><strong>QoS、27B、agent replay、配置與 block layout</strong>：§A.1–A.5，PDF pp.16–17。</span></li>

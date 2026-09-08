@@ -1,6 +1,6 @@
 interface:
   display_name: "Paper Reading"
-  short_description: "Create evidence-traceable Traditional Chinese HTML paper summaries"
-  default_prompt: "Use $paper-reading to organize and deeply summarize this paper with the project HTML template."
+  short_description: "Reader-first Traditional Chinese HTML paper summaries"
+  default_prompt: "Use $paper-reading to organize and deeply summarize this paper with a reader-first causal explanation and the project HTML template."
 policy:
   allow_implicit_invocation: true

@@ -15,6 +15,12 @@ Maintain an evidence ledger before writing the summary. Every important number, 
 
 Do not fabricate information or present analysis or speculation as an author-established fact. When information is missing, write `論文未提供` and explain how that absence affects verifiability.
 
+## Reader-First Exposition
+
+Before drafting, read and apply [reader-first-exposition.md](reader-first-exposition.md). The report must teach only the minimum prerequisites needed by its target reader, then carry one causal thread from system context and observed failure through root cause, prior-art gap, derived requirements, end-to-end method, evidence, and limitations. Every prerequisite must be used later; every major method component must answer a named problem or requirement; and every principal empirical conclusion must map to the experiment that tests it.
+
+Keep provenance explicit when adding context beyond the paper. Cite canonical external sources for necessary prerequisites, identify them as external background, and label the summarizer's connection to the paper as `分析`. External material may improve explanation but must never fill a missing experiment, ablation, or deployment detail in the paper.
+
 ## Directory and Filename Standard
 
 ```text
@@ -51,17 +57,17 @@ Every section below must be present in this order. Preserve each exact Tradition
 
 1. **`論文基本資料` (Paper Metadata):** Formal title, authors, conference, journal, or arXiv record, year, canonical link, classification, classification rationale, a neutrally worded local PDF link, and the plain total page count `共 N 頁`. Do not include file or tool-validation information.
 2. **`一句話總結` (One-Sentence Summary):** State the central problem, method, and result in one to three sentences. Do not include promotional numbers without sources.
-3. **`Executive Summary`:** Quickly summarize the research problem, key insight, method, primary evidence, limitations, and takeaways.
-4. **`背景與動機` (Background and Motivation):** Explain the domain and systems context required to understand the paper, the topic's role in the broader workflow, existing bottlenecks, and the authors' observations. Explain prefill's role in model inference only when the paper actually concerns prefill.
-5. **`問題定義` (Problem Definition):** Cover objectives, inputs and outputs, assumptions, constraints, important terminology, and notation. Distinguish definitions stated by the authors from formalization introduced by the summarizer.
-6. **`核心方法` (Core Method):** Explain the architecture, algorithm, execution flow, component responsibilities, interactions, and design intuition step by step. When restructuring pseudocode, preserve its semantics without copying long passages.
-7. **`公式與理論` (Equations and Theory):** Include only equations needed to understand or validate the method. Explain each variable, unit or system meaning, assumption, and purpose.
-8. **`圖片與圖表導讀` (Figure and Table Reading Guide):** Include necessary crops. Each caption's source label must show only `Figure/Table/Algorithm + the original identifier`, followed by a self-authored reading guide and reading focus. Put page numbers in body source markers or the key-evidence index, not in captions.
-9. **`實驗設計` (Experimental Design):** Hardware, software, models, datasets, baselines, workloads, metrics, variable control, and fairness.
-10. **`實驗結果` (Experimental Results):** Organize metrics according to the paper's actual evaluation goals. For model-inference work, these may include latency, throughput, Time to First Token (TTFT), memory, and cost. Explain what the figures and tables can and cannot support.
+3. **`Executive Summary`:** Use the compact causal order problem, root cause or gap, key insight, method, primary evidence, limitations, and takeaways.
+4. **`背景與動機` (Background and Motivation):** Explain the minimal domain and systems prerequisites required to understand the paper, the topic's role in the broader workflow, existing bottlenecks, and the authors' observations. A comparison table or prerequisite map is useful when it removes later ambiguity, but every included concept must be used later. End with a bridge to the exact problem in Section 05. Explain prefill's role in model inference only when the paper actually concerns prefill.
+5. **`問題定義` (Problem Definition):** Organize the explanation as observable symptom, root mechanism, why the nearest existing approach is insufficient, and the resulting requirements or success criteria. Cover objectives, inputs and outputs, assumptions, constraints, important terminology, and notation. Distinguish definitions stated by the authors from formalization introduced by the summarizer.
+6. **`核心方法` (Core Method):** Start with an end-to-end execution walkthrough, then explain the architecture, algorithm, component responsibilities, interactions, state changes, and design intuition in execution order. Tie each design choice to a named requirement or failure mechanism. When restructuring pseudocode, preserve its semantics without copying long passages.
+7. **`公式與理論` (Equations and Theory):** Include only equations needed to understand or validate the method. Explain each variable, unit or system meaning, assumption, purpose, qualitative sensitivity, and where the equation affects execution.
+8. **`圖片與圖表導讀` (Figure and Table Reading Guide):** Include necessary crops next to the concept or claim they resolve. Each caption's source label must show only `Figure/Table/Algorithm + the original identifier`, followed by a self-authored reading guide that tells the reader what to inspect and why it matters. Put page numbers in body source markers or the key-evidence index, not in captions.
+9. **`實驗設計` (Experimental Design):** Organize hardware, software, models, datasets, baselines, workloads, metrics, variable control, and fairness around the claims each experiment is intended to test.
+10. **`實驗結果` (Experimental Results):** Present claim-test pairs: claim, setup and controls, metric, observation, supported conclusion, and caveat. Organize metrics according to the paper's actual evaluation goals. For model-inference work, these may include latency, throughput, Time to First Token (TTFT), memory, and cost. Explain what the figures and tables can and cannot support.
 11. **`Ablation 與敏感度分析` (Ablation and Sensitivity Analysis):** Contribution of each design choice, parameter sensitivity, and interactions. Explicitly note when the paper does not provide these results.
 12. **`優點、限制與風險` (Strengths, Limitations, and Risks):** Strengths, system assumptions, applicable scope, scalability, generalizability, deployment constraints, author-stated limitations, and additional analysis.
-13. **`與相關工作的比較` (Comparison with Related Work):** Compare technical approaches, applicable scenarios, costs, and tradeoffs rather than merely listing names.
+13. **`與相關工作的比較` (Comparison with Related Work):** Compare the closest alternatives by mechanism, assumptions, applicable scenarios, deployment cost, and failure mode rather than merely listing names.
 14. **`個人分析與可延伸方向` (Independent Analysis and Extensions):** Reusable design ideas, conclusions still requiring validation, research or engineering extensions, and broader significance. Mark content as `分析` or `推測` as appropriate.
 15. **`組會討論問題` (Research-Group Discussion Questions):** Provide three to five technically substantive questions that prompt discussion of evidence or design.
 16. **`術語表與重點索引` (Glossary and Key-Evidence Index):** Abbreviations, terminology, definitions, and the pages, sections, Figures, Tables, or Equations supporting key conclusions.
@@ -105,6 +111,7 @@ Every section below must be present in this order. Preserve each exact Tradition
 - A pinned-version MathJax CDN is allowed. Do not add external fonts, trackers, frameworks, or complex build dependencies.
 - Do not leave `{{PLACEHOLDER}}`, sample data, fabricated citations, or template instructions in the finished output.
 - After writing, inspect all reader-visible content and remove filename explanations, file-validation details, page-offset status, path, tool, download, or cropping procedures, and other operational logs.
+- Inspect the explanatory spine: prerequisites must be reused, the problem must derive the requirements, components must answer those requirements, and conclusions must point to the experiments that test them.
 
 ## Research-Loop Stopping Conditions
 
@@ -117,6 +124,7 @@ End full-text research only when all of the following are true:
 - All 16 sections have sufficient content or explicitly state `論文未提供`.
 - `作者主張`, `實驗事實`, `分析`, and `推測` content is clearly separated.
 - Every unresolved issue is recorded as a limitation or in the delivery report rather than filled with assumed knowledge.
+- Every prerequisite introduced for the reader is used later, every major component is tied to a problem or requirement, and every principal empirical conclusion has a claim-test mapping.
 
 ## Manual Acceptance Before Delivery
 

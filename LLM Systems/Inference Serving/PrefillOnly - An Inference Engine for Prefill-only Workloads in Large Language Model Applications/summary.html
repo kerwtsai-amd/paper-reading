@@ -716,13 +716,6 @@
 
       h2, h3, h4 { break-after: avoid; }
       img { max-width: 100%; height: auto; }
-      figure img {
-        width: auto;
-        max-height: 210mm;
-        margin-right: auto;
-        margin-left: auto;
-        object-fit: contain;
-      }
       p { orphans: 3; widows: 3; }
       .statement { background: #fff !important; border-color: #777 !important; }
       .source-ref { background: #fff; border-color: #999; }
@@ -777,7 +770,7 @@
       </div>
       <div class="property">
         <dt>摘要更新</dt>
-        <dd><time datetime="2026-09-06">2026-09-06</time></dd>
+        <dd><time datetime="2026-09-08">2026-09-08</time></dd>
       </div>
     </dl>
 
@@ -829,7 +822,9 @@
         分析：<aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>...</p></aside>
         推測：<aside class="statement statement--speculation" data-kind="speculation"><span class="statement__label">推測</span><p>...</p></aside>
         來源：<a class="source-ref" href="#source-fig3-p7">§4.2 · PDF p.7 · Fig. 3</a>
-        圖片：src 與 href 僅用 assets/images/...；figcaption 需有原編號、頁碼、裁切來源與自撰導讀。
+        圖片：src 與 href 僅用 assets/images/...。固定格式：<figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>...</span></figcaption>。來源標籤只顯示 Figure／Table／Algorithm 與原編號，不加「原論文」、句點、頁碼、來源敘述或產製資訊；頁碼放正文來源標記或重點索引。
+        基本資料頁數欄固定寫法：<td data-summary-field="pdf-page-count">共 N 頁</td>（也可使用 dd）；完成頁面中必須恰有一個此 marker。
+        禁止把頁碼 offset 檢查、檔名／路徑處理、PDF signature／hash、下載／解析／裁圖工具或 QA 過程寫進讀者可見內容。
       -->
 
       <section id="paper-info" class="paper-section">
@@ -858,132 +853,145 @@
 
       <section id="one-sentence-summary" class="paper-section">
         <div class="section-heading"><span class="section-number">02</span><h2>一句話總結</h2></div>
-        <p class="lead">PrefillOnly 將「長輸入、固定只產生一個 token」視為一等 workload contract：以 hybrid prefilling 壓低暫存張量、只保留值得重用的 prefix KV，並依動態 cache hit 重算 JCT 後逐請求排程；作者報告它在不拉高平均與 P99 latency 的條件下，可承受 1.4–4.0× 的 QPS。<a class="source-ref" href="#source-abstract-p1">Abstract · PDF p.1</a><a class="source-ref" href="#source-eval-results-p10-p12">§7.2 · PDF pp.10–12</a></p>
+        <p class="lead">當應用保證每個長輸入請求只輸出一個 token，PrefillOnly 便以混合預填充（hybrid prefilling）降低多層感知器（Multilayer Perceptron, MLP）暫存張量峰值、保留 prefix 而丟棄 suffix 鍵值快取（key-value cache, KV cache），並按最新 cache state 重算工作完成時間（Job Completion Time, JCT）後逐請求排程；在兩個合成 workload 上，作者報告其可在平均與 P99 latency 不高於 baselines 時承受 1.4–4.0× 的每秒查詢數（queries per second, QPS）。<a class="source-ref" href="#source-abstract-p1">Abstract · PDF p.1</a><a class="source-ref" href="#source-eval-results-p10-p12">§7, §7.2 · PDF pp.8, 10–12 · Fig. 6–10</a></p>
       </section>
 
       <section id="executive-summary" class="paper-section">
         <div class="section-heading"><span class="section-number">03</span><h2>Executive Summary</h2></div>
-        <div class="key-grid">
-          <article class="key-card">
-            <p class="key-card__eyebrow">Workload</p>
-            <p>輸入可達數萬 token，但輸出被限制為一個候選 token，例如以 \(P(\texttt{Yes})\) 作推薦分數。</p>
-          </article>
-          <article class="key-card">
-            <p class="key-card__eyebrow">Memory path</p>
-            <p>attention 保持整段計算；token-wise 的非 attention 路徑分 chunk，搭配 output preallocation 與 in-place reuse。</p>
-          </article>
-          <article class="key-card">
-            <p class="key-card__eyebrow">Cache + scheduling</p>
-            <p>保留 prefix KV、丟棄 suffix KV；每一步依當下 cache state 重算所有等待請求的 JCT 分數。</p>
-          </article>
-          <article class="key-card">
-            <p class="key-card__eyebrow">Evidence boundary</p>
-            <p>只測 2 個模擬 workload、4 種 NVIDIA 雙 GPU 組態；沒有真實 production trace、品質、能耗或成本實驗。</p>
-          </article>
-        </div>
+        <ol>
+          <li><strong>問題：</strong>推薦、信用驗證等判別式應用可能送入數萬 tokens，卻只需一個候選 token；一般 serving engine 仍按任意長度生成來保存所有層 KV，排程也不利用固定輸出長度。</li>
+          <li><strong>根因：</strong>即使丟棄 KV，token 數成比例放大的 MLP intermediates 仍製造峰值；同時 prefix cache 的建立與逐出會持續改變每個等待請求的實際工作量。</li>
+          <li><strong>關鍵洞察：</strong>只切沿 token 可獨立計算的 non-attention path，便能控制暫存張量而不切 attention；單 token contract 又允許 suffix KV 不再為本次請求的後續 decode 保留。</li>
+          <li><strong>方法：</strong>hybrid prefilling、suffix KV cache discarding 與 continuous JCT calibration 分別處理 working-set peak、跨請求 reuse、cache-dependent scheduling。</li>
+          <li><strong>證據：</strong>作者以 4 種雙 NVIDIA GPU／模型組態、2 個合成 workload 比較 4 個 baselines；headline 是 1.4–4.0× 可承受 QPS，A100/Qwen-32B FP8 的最大輸入長度（Maximum Input Length, MIL）為 87k，而 PagedAttention 為 11k、Chunked Prefill 為 17k。<a class="source-ref" href="#source-eval-results-p10-p12">§7 · PDF pp.8–12 · Table 2, Fig. 6–10</a></li>
+          <li><strong>邊界：</strong>未測 production trace、混合生成 workload、模型品質、能耗或成本；graph rewrite 的通用性、scheduler overhead 與 cache policy 細節也未充分揭露。</li>
+        </ol>
         <aside class="statement statement--claim" data-kind="author-claim">
           <span class="statement__label">作者主張</span>
           <p>單 token 輸出讓大部分本次請求產生的 KV 不再被 decode 重用，也讓工作量比任意長度生成更可預測，因而同時打開記憶體與排程兩個優化空間。<a class="source-ref" href="#source-intro-p1-p2">§1 · PDF pp.1–2</a></p>
         </aside>
         <aside class="statement statement--fact" data-kind="experimental-fact">
           <span class="statement__label">實驗事實</span>
-          <p>在作者的模擬 recommendation 與 credit-verification workloads 上，PrefillOnly 的可承受 QPS 為 baseline 的 1.4–4.0×；A100/Qwen-32B FP8 的 maximum input length（MIL）由 vanilla vLLM 的 11k 增至 87k tokens。<a class="source-ref" href="#source-eval-results-p10-p12">§7 · PDF pp.10–12 · Table 2, Fig. 6–10</a></p>
+          <p>在作者的模擬 recommendation 與 credit-verification workloads 上，PrefillOnly 的可承受 QPS 為 baseline 的 1.4–4.0×；A100/Qwen-32B FP8 的 maximum input length（MIL）由 vanilla vLLM 的 11k 增至 87k tokens。<a class="source-ref" href="#source-eval-results-p10-p12">§7 · PDF pp.8–12 · Table 2, Fig. 6–10</a></p>
         </aside>
         <aside class="statement statement--analysis" data-kind="analysis">
           <span class="statement__label">分析</span>
-          <p>這篇工作的真正價值不是把一般生成式 serving 全面加速，而是示範：一旦應用能提供更強的輸出長度 contract，engine 就能安全地縮短 tensor lifetime，並把 cache locality 直接納入 service-time prediction。</p>
+          <p>這篇工作的價值不是把一般生成式 serving 全面加速，而是示範：應用若能提供更強的輸出長度 contract，engine 就能安全改寫 tensor lifetime、KV retention 與 request order；相對地，contract 一旦放寬，多數收益都必須重新驗證。</p>
         </aside>
       </section>
 
       <section id="background-motivation" class="paper-section">
         <div class="section-heading"><span class="section-number">04</span><h2>背景與動機</h2></div>
-        <h3>從生成到判別式 LLM pipeline</h3>
-        <p>一般自迴歸推論先執行預填充（prefill）處理全部輸入並產生第一個 token，再反覆執行解碼（decode）。在推薦、信用驗證、spam／labeling 等判別任務，應用通常只需要在候選集合中選一個 token；例如對 <code>Yes</code>/<code>No</code> 做 constrained sampling，並把 \(P(\texttt{Yes})\) 當作分數。<a class="source-ref" href="#source-motivation-p3-p4">§2.1–2.4 · PDF pp.3–4</a></p>
-        <p>輸出縮到一個 token 不代表輸入短。作者以使用者長期瀏覽史與數月信用紀錄為例，主張此類 request 常有數萬 token，且主要是 GPU compute-bound 的 prefill，而不是反覆讀取模型權重的 memory-bound decode。這個 workload characterization 是整篇設計成立的前提，但論文沒有用 roofline 或獨立 batching microbenchmark 完整驗證。<a class="source-ref" href="#source-motivation-p3-p4">§2.4 · PDF p.4</a></p>
+        <p class="lead">只需四個前置概念：prefill 與 decode 的分工、短命 activation 與可重用 KV 的差別、prefix hit 如何改變剩餘工作量，以及 compute-bound prefill 為何不像 decode 那樣從 batching 獲益。它們會直接推導下一節的四項系統需求。</p>
 
-        <h3>為何現有 engine 留下不必要成本</h3>
+        <h3>最小前置地圖</h3>
         <div class="table-scroll">
           <table>
-            <caption>現有方案的瓶頸與原文證據；數字皆來自 arXiv v1。</caption>
-            <thead><tr><th>瓶頸</th><th>原文觀察</th><th>對 PrefillOnly 的啟示</th></tr></thead>
+            <caption>本節只保留後文會直接用到的概念。<a class="source-ref" href="#source-motivation-p3-p5">§2.1–2.6 · PDF pp.3–5</a></caption>
+            <thead><tr><th>概念</th><th>讀到什麼程度就夠</th><th>後文用途</th></tr></thead>
             <tbody>
-              <tr><td>完整 KV cache</td><td>Llama-3.1-8B 的 100k-token request 約需 12 GB KV cache。</td><td>只產生一個 token 時，suffix KV 不必為後續 decode 長期保存。</td></tr>
-              <tr><td>Maximum input length</td><td>A100 40 GB、Qwen-32B FP8 的 PagedAttention MIL 僅 11k tokens。</td><td>需要縮短 KV 與 activation 的峰值生命期。</td></tr>
-              <tr><td>一般 chunked prefill</td><td>20k input、chunk size 512 時，作者量得 end-to-end throughput 降 14%，且 MIL 增幅不到 2×。</td><td>不能把 attention 與 token-wise MLP 一律切 chunk。</td></tr>
-              <tr><td>跨 GPU 平行</td><td>Tensor parallel 有 all-reduce；pipeline parallel 對變長 request 產生 bubbles。</td><td>若單 GPU 可容納長 prefill，可避開通訊／同步開銷。</td></tr>
-              <tr><td>FCFS／靜態 JCT</td><td>任意長度生成難預知完成時間；啟用 prefix cache 後，請求 service time 又會隨 cache state 改變。</td><td>每次決策前要重新估計，而非只在 arrival 時算一次。</td></tr>
+              <tr><td>Prefill / decode</td><td>Prefill 一次處理全部 input 並產生第一 token；decode 才會逐 token 重複 forward。</td><td>只有一個 output token 時，不存在同一請求的後續 decode，因此 suffix KV 不必為它保留。</td></tr>
+              <tr><td>Activation / KV cache</td><td>MLP intermediates 是本輪 operator 的短命工作空間；attention KV 可供後續 token 或共享 prefix 的另一請求重用。</td><td>Hybrid prefilling 控制前者峰值，suffix policy 控制後者壽命，不能把兩者混為一談。</td></tr>
+              <tr><td>Prefix caching</td><td>兩個 requests 若共享 prompt prefix，後者可跳過該段計算；cache 建立或逐出會改變 cache-miss token 數。</td><td>排程必須讀取「現在」的 cache state，不能只看 arrival-time input length。</td></tr>
+              <tr><td>Compute-bound / memory-bound</td><td>作者把長 prefill 描述為 compute-bound、decode 描述為 memory-bandwidth-bound；前者合併 requests 不會像 decode batching 一樣近似免費地攤銷 weight reads。</td><td>PrefillOnly 一次跑一個 request，換取較低 queueing latency 與每步重新排程的機會。</td></tr>
             </tbody>
           </table>
         </div>
-        <p><a class="source-ref" href="#source-motivation-p3-p5">§2.1, §2.5–2.6 · PDF pp.3–5</a></p>
+
+        <h3>可觀察症狀：輸出短，engine 卻仍按長生成設計</h3>
+        <p>推薦、信用驗證與資料標註可把 sampling vocabulary 限制為少數 labels；例如只允許 <code>Yes</code>/<code>No</code>，以 \(P(\texttt{Yes})\) 作 score。輸出雖只有一個 token，使用者歷史或信用紀錄仍可形成數萬-token prompt。<a class="source-ref" href="#source-motivation-p3-p4">§2.3–2.4 · PDF pp.3–4</a></p>
         <aside class="statement statement--claim" data-kind="author-claim">
           <span class="statement__label">作者主張</span>
-          <p>推薦 workload 的典型規模可達每秒數萬 queries，可能需要數百至數千張 H100，因而值得配置獨立 GPU；這是動機估計，不是本文 production deployment 的實驗量測。<a class="source-ref" href="#source-motivation-p3-p4">§2.4 · PDF p.4</a></p>
+          <p>此類 workload 值得使用專用 GPU，因為與一般生成流量混跑會讓 decode 更常與 prefill 同 batch，抬高生成工作的平均與 P99 time-per-output-token；推薦流量本身也可能達每秒數萬 queries。這是動機與容量估計，不是本文的 production trace 實驗。<a class="source-ref" href="#source-motivation-p3-p4">§2.4 · PDF p.4</a></p>
+        </aside>
+
+        <h3>根因與最近方案的缺口</h3>
+        <aside class="statement statement--fact" data-kind="experimental-fact">
+          <span class="statement__label">實驗事實</span>
+          <p>Llama-3.1-8B 的 100k-token request 約需 12 GB KV；A100 40 GB、Qwen-32B FP8 的 PagedAttention MIL 為 11k tokens。把 20k-token input 以 512-token chunks 做一般 chunked prefill，作者量得 end-to-end throughput 下降 14%，MIL 增幅仍不到 2×；只丟棄 active-layer KV，在 L4/Llama-3.1-8B 也僅得到 1.6× MIL。<a class="source-ref" href="#source-motivation-p3-p5">§2.1, §2.5–2.6 · PDF pp.3–5</a></p>
+        </aside>
+        <p>這些觀察揭示兩個根因：峰值不只由 KV 構成，linear/MLP intermediates 也很大；完整 chunking 雖壓低當下 activation，卻迫使 engine 保存前面 chunks 的多層 KV，還降低 attention kernel 效率。跨 GPU 的 tensor parallel（TP）與 pipeline parallel（PP）可容納更長 input，但分別引入 all-reduce 與 variable-length pipeline bubbles。<a class="source-ref" href="#source-motivation-p3-p5">§2.5–2.6 · PDF pp.4–5</a></p>
+        <aside class="statement statement--analysis" data-kind="analysis">
+          <span class="statement__label">分析：通往問題定義的橋</span>
+          <p>因此目標不是單純「少存 KV」：系統必須同時壓低短命 activation、維持完整 attention 效率、保留跨請求 prefix reuse，並在 cache state 改變時更新 request priority。下一節把這四個必要條件定義為 R1–R4。</p>
         </aside>
       </section>
 
       <section id="problem-definition" class="paper-section">
         <div class="section-heading"><span class="section-number">05</span><h2>問題定義</h2></div>
-        <h3>Workload contract</h3>
+        <h3>作者的 workload contract 與系統目標</h3>
         <dl class="term-list">
           <dt>輸入</dt>
-          <dd>長 prompt、固定模型／硬體組態，以及可接受的單 token label 集合；請求 \(r\) 有 \(n_{\text{input}}\) 個 tokens，其中當下有 \(n_{\text{cached}}\) 個 prefix tokens 可命中 cache。</dd>
+          <dd>長 prompt、固定模型／硬體組態，以及可接受的單-token label 集合；請求 \(r\) 有 \(n_{\text{input}}\) 個 tokens，其中當下有 \(n_{\text{cached}}\) 個 prefix tokens 可命中 cache。</dd>
           <dt>輸出</dt>
           <dd>第一個 output token 或候選 token 的機率分布；推薦案例使用 \(P(\texttt{Yes})\) 作 score。</dd>
           <dt>系統目標</dt>
-          <dd>在平均與 P99 latency 不惡化的條件下提高可持續 QPS，同時提高最大輸入長度（Maximum Input Length, MIL）。</dd>
+          <dd>在平均與 P99 latency 不高於比較系統時提高可持續 QPS，同時提高最大輸入長度（Maximum Input Length, MIL），且不靠會降低 throughput 的全 input chunking 或跨 GPU inference。</dd>
           <dt>受控資源</dt>
           <dd>單次 forward 的 activation／working KV、跨請求 prefix KV cache、請求順序，以及兩張 GPU 的 instance／parallelism 配置。</dd>
         </dl>
         <p><a class="source-ref" href="#source-overview-p5">§3 · PDF p.5</a><a class="source-ref" href="#source-scheduler-p7-p8">§6 · PDF pp.7–8</a></p>
 
-        <h3>四個需要同時解開的衝突</h3>
-        <ol>
-          <li>完整保存所有 layers 的 KV 會讓 MIL 隨輸入長度受限。</li>
-          <li>完全丟棄 KV 雖節省空間，卻會破壞跨請求 prefix reuse。</li>
-          <li>把整個 prefill 分 chunk 會保留跨 chunk KV，且降低 attention kernel 效率。</li>
-          <li>依 request arrival 時的長度做靜態 SJF/SRJF，無法反映之後新增或被 evict 的 prefix cache。</li>
-        </ol>
+        <h3>由失敗機制推導的需求</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>每項 requirement 都在 Section 06 對應一個明確機制。</caption>
+            <thead><tr><th>症狀與根因</th><th>最近方案為何不夠</th><th>導出的成功條件</th></tr></thead>
+            <tbody>
+              <tr><td>KV 丟掉後，MLP intermediates 仍主導 peak memory。</td><td>Naive KV discard 只帶來 1.6× MIL。<a class="source-ref" href="#source-motivation-p3-p5">§2.6 · PDF p.5</a></td><td><strong>R1 Working-set：</strong>暫存張量必須只隨 chunk 大小、而非完整 input 長度成長。</td></tr>
+              <tr><td>Attention 有跨 token dependency；其 kernel 效率受 chunking 影響。</td><td>一般 chunked prefill 在作者的 20k/512 設定下降 14% throughput。<a class="source-ref" href="#source-motivation-p3-p5">§2.5 · PDF p.4</a></td><td><strong>R2 Compute：</strong>只能 chunk token-separable path，attention 維持正常完整序列執行。</td></tr>
+              <tr><td>本次請求不再 decode，但未來請求可能共享 prefix。</td><td>全丟 KV 會消滅 prefix hit；全留又限制 MIL。</td><td><strong>R3 Reuse：</strong>優先保留可跨請求重用的 prefix，讓本次請求不再需要的 suffix 儘早離開 GPU；被丟棄部分仍可能失去未來 reuse。<a class="source-ref" href="#source-cache-p7">§5.1 · PDF p.7</a></td></tr>
+              <tr><td>每次執行都可能建立或逐出 prefix cache，令等待請求的 service time 改變。</td><td>FCFS 不用 JCT；arrival-time SJF/SRJF 使用過期估計並錯失 cache locality。</td><td><strong>R4 Scheduling：</strong>每個決策點重算 cache-aware JCT，並以 aging 避免 starvation。<a class="source-ref" href="#source-scheduler-p7-p8">§6.2–6.3 · PDF pp.7–8</a></td></tr>
+            </tbody>
+          </table>
+        </div>
         <aside class="statement statement--analysis" data-kind="analysis">
           <span class="statement__label">分析：形式化邊界</span>
           <p>「JCT 是 deterministic」較精確的解讀是：在固定模型／硬體與當下 cache state 下，<em>service work</em> 比任意長度生成更可預測；實際 end-to-end completion time 仍受 queue、cache eviction 與 contention 影響，所以系統實際使用 estimator／proxy，而不是精確閉式解。<a class="source-ref" href="#source-scheduler-p7-p8">§6.3 · PDF p.8</a></p>
         </aside>
-        <h3>成立假設</h3>
+        <h3>假設、約束與不在範圍內的情況</h3>
         <ul>
           <li>輸出必須恰為一個 tokenizer token；多 token label、chain-of-thought 或 structured generation 不在範圍內。</li>
           <li>使用者事先提供 MIL；engine 以 fake request 做 memory profile。</li>
           <li>評估將 prefill-only 與 generative workloads 分開部署；本文沒有處理混合 workload interference。</li>
-          <li>方法假設非 attention 路徑沿 token 維度可分離，且 buffer liveness 允許安全的 preallocation／in-place reuse。</li>
+          <li>方法需要 non-attention computation 沿 token 維度可分離，且 graph／buffer liveness 允許安全的 preallocation 與 in-place reuse；論文只在三個 dense LLM families 上評估。</li>
         </ul>
       </section>
 
       <section id="core-method" class="paper-section">
         <div class="section-heading"><span class="section-number">06</span><h2>核心方法</h2></div>
-        <h3>端到端執行流程</h3>
+        <h3>先走一次端到端請求</h3>
+        <p>把 Figure 2 視為兩個回授迴圈：memory profile 決定 inference working set 與 cache budget；每個完成請求又改變 prefix-cache state，供下一次 scheduler 校準。</p>
         <ol>
-          <li><strong>Profile run：</strong>使用者給定 MIL；PrefillOnly 以同長度 fake request 跑一次 forward，量測 peak GPU memory，剩餘空間留給 prefix KV cache。</li>
+          <li><strong>Profile run（R1/R3）：</strong>使用者給定 MIL；PrefillOnly 以同長度 fake request 跑一次 forward，量測 peak GPU memory，剩餘空間留給 prefix KV cache。</li>
           <li><strong>Request intake：</strong>OpenAI-compatible HTTP server 收到 request，tokenize 後透過 ZeroMQ RPC 放進 scheduler process 的 waiting queue。</li>
-          <li><strong>逐步排程：</strong>每個 scheduling step 枚舉 queue，依最新 prefix-cache hit 與等待時間重算 score，只選一個 request。</li>
-          <li><strong>Hybrid forward：</strong>attention 處理完整序列；非 attention、token-wise 的 virtual layer 才沿 token 維度分 chunk。</li>
-          <li><strong>KV lifetime：</strong>盡量保留可供後續 request 重用的 prefix KV；目前實作丟棄 suffix KV。下一步再依新的 cache state 校準。</li>
+          <li><strong>逐步排程（R4）：</strong>每個 scheduling step 枚舉 queue，依最新 prefix-cache hit 與等待時間重算 score，只選一個 request。</li>
+          <li><strong>Hybrid forward（R1/R2）：</strong>attention 處理完整序列；沿 token 可獨立計算的 non-attention virtual layer 才分 chunk。</li>
+          <li><strong>KV lifetime（R3）：</strong>盡量保留可供後續 request 重用的 prefix KV；目前實作丟棄 suffix KV。完成後 cache state 改變，控制回到步驟 3。</li>
           <li><strong>Response：</strong>executor 回傳單 token 的 probability score。</li>
         </ol>
         <p><a class="source-ref" href="#source-overview-p5">§3.1–3.2 · PDF p.5 · Fig. 2</a></p>
 
-        <h3>一、Hybrid prefilling：只切可沿 token 分離的路徑</h3>
-        <p>GPU memory trace 顯示，Llama-3.1-8B 以 32,768 tokens prefill 時，MLP 中間張量會週期性製造約 20 GB 的峰值；hybrid prefilling 將峰值壓低約 2 GB。Fig. 4 的兩個 MLP intermediates 形狀分別為 \([32768,28672]\) 與 \([32768,14336]\)，是單層 KV 大小的 14× 與 7×。<a class="source-ref" href="#source-method-p6-p7">§4.1 · PDF p.6 · Fig. 3–4</a></p>
-        <p>實作以 <code>torch.compile</code> 取得 computation graph，把連續 token-wise operations 組成 virtual layer，逐 chunk 執行；完整 output tensor 先配置，各 chunk 直接寫入對應 slice。若 input/output shape 與生命期允許，則重用 input buffer 做 in-place computation，避免 concatenate 或雙份完整 tensor。<a class="source-ref" href="#source-method-p6-p7">§4.2–4.3 · PDF pp.6–7</a></p>
+        <h3>R1 + R2｜Hybrid prefilling：把 chunk boundary 放在 dependency 正確的位置</h3>
+        <aside class="statement statement--fact" data-kind="experimental-fact">
+          <span class="statement__label">實驗事實</span>
+          <p>Llama-3.1-8B 以 32,768 tokens prefill 時，MLP intermediates 週期性把記憶體推近 20 GB；hybrid prefilling 的 trace 峰值約低 2 GB。Fig. 4 的兩個 MLP tensors 形狀為 \([32768,28672]\) 與 \([32768,14336]\)，相當於單層 KV 大小的 14× 與 7×。<a class="source-ref" href="#source-method-p6-p7">§4.1 · PDF p.6 · Fig. 3–4</a></p>
+        </aside>
+        <p><strong>Input/signal：</strong><code>torch.compile</code> 產生的 computation graph 與 tensor shapes。<strong>Decision：</strong>把連續、沿 token 可分離的 operations 組成 virtual layer；attention 不分 chunk。<strong>Action：</strong>virtual layer 逐 chunk forward，完整 output 先配置後直接寫入對應 slice；若 input/output 同 shape 且生命期允許，再重用 input buffer。<strong>預期效果：</strong>把主要 temporary footprint 從完整序列縮到單一 chunk，同時避免 concatenate 的第二份完整 output 與一般 chunked attention 的效率損失。<a class="source-ref" href="#source-method-p6-p7">§4.2–4.3 · PDF pp.6–7</a></p>
         <aside class="statement statement--analysis" data-kind="analysis">
           <span class="statement__label">分析：原文用語需收斂</span>
           <p>論文稱非 attention layers「都是 linear layers」並不嚴謹，因自己的 Fig. 4 就含非線性 SwiGLU。正確的必要性質是<strong>沿 token 維度可分離</strong>；這足以讓 chunking 保持語義，但對有跨 token coupling 的 MoE capacity、convolution、SSM 或其他 operator，通用性尚未被驗證。</p>
         </aside>
 
-        <h3>二、Suffix KV cache discarding：保留 reuse，縮短無用 suffix 壽命</h3>
-        <p>Hybrid prefilling 在一次 model forward 內完成 request，因此當前 layer 的 suffix KV 用完即可丟棄，不必為下一個 chunk／decode pass 保存；跨請求有 reuse 價值的 prefix KV 則留在 cache pool。實作重用 vLLM sliding-window attention abstraction，不修改硬體 kernel。<a class="source-ref" href="#source-cache-p7">§5.1 · PDF p.7</a></p>
-        <p>「只保留一層 KV」不可誤讀成整個 engine 僅存在一層 KV：當前 request 的非保留 suffix working KV 可以逐層釋放，但被選入跨請求 prefix cache 的 tokens 仍需保有多層 KV。論文未提供 prefix/suffix 邊界、allocation／eviction policy、fragmentation safety margin 或 OOM 行為。</p>
+        <h3>R3｜Suffix KV cache discarding：縮短本次請求不再需要的 KV 壽命</h3>
+        <p><strong>Input/signal：</strong>profile run 留出的 prefix-cache budget，以及 request 中可保留的 prefix。<strong>Decision：</strong>prefix KV 仍跨請求保存在 GPU，suffix KV 則不為不存在的 decode 保留。<strong>Action：</strong>hybrid prefilling 在單次 model forward 完成 request，使當前 layer 的 suffix KV 用完即可丟棄；實作重用 vLLM sliding-window attention abstraction，不改硬體 kernel。<strong>預期效果：</strong>以可能犧牲被丟棄部分的未來跨請求 reuse 為代價，換取較大 MIL，同時保留部分 prefix caching。<a class="source-ref" href="#source-cache-p7">§5.1 · PDF p.7</a><a class="source-ref" href="#source-discussion-p12-p13">§9 · PDF pp.12–13</a></p>
+        <aside class="statement statement--analysis" data-kind="analysis">
+          <span class="statement__label">分析：不要誤讀「只保留一層 KV」</span>
+          <p>這不表示整個 engine 永遠只存在一層 KV：當前 request 的非保留 suffix working KV 可逐層釋放，但被選入跨請求 prefix cache 的 tokens 仍需保存多層 KV。論文未提供 prefix/suffix 邊界、allocation／eviction policy、fragmentation safety margin 或 OOM 行為。</p>
+        </aside>
 
-        <h3>三、Continuous JCT calibration：讓 cache locality 進入 service-time score</h3>
-        <p>Prefill-only prefill 被作者視為 compute-bound；同時 batch 多個 requests 不會像 decode 那樣顯著提高 throughput，反而增加平均 latency，因此 PrefillOnly 採一個 request 跑完再選下一個。每次執行都可能建立／逐出 prefix cache，scheduler 遂在每一步重算所有候選，而非沿用 arrival-time JCT。<a class="source-ref" href="#source-scheduler-p7-p8">§6.1–6.3 · PDF pp.7–8 · Fig. 5, Algorithm 1</a></p>
+        <h3>R4｜Continuous JCT calibration：讓 locality 進入每一步決策</h3>
+        <p>作者認為 prefill-only 工作 compute-bound，多 request batching 不會像 decode 一樣顯著提高 throughput，卻增加平均 latency，因此 PrefillOnly 一次只排一個 request；論文未描述 request 內部 preemption。<strong>Input/signal：</strong>waiting queue、當下 prefix-cache state 與每個 request 的等待時間。<strong>Decision：</strong>以 cache-miss tokens 預測 JCT，再扣除 aging term。<strong>Action：</strong>選 score 最小者；它完成並改變 cache state 後，對其餘 requests 全部重算。<strong>預期效果：</strong>把可立即 hit 的 request 提前，同時避免長 request 永久飢餓。<a class="source-ref" href="#source-scheduler-p7-p8">§6.1–6.3 · PDF pp.7–8 · Fig. 5, Algorithm 1</a></p>
         <pre><code>對 waiting queue 中每個 request r：
   讀取 input tokens、當下可命中的 prefix tokens、已等待時間
   計算預測 JCT 並扣除 aging / fairness 項
@@ -1052,7 +1060,7 @@
 
         <figure id="source-fig7-p11">
           <a href="assets/images/fig-07-p11.png"><img src="assets/images/fig-07-p11.png" alt="PrefillOnly 與 baselines 在兩個 workload、四種 GPU 組態上的 QPS 對 P99 latency 曲線。"></a>
-          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 7</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>這張圖檢查 SRJF 是否以平均值換取極端 starvation。作者的 aging term 讓 PrefillOnly 在高 QPS 仍有較低 P99；不過沒有 error bars、重複次數或 confidence interval。</span></figcaption>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 7</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>這張圖檢查完整 PrefillOnly 排程在平均 latency 之外的 P99；高 QPS 曲線顯示整體系統仍有較低 P99，但不能由此隔離 aging term 的因果貢獻。論文也沒有 error bars、重複次數或 confidence interval。</span></figcaption>
         </figure>
 
         <figure id="source-fig10-p12">
@@ -1068,10 +1076,24 @@
 
       <section id="experimental-setup" class="paper-section">
         <div class="section-heading"><span class="section-number">09</span><h2>實驗設計</h2></div>
+        <h3>先把主張對到測試</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>Evaluation 的 claim–test map；setup 不只列設備，也說明每項證據能回答什麼。<a class="source-ref" href="#source-eval-setup-p9-p10">§7–7.2 · PDF pp.8–12</a></caption>
+            <thead><tr><th>待檢驗主張</th><th>主要測試與 metric</th><th>控制與比較</th><th>先天限制</th></tr></thead>
+            <tbody>
+              <tr><td><strong>C1：</strong>PrefillOnly 在高負載可提供更好的 capacity–latency trade-off。</td><td>Poisson arrivals 下掃 QPS，量 mean/P99 latency（Fig. 6–7）。</td><td>同為 2 張 GPU；比較 PagedAttention、Chunked Prefill、TP=2、PP=2。</td><td>非平行方案是 2 個單-GPU instances，TP/PP 是 1 個雙-GPU instance；低負載單請求資源形態不同。</td></tr>
+              <tr><td><strong>C2：</strong>Hybrid prefilling 不靠跨 GPU inference 即能擴大 MIL。</td><td>逐方案尋找 max input tokens（Table 2）；逐步加入 chunking、preallocation、in-place（Fig. 10）。</td><td>固定 A100/Qwen-32B FP8 做 component ablation。</td><td>未交代 MIL 搜尋步幅、OOM safety margin、chunk size 或 repetitions。</td></tr>
+              <tr><td><strong>C3：</strong>Continuous calibration 能利用 prefix locality。</td><td>Recommendation workload 的 throughput 曲線與四-request illustrative schedule（Fig. 5、9）。</td><td>同 user 的 50 requests 經 affinity routing 到同一 instance。</td><td>沒有完整 workload 的 FIFO／靜態 SRJF／calibration cache-hit-rate ablation。</td></tr>
+              <tr><td><strong>C4：</strong>Aging term 能用平均 latency 換較佳 tail。</td><td>比較 \(\lambda=0,200,2000\) 的 latency CDF（Fig. 11）。</td><td>其餘設定未由論文逐項列出。</td><td>預設 \(\lambda=500\) 不在曲線中，亦無數值表或 confidence interval。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
         <h3>Workloads 與到達模型</h3>
         <div class="table-scroll">
           <table>
-            <caption>Table 1 的模擬資料集設定；兩者都評估 engine performance，而非模型判斷品質。</caption>
+            <caption>Table 1 的模擬資料集設定；兩者都評估 engine performance，而非模型判斷品質。<a class="source-ref" href="#source-eval-setup-p9-p10">§7.1 · PDF pp.9–10 · Table 1</a></caption>
             <thead><tr><th>Workload</th><th>使用者／請求</th><th>長度</th><th>總 tokens</th><th>主要壓力</th></tr></thead>
             <tbody>
               <tr><td>Post recommendation</td><td>20 users；每人 50 requests，每 request 對應一篇 post</td><td>user profile 11k–17k（Normal：mean 14k、std 3k）；post 150 tokens</td><td>14,000,000</td><td>同一 user 的 50 requests 共享長 prefix，測 cache reuse 與排程</td></tr>
@@ -1084,7 +1106,7 @@
         <h3>硬體與模型</h3>
         <div class="table-scroll">
           <table>
-            <caption>Table 3：每次比較皆有 2 張同型 GPU；H100 另分 PCIe 與 NVLink 組態。</caption>
+            <caption>Table 3：每次比較皆有 2 張同型 GPU；H100 另分 PCIe 與 NVLink 組態。<a class="source-ref" href="#source-eval-setup-p9-p10">§7.1 · PDF p.10 · Table 3</a></caption>
             <thead><tr><th>組態</th><th>GPU</th><th>模型</th></tr></thead>
             <tbody>
               <tr><td>Low-end</td><td>2× NVIDIA L4 PCIe，24 GB</td><td>Llama-3.1-8B</td></tr>
@@ -1094,7 +1116,7 @@
             </tbody>
           </table>
         </div>
-        <p>PrefillOnly 建於 vLLM，核心約 4.6k 行 Python，預設 fairness \(\lambda=500\)。論文未提供 vLLM commit、PyTorch／CUDA／driver 版本、hybrid chunk size、warm-up、測量重複次數或 statistical interval。<a class="source-ref" href="#source-eval-setup-p9-p10">§7.1 · PDF p.10 · Table 3</a></p>
+        <p>PrefillOnly 建於 vLLM，核心約 4.6k 行 Python，預設 fairness \(\lambda=500\)。論文未提供 CPU、主機記憶體、vLLM commit、PyTorch／CUDA／driver 版本、hybrid chunk size、warm-up、測量重複次數或 statistical interval。<a class="source-ref" href="#source-eval-setup-p9-p10">§7.1 · PDF p.10 · Table 3</a></p>
 
         <h3>Baselines、資源配置與指標</h3>
         <ul>
@@ -1108,17 +1130,22 @@
 
       <section id="experimental-results" class="paper-section">
         <div class="section-heading"><span class="section-number">10</span><h2>實驗結果</h2></div>
-        <h3>QPS–latency trade-off</h3>
+        <h3>C1｜高負載 capacity–latency trade-off</h3>
         <aside class="statement statement--fact" data-kind="experimental-fact">
           <span class="statement__label">實驗事實</span>
-          <p>作者總結 PrefillOnly 可承受 baseline 的 1.4–4.0× QPS，且平均與 P99 latency 不高於比較系統。負載點是先把所有 requests 同時送入 PrefillOnly 得到吞吐 \(x\)，再測 \(x/4,x/2,x,2x,3x,4x\)；因此「4×」是跨設定的最高觀察值，不代表每張圖、每個 latency SLO 都固定四倍。<a class="source-ref" href="#source-eval-results-p10-p12">§7, §7.2 · PDF pp.8, 10–12 · Fig. 6–7</a></p>
+          <p><strong>觀察：</strong>作者總結 PrefillOnly 可承受 baseline 的 1.4–4.0× QPS，且平均與 P99 latency 不高於比較系統。負載點先以所有 requests 同時抵達 PrefillOnly 的吞吐定義 \(x\)，再測 \(x/4,x/2,x,2x,3x,4x\)。<a class="source-ref" href="#source-eval-results-p10-p12">§7, §7.2 · PDF pp.8, 10–11 · Fig. 6–7</a></p>
         </aside>
-        <p>Fig. 6–7 的共同趨勢是：<strong>低 QPS</strong> 時 TP／PP 可把兩張 GPU 用於一個 request，某些組態 latency 低於 PrefillOnly；<strong>高 QPS</strong> 時 parallel baselines 受 all-reduce／pipeline bubbles 限制，非平行 baselines 又可能因 MIL 或 cache throttling 失速，PrefillOnly 才展現較佳 capacity。這不是無條件 latency win。<a class="source-ref" href="#source-fig6-p9">Fig. 6 · PDF p.9</a><a class="source-ref" href="#source-fig7-p11">Fig. 7 · PDF p.11</a></p>
+        <dl class="term-list">
+          <dt>測試／metric</dt><dd>兩個 workloads、四種硬體組態上掃 QPS，分別觀察 mean 與 P99 latency。</dd>
+          <dt>支持的結論</dt><dd>Fig. 6–7 一致顯示，高 QPS 時 PrefillOnly 的曲線較晚進入 queueing cliff，因此主要勝在 sustainable capacity，而非所有負載下的 service latency。</dd>
+          <dt>反例／caveat</dt><dd>低 QPS 時 TP／PP 能讓一個 request 使用兩張 GPU，某些組態 latency 低於 PrefillOnly；「4×」是跨設定最高值，不代表每張圖或任意 latency SLO 都固定四倍。</dd>
+        </dl>
+        <p><a class="source-ref" href="#source-fig6-p9">§7.2 · PDF p.9 · Fig. 6</a><a class="source-ref" href="#source-fig7-p11">§7.2 · PDF p.11 · Fig. 7</a></p>
 
-        <h3>Maximum Input Length</h3>
+        <h3>C2｜不跨 GPU 的 Maximum Input Length</h3>
         <div class="table-scroll">
           <table>
-            <caption>Table 2 的 MIL（tokens）；粗體表示各欄非平行方案中較高者，而非所有方案的全域最高。</caption>
+            <caption>Table 2 的 MIL（tokens）；粗體表示各欄非平行方案中較高者，而非所有方案的全域最高。<a class="source-ref" href="#source-table2-p10">§7 · PDF p.10 · Table 2</a></caption>
             <thead><tr><th>系統</th><th>L4 24 GB</th><th>A100 40 GB</th><th>H100 80 GB</th></tr></thead>
             <tbody>
               <tr><td>PagedAttention</td><td>24k</td><td>11k</td><td>15k</td></tr>
@@ -1129,27 +1156,40 @@
             </tbody>
           </table>
         </div>
-        <p>相對較強的非平行 baseline（Chunked Prefill），PrefillOnly 的 MIL 比例約為 L4 2.8×、A100 5.1×、H100 3.9×，支持作者「最高約 5×、且不需平行化」的表述；但 L4/H100 的絕對 MIL 仍低於 TP，H100 也低於 PP，代價／收益重點是避開多 GPU 通訊以換取高負載 throughput。<a class="source-ref" href="#source-table2-p10">§7 · PDF p.10 · Table 2</a></p>
+        <aside class="statement statement--fact" data-kind="experimental-fact">
+          <span class="statement__label">實驗事實</span>
+          <p><strong>觀察：</strong>相對較強的非平行 baseline（Chunked Prefill），PrefillOnly 的 MIL 比例為 L4 \(130/46\approx2.8\times\)、A100 \(87/17\approx5.1\times\)、H100 \(97/25\approx3.9\times\)。這支持作者「最高約 5×、且不需平行化」的表述。<a class="source-ref" href="#source-table2-p10">§7 · PDF p.10 · Table 2</a></p>
+        </aside>
+        <p><strong>Caveat：</strong>L4/H100 上 TP 的絕對 MIL 仍較高，H100 上 PP 也較高；此實驗支持的是「用單 GPU instance 容納 workload 並避開通訊」，不是 PrefillOnly 永遠有最高絕對 context ceiling。</p>
 
-        <h3>兩種 workload 的增益來源</h3>
-        <ul>
-          <li><strong>Recommendation：</strong>高 QPS 下 Chunked Prefill 的 prefix cache 被不利順序逐出，throughput 下降；continuous calibration 會優先執行可命中新建立 cache 的 requests。TP／PP cache 空間較多，但受通訊與同步成本限制。</li>
-          <li><strong>Credit verification：</strong>單 request 很長且幾乎沒有跨 request prefix reuse；PrefillOnly 的優勢主要來自避免 TP all-reduce 與 PP bubbles。即使 NVLink 提升 TP throughput，Fig. 8 中 PrefillOnly 仍較高。</li>
-        </ul>
-        <p><a class="source-ref" href="#source-eval-results-p10-p12">§7.2 · PDF pp.11–12 · Fig. 8–9</a></p>
+        <h3>C3｜兩個 workload 分離兩種增益來源</h3>
+        <div class="key-grid">
+          <article class="key-card">
+            <p class="key-card__eyebrow">Prefix-locality test</p>
+            <p><strong>Recommendation：</strong>每 user 的 50 requests 共享 profile。高 QPS 下 Chunked Prefill throughput 下滑；作者歸因於 prefix-cache throttling。Calibration 會優先執行可命中新 cache 的 requests，而 TP／PP 雖有較大 cache space，仍承擔通訊或同步。<a class="source-ref" href="#source-eval-results-p10-p12">§7.2 · PDF p.11 · Fig. 9</a></p>
+          </article>
+          <article class="key-card">
+            <p class="key-card__eyebrow">Long-input test</p>
+            <p><strong>Credit verification：</strong>每 user 只有一個 40k–60k-token request，幾乎沒有同 user reuse；增益主要來自單 GPU 容納 input，避開 TP all-reduce 與 PP bubbles。NVLink 提升 TP throughput 後，Fig. 8 中 PrefillOnly 仍較高。<a class="source-ref" href="#source-eval-results-p10-p12">§7.2 · PDF p.11 · Fig. 8</a></p>
+          </article>
+        </div>
+        <aside class="statement statement--analysis" data-kind="analysis">
+          <span class="statement__label">分析：因果證據仍不完整</span>
+          <p>兩個 workloads 的對照有助於分辨「cache-aware scheduling」與「避免跨 GPU」兩種來源，但 Recommendation 沒有完整系統下的 scheduler-only ablation，也沒直接報 cache-hit-rate；因此 Fig. 9 支持整體相關趨勢，不能單獨量化 calibration 的因果貢獻。</p>
+        </aside>
 
         <aside class="statement statement--analysis" data-kind="analysis">
           <span class="statement__label">分析：需顯式保留的原文矛盾</span>
-          <p>Fig. 10 顯示 vanilla 11k、hybrid 87k，故 \(87/11\approx7.9\times\)，與 caption 一致；正文卻稱「相對 chunked prefill 超過 8.7×」。同圖 chunked prefill 為 17k，所以可重算的比例其實是 \(87/17\approx5.1\times\)。本摘要採 bars／Table 2 可重算數字，不沿用該句。另 Table 2 把 A100/PP 的 MIL 寫成 38k，卻又標 credit workload（40k–60k）可執行，兩者也不相容；Fig. 10 稱模型為 Qwen-2.5-32B FP8，Table 3 則列 DeepSeek-R1-Distill-Qwen-32B-FP8-dynamic，命名亦未完全一致。<a class="source-ref" href="#source-table2-p10">Table 2–3 · PDF p.10</a><a class="source-ref" href="#source-fig10-p12">Fig. 10 · PDF p.12</a></p>
+          <p>Fig. 10 顯示 vanilla 11k、hybrid 87k，故 \(87/11\approx7.9\times\)，與 caption 一致；正文卻稱「相對 chunked prefill 超過 8.7×」。同圖 chunked prefill 為 17k，所以可重算比例其實是 \(87/17\approx5.1\times\)。本摘要採 bars／Table 2 可重算數字，不沿用該句。另 Table 2 把 A100/PP 的 MIL 寫成 38k，卻又標 credit workload（40k–60k）可執行；Fig. 10 稱模型為 Qwen-2.5-32B FP8，Table 3 則列 DeepSeek-R1-Distill-Qwen-32B-FP8-dynamic；Fig. 7 caption 寫「three hardware setups」，圖中實際有四欄。<a class="source-ref" href="#source-table2-p10">Table 2–3 · PDF p.10</a><a class="source-ref" href="#source-fig7-p11">Fig. 7 · PDF p.11</a><a class="source-ref" href="#source-fig10-p12">Fig. 10 · PDF p.12</a></p>
         </aside>
       </section>
 
       <section id="ablation-sensitivity" class="paper-section">
         <div class="section-heading"><span class="section-number">11</span><h2>Ablation 與敏感度分析</h2></div>
-        <h3>Hybrid prefilling 的 component ablation</h3>
+        <h3>C2｜Hybrid prefilling 的 component ablation</h3>
         <div class="table-scroll">
           <table>
-            <caption>Figure 10：A100 上的 Qwen-32B FP8；MIL 由圖中 bars 讀取。</caption>
+            <caption>Figure 10：A100 上的 Qwen-32B FP8；MIL 由圖中 bars 讀取。<a class="source-ref" href="#source-fig10-p12">§7.2 · PDF p.12 · Fig. 10</a></caption>
             <thead><tr><th>逐步加入設計</th><th>MIL</th><th>新增效果</th></tr></thead>
             <tbody>
               <tr><td>Vanilla vLLM</td><td>11k</td><td>基準</td></tr>
@@ -1160,10 +1200,16 @@
             </tbody>
           </table>
         </div>
-        <p><a class="source-ref" href="#source-fig10-p12">§7.2 · PDF p.12 · Fig. 10</a></p>
+        <aside class="statement statement--fact" data-kind="experimental-fact">
+          <span class="statement__label">實驗事實</span>
+          <p>11k→45k 顯示 token-wise chunking 是最大單一增益；preallocation 與 in-place reuse 再把 MIL 推至 63k 與 87k。這組證據直接支持 R1 的 component contribution，但只測一個模型／GPU／precision 組合。<a class="source-ref" href="#source-fig10-p12">§7.2 · PDF p.12 · Fig. 10</a></p>
+        </aside>
 
-        <h3>Fairness sensitivity</h3>
-        <p>Fig. 11 比較 \(\lambda=0,200,2000\) 的 latency CDF：較大 \(\lambda\) 會讓久候 request 更快被選，縮短右尾／改善 P99，但可能拉高平均 latency。圖未列具體 mean、P99 或 confidence interval，也未測實驗預設 \(\lambda=500\)，因此只能支持方向性取捨，不能推導最佳值。<a class="source-ref" href="#source-fig11-p12">§7.2 · PDF p.12 · Fig. 11</a></p>
+        <h3>C4｜Fairness sensitivity</h3>
+        <aside class="statement statement--fact" data-kind="experimental-fact">
+          <span class="statement__label">實驗事實</span>
+          <p>Fig. 11 比較 \(\lambda=0,200,2000\) 的 latency CDF：較大 \(\lambda\) 使右尾較短，而分布中段可右移，呈現 tail 與平均 latency 的方向性取捨。圖未列具體 mean、P99、workload 條件或 confidence interval，也未測實驗預設 \(\lambda=500\)，因此不能由此推導最佳值。<a class="source-ref" href="#source-fig11-p12">§7.2 · PDF p.12 · Fig. 11</a></p>
+        </aside>
 
         <h3>缺少的隔離實驗</h3>
         <ul>
@@ -1187,17 +1233,17 @@
         <h3>限制與風險</h3>
         <div class="table-scroll">
           <table>
-            <caption>限制依「作者明示」與本摘要分析分開列出。</caption>
+            <caption>限制依「作者主張」與本摘要分析分開列出。<a class="source-ref" href="#source-discussion-p12-p13">§9 · PDF pp.12–13</a></caption>
             <thead><tr><th>類型</th><th>限制</th><th>影響</th></tr></thead>
             <tbody>
-              <tr><td>作者明示</td><td>目前只做 suffix KV discard；CPU offload 尚未實作。</td><td>被丟棄 suffix 無法被未來 request 重用，容量與 reuse 仍有取捨。</td></tr>
-              <tr><td>作者明示</td><td>Prefill/decode disaggregation 的 prefill node 與 contiguous-buffer latency optimization 只列為 future work。</td><td>不能把本文數據外推到這些整合。</td></tr>
+              <tr><td>作者主張</td><td>目前只做 suffix KV discard；CPU offload 尚未實作。</td><td>被丟棄 suffix 無法被未來 request 重用，容量與 reuse 仍有取捨。</td></tr>
+              <tr><td>作者主張</td><td>Prefill/decode disaggregation 的 prefill node 與 contiguous-buffer latency optimization 只列為 future work。</td><td>不能把本文數據外推到這些整合。</td></tr>
               <tr><td>分析</td><td>嚴格單 token contract。</td><td>不適用多 token label、reasoning trace、JSON 或一般聊天生成。</td></tr>
               <tr><td>分析</td><td>兩個 workload 都是模擬資料、Poisson arrivals，且 user-id affinity routing 強化 prefix locality。</td><td>production burst、跨 tenant 路由、低 cache reuse 時的收益不確定。</td></tr>
               <tr><td>分析</td><td>只測 NVIDIA L4/A100/H100，且版本、chunk size、重複次數與 error bars 未提供。</td><td>「跨硬體泛化」與數字可重現性有限，尚不能推論到 AMD 或其他 accelerator。</td></tr>
               <tr><td>分析</td><td>prefix boundary／eviction、OOM safety、scheduler overhead 與公平性 bound 未交代。</td><td>大量 queue、cache churn 或記憶體碎片下可能出現未量測成本。</td></tr>
               <tr><td>分析</td><td>不評估 label accuracy、能耗、成本與 mixed generative interference。</td><td>只證明 serving performance，不能證明 end-to-end 產品效益。</td></tr>
-              <tr><td>原文一致性</td><td>Algorithm 1 line 11、Fig. 10 正文倍率、Table 2 workload feasibility 有內部不一致。</td><td>實作者應依語義與原始 bars 重算，不應逐字照搬。</td></tr>
+              <tr><td>分析</td><td>Algorithm 1 line 11、Fig. 7 hardware-count caption、Fig. 10 正文倍率、Table 2 workload feasibility 有內部不一致。</td><td>實作者應依語義、panels 與原始 bars 重算，不應逐字照搬。</td></tr>
             </tbody>
           </table>
         </div>
@@ -1221,7 +1267,7 @@
               <tr><td>Tensor / Pipeline Parallel</td><td>跨 GPU 分散模型／計算以提高 MIL 或降低低負載單請求 latency。</td><td>TP 有 all-reduce、PP 有 bubbles；PrefillOnly 以單 GPU instance 避免通訊，偏向 high-QPS throughput，但絕對 MIL 不一定最高。</td></tr>
               <tr><td>CacheGen、CacheBlend、KV compression</td><td>壓縮／串流 KV，或融合非 prefix cache 以減少載入與重算。</td><td>PrefillOnly 不改 KV 內容，作者認為可相容；但本文沒有整合測試。</td></tr>
               <tr><td>LMCache / CPU offload</td><td>將 KV 放到 GPU 之外的 tier。</td><td>可避免 suffix discard 犧牲未來 reuse；本文僅列 future work。</td></tr>
-              <tr><td>Tiresias、Optimus 等傳統 DL scheduling</td><td>消除無用 tensors、依 JCT 排程。</td><td>LLM 特有之處是大型 token-wise MLP intermediates，以及 JCT 會隨 prefix cache hit 動態改變。</td></tr>
+              <tr><td>PyTorch 2；Tiresias、Optimus 等傳統 DL systems</td><td>前者以 graph compilation 消除不必要 tensors；後兩者依 JCT 排程。</td><td>LLM 特有之處是大型 token-wise MLP intermediates，以及 JCT 會隨 prefix cache hit 動態改變。</td></tr>
             </tbody>
           </table>
         </div>
@@ -1327,7 +1373,7 @@
   </div>
 
   <footer class="page-footer">
-    <p>Paper Reading · PrefillOnly: An Inference Engine for Prefill-only Workloads in Large Language Model Applications · 最後更新 2026-09-06</p>
+    <p>Paper Reading · PrefillOnly: An Inference Engine for Prefill-only Workloads in Large Language Model Applications · 最後更新 2026-09-08</p>
     <p>模板版本 1.2.0。頁面中的分析與推測不代表原論文作者立場。</p>
   </footer>
 

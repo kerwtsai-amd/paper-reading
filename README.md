@@ -1,6 +1,6 @@
 # Paper Reading
 
-This repository turns paper discovery, deep reading, and evidence-traceable Traditional Chinese HTML summaries into a browsable research website. Each paper follows the project structure `<Topic>/<Subtopic>/<Formal Paper Title>/`. Its summary is created from `html template/summary-template.html` and must pass validation defined by the paper-reading Skill. All generated paper summaries must be written in Traditional Chinese, even though the repository documentation and Skill instructions are written in English.
+This repository turns paper discovery, deep reading, and evidence-traceable Traditional Chinese HTML summaries into a browsable research website. Both HTML and Confluence summaries use a reader-first explanatory spine: minimal prerequisites → problem and root cause → prior-art gap → derived requirements → end-to-end method → claim-aligned evidence → limitations. Each paper follows the project structure `<Topic>/<Subtopic>/<Formal Paper Title>/`. Its summary is created from `html template/summary-template.html` and must pass validation defined by the paper-reading Skill. All generated paper summaries must be written in Traditional Chinese, even though the repository documentation and Skill instructions are written in English.
 
 ## Automation Architecture
 

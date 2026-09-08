@@ -1,69 +1,72 @@
-# Paper Reading 的 Confluence 摘要與發佈標準
+# Confluence Summary and Publishing Standard for Paper Reading
 
-本標準只定義 Confluence 交付與媒介差異。研究深度、證據紀律、分類、PDF intake、圖片擷取與停止條件沿用 [`paper-reading-standard.md`](../../paper-reading/references/paper-reading-standard.md)。使用者當次明確指示仍具最高優先權。
+This standard defines only Confluence delivery and medium-specific differences. Inherit research depth, evidence discipline, classification, PDF intake, figure extraction, and stopping conditions from [`paper-reading-standard.md`](../../paper-reading/references/paper-reading-standard.md), and inherit the shared narrative method from [`reader-first-exposition.md`](../../paper-reading/references/reader-first-exposition.md). The user's explicit instructions for the current task still take highest priority. All reader-facing paper-summary content must be written in Traditional Chinese; these operating instructions are in English.
 
-## 成果與來源稿
+## Deliverable and Source Draft
 
-- 正式成果是單一 Confluence page；本地 `confluence-summary.md` 是該頁的可審核來源稿。
-- 每次重建 page body 都從 `confluence-summary.md` 完整產生，避免遠端內容與本地來源分叉。
-- `confluence-summary.md` 必須從 [`confluence-summary-template.md`](../assets/confluence-summary-template.md) 複製，不得從既有 `summary.html` 直接貼上完整 HTML。既有 HTML 可作內容來源，但 CSS、JavaScript、MathJax、DOM markers 與作業紀錄不得進入 Confluence。
-- 發佈用 storage XHTML 由 `prepare_confluence.py` 產生。不要手動修改產出的 XHTML；應修改 Markdown 來源後重建。
-- 使用者要求 prepare-only 時，耐久成果是本地來源稿與附件；產出的 storage XHTML 是可由來源稿重建的暫存 build artifact。完全不連線 Atlassian，只有明確要求 Publish 才解析 space／parent／page 並執行遠端寫入。
-- 遷移既有摘要時，正式論文 metadata 以第一方來源重新核對；Confluence page title 使用正式完整標題。Topic／Subtopic 則以目前兩層實體路徑為交付基準。若舊摘要文字與實體路徑不一致，先回報矛盾並重新判讀，但未經使用者同意不搬動既有資料夾。
+- The official deliverable is one Confluence page. Local `confluence-summary.md` is that page's reviewable source draft.
+- Generate the complete page body from `confluence-summary.md` every time it is rebuilt so remote content cannot diverge from the local source.
+- Copy `confluence-summary.md` from [`confluence-summary-template.md`](../assets/confluence-summary-template.md). Do not paste complete HTML directly from an existing `summary.html`. Existing HTML may serve as a content source, but CSS, JavaScript, MathJax, DOM markers, and operational records must not enter Confluence.
+- Generate publishing storage XHTML with `prepare_confluence.py`. Do not edit generated XHTML manually; edit the Markdown source and rebuild it.
+- For a Prepare-only request, the durable outputs are the local source draft and attachments; generated storage XHTML is a temporary build artifact reproducible from that source. Make no Atlassian connection at all. Resolve a space, parent, or page and perform remote writes only when the user explicitly requests Publish.
+- When migrating an existing summary, reverify the formal paper metadata from first-party sources and use the full formal title as the Confluence page title. Use the current two-level physical Topic/Subtopic path as the delivery classification. If legacy summary text conflicts with the physical path, report the conflict and reassess it, but do not move the existing folder without user approval.
 
-## 固定章節
+## Fixed Sections
 
-Confluence page title 充當唯一頁面標題，body 依下列順序使用 16 個二級標題：
+The Confluence page title is the only page title. Its body must use these 16 H2 headings, in this order. Keep the heading text itself in Traditional Chinese:
 
-1. **論文基本資料**：正式標題、作者、venue／期刊／arXiv、年份、版本、canonical link、Topic／Subtopic、分類理由、PDF attachment 與唯一的 `共 N 頁`。
-2. **一句話總結**：一至三句交代核心問題、方法與結果；數字必須可追溯。
-3. **Executive Summary**：研究問題、洞察、方法、主要證據、限制與 takeaways。
-4. **背景與動機**：必要領域背景、流程角色、既有瓶頸與作者觀察。
-5. **問題定義**：目標、輸入輸出、假設、限制、術語與符號。
-6. **核心方法**：架構、演算法、資料流、元件責任、互動與設計直覺。
-7. **公式與理論**：必要公式、變數、單位／系統意義、假設、用途與來源。
-8. **圖片與圖表導讀**：必要附件圖片、原物件編號、自撰導讀與來源定位。
-9. **實驗設計**：硬軟體、模型、資料集、baseline、工作負載、指標與公平性。
-10. **實驗結果**：各評估目標的結果、條件與圖表可支持／不可支持的結論。
-11. **Ablation 與敏感度分析**：各設計貢獻、參數敏感度與互動；沒有時明確註記。
-12. **優點、限制與風險**：系統假設、適用範圍、泛化、部署限制與外部效度。
-13. **與相關工作的比較**：技術路線、場景、成本與取捨，不只列名稱。
-14. **個人分析與可延伸方向**：可借鑑設計、待驗證結論與研究／工程延伸。
-15. **組會討論問題**：3–5 個可引發證據或設計討論的技術問題。
-16. **術語表與重點索引**：縮寫、定義，以及重要結論的章節／頁碼／物件索引。
+1. **論文基本資料**: formal title, authors, venue/journal/arXiv record, year, version, canonical link, Topic/Subtopic, classification rationale, PDF attachment, and the single `共 N 頁`.
+2. **一句話總結**: one to three sentences stating the central problem, method, and result; every number must be traceable.
+3. **Executive Summary**: the compact causal order problem, root cause or gap, key insight, method, principal evidence, limitations, and takeaways.
+4. **背景與動機**: only the domain prerequisites used later, workflow roles, existing bottlenecks, and author observations, ending with a bridge to the exact problem.
+5. **問題定義**: observable symptom, root mechanism, why the nearest existing approach is insufficient, derived requirements, objective, inputs and outputs, assumptions, constraints, terminology, and notation.
+6. **核心方法**: an end-to-end walkthrough followed by architecture, algorithms, data flow, component responsibilities, state changes, interactions, and design intuition, with every design choice tied to a requirement.
+7. **公式與理論**: necessary formulas, variables, units or system meaning, assumptions, purpose, qualitative sensitivity, execution role, and sources.
+8. **圖片與圖表導讀**: necessary attached images placed with the concepts or claims they resolve, original object numbers, original reading guides that say what to inspect and why it matters, and source locations.
+9. **實驗設計**: claim-aligned hardware, software, models, datasets, baselines, workloads, metrics, controls, and fairness.
+10. **實驗結果**: claim-test pairs containing the setup, metric, observation, supported conclusion, and caveat, plus what the figures support and do not support.
+11. **Ablation 與敏感度分析**: each design contribution, parameter sensitivity, and interactions; explicitly note when unavailable.
+12. **優點、限制與風險**: system assumptions, scope of applicability, generalization, deployment constraints, and external validity.
+13. **與相關工作的比較**: the closest alternatives compared by mechanism, assumptions, scenarios, deployment costs, and failure modes, not merely a list of names.
+14. **個人分析與可延伸方向**: reusable design ideas, conclusions still requiring verification, and research or engineering extensions.
+15. **組會討論問題**: three to five technical questions that invite evidence-based or design discussion.
+16. **術語表與重點索引**: abbreviations, definitions, and section/page/object indexes for important conclusions.
 
-資訊缺失時保留章節並寫「論文未提供」，不得刪節或虛構。
+When information is missing, preserve the section and write `論文未提供`. Do not omit the section or fabricate content.
 
-## 來源稿硬性格式
+## Mandatory Source-draft Format
 
-- 頁首「優先閱讀」恰好列三個有效章節編號。
-- body 只使用固定的 16 個 H2，不加 H1 或 H3–H6；子主題用粗體段落或列表，避免把主張藏進未驗證的次標題。
-- `最後更新` 使用不晚於今天的有效 `YYYY-MM-DD`；`年份` 使用四位西元年。
-- `分類` 必須精確等於實體資料夾的 `<Topic> / <Subtopic>`，不能只在分類理由提到正確字串。
-- `正式標題` 預設須和 Windows-safe folder title 同一身份；只有已人工核對的既有 legacy folder 才能以 `--allow-legacy-folder-title` 例外沿用，且不得因此改寫正式 metadata。
-- `分類理由` 的 `CLASSIFICATION_SOURCE` 也要同時含原文定位與 PDF 頁碼，例如 `Abstract · PDF p.1`。
-- 第 02–14 章除圖片 block 外，每個正文句、列表項或資料列中的主張都要在同一句使用 evidence label；只有純來源行與單獨成句的「論文未提供」例外，不得把該片語和其他未標示主張串在一起。第 15 章是討論問題而免標。第 16 章的術語與重點索引一律在同一句使用 evidence label，且同一列表項／段落必須含原文章節與 `PDF p.N`，不能用另一個項目的來源湊整章覆蓋率。術語可寫成 `` **[作者主張]** `TERM`：指……（來源：§… · PDF p.N）``；沒有 evidence／source 的「純定義」也不例外，以免把結果主張藏進定義句。
-- 來源稿不可手寫 HTML/storage tags；inline code 內討論標籤字面值不算手寫 markup。一般 Markdown link 只允許 `https://` 或頁內 anchor；destination 若含括號必須 percent-encode。PDF 與圖片必須使用 attachment block。讀者內容不得含 Windows、UNC、POSIX 絕對本機路徑或 `file://`；code 中的 `/api/...` 類介面路徑不視為本機檔案。
+- The top-of-page `優先閱讀` field must list exactly three valid section numbers.
+- The body may contain only the fixed 16 H2 headings—no H1 and no H3–H6. Use bold paragraphs or lists for subtopics so claims cannot hide in unvalidated subheadings.
+- `最後更新` must be a valid `YYYY-MM-DD` no later than today; `年份` must be a four-digit Gregorian year.
+- `分類` must exactly equal the physical folder's `<Topic> / <Subtopic>`. Mentioning the correct string only in the classification rationale is insufficient.
+- By default, `正式標題` must identify the same title as the Windows-safe folder title. Use `--allow-legacy-folder-title` only for an existing legacy folder that has been manually verified, and never rewrite formal metadata to justify that exception.
+- To display a literal `|` inside a Markdown table cell, write `\|` in the source draft. The renderer restores it in storage XHTML. An unescaped `|` is a field delimiter; do not rewrite the formal title to evade this syntax.
+- `CLASSIFICATION_SOURCE` for `分類理由` must include both the source-text location and PDF page, for example `Abstract · PDF p.1`.
+- In Sections 02–14, excluding image blocks, every claim in a prose sentence, list item, or data row must include an evidence label in the same sentence. The only exceptions are a source-only line and a standalone `論文未提供`; never join that phrase to other unlabeled claims. Section 15 contains discussion questions and is exempt. In Section 16, every glossary term and key-index entry must use an evidence label in the same sentence, and the same list item or paragraph must contain both a source section and `PDF p.N`. A source attached to another item cannot satisfy coverage for the whole section. A term may be written as `` **[作者主張]** `TERM`：指……（來源：§… · PDF p.N）``. A “definition-only” sentence without evidence or a source is not exempt; this prevents result claims from being hidden inside definitions.
+- In Section 04, add external background only when the target reader needs it to understand a later design or result. Label the connection as `分析`, identify the canonical external source explicitly, and also cite the paper section and `PDF p.N` that make the prerequisite relevant. Do not imply that an external explanation or number came from the paper, and do not use external material to fill missing paper evidence.
+- Before conversion, apply the reader-first review gates: every prerequisite is reused, every major component answers a named problem or requirement, and every principal empirical conclusion maps to a claim-test pair with conditions and a caveat.
+- Do not hand-write HTML or storage tags in the source draft. Discussing a tag literal inside inline code does not count as hand-written markup. Ordinary Markdown links may target only `https://` URLs or same-page anchors; percent-encode parentheses in destinations. PDFs and images must use attachment blocks. Reader content must not contain absolute Windows, UNC, or POSIX local paths or `file://` URLs. Interface paths such as `/api/...` inside code are not treated as local filesystem paths.
 
-## Confluence 原生呈現對應
+## Native Confluence Rendering Mapping
 
-| HTML 摘要語意 | Confluence 呈現 |
+| HTML summary semantics | Confluence rendering |
 | --- | --- |
-| 頁面 `<h1>` | Confluence page title；body 不再重複 H1 |
-| 手工目錄 | `toc` storage macro，由轉換腳本自動加入 |
-| hero／properties | 原生 Markdown table／段落 |
-| evidence chip | 可見文字 `**[作者主張]**`、`**[實驗事實]**`、`**[分析]**`、`**[推測]**` |
-| source chip | 緊鄰主張的 `（來源：§4.2 · PDF p.7 · Figure 3）` |
-| HTML table | Markdown pipe table，轉為 Confluence table |
-| `<pre><code>`／MathJax | inline code 或 fenced code block；正文另解釋公式 |
-| `<img>`／本地 PDF link | page attachment reference；禁止本地絕對路徑與 `file://` |
-| CSS／JS／responsive／print | 不移植；使用 Confluence 原生版面並在實際頁面做視覺 QA |
+| Page `<h1>` | Confluence page title; do not repeat H1 in the body |
+| Hand-built table of contents | `toc` storage macro, inserted automatically by the converter |
+| Hero/properties | Native Markdown table or paragraph |
+| Evidence chip | Visible text `**[作者主張]**`, `**[實驗事實]**`, `**[分析]**`, or `**[推測]**` |
+| Source chip | `（來源：§4.2 · PDF p.7 · Figure 3）` immediately adjacent to the claim |
+| HTML table | Markdown pipe table converted to a Confluence table |
+| `<pre><code>` / MathJax | Inline code or fenced code block; explain the formula separately in prose |
+| `<img>` / local PDF link | Page attachment reference; absolute local paths and `file://` are prohibited |
+| CSS / JS / responsive / print | Do not migrate; use native Confluence layout and perform visual QA on the live page |
 
-四種 evidence label 是語意資訊，不得省略或改成只靠顏色的 status macro。每句含重要數值的主張都要在同一句帶 evidence label；來源必須同時含非空的原文章節／附錄定位與正整數 `PDF p.N`。只有 PDF 與印刷頁碼不同時才並列，例如 `PDF p.7（論文標示 p.5）`。
+The four evidence labels carry semantic information. Do not omit them or replace them with a color-only status macro. Every claim containing an important number must carry an evidence label in the same sentence. Its source must include both a nonempty source section or appendix location and a positive-integer `PDF p.N`. Include the printed page number only when it differs from the PDF page, for example `PDF p.7（論文標示 p.5）`.
 
 ## PDF attachment block
 
-在第 1 章使用一個 fenced JSON block。`file` 只能是論文資料夾根層的 PDF basename；`label` 是讀者看見的中性連結文字。不可放絕對路徑。
+Use one fenced JSON block in Section 1. `file` may contain only the PDF basename at the paper-folder root. `label` is neutral reader-visible link text. Do not include an absolute path.
 
 ````markdown
 ```paper-attachment
@@ -71,11 +74,11 @@ Confluence page title 充當唯一頁面標題，body 依下列順序使用 16 �
 ```
 ````
 
-允許可選的 `description`，但不得用來記錄下載、驗證或命名過程。每份摘要必須恰有一個 PDF attachment block。
+An optional `description` is allowed, but it must not record download, validation, or naming operations. Each summary must contain exactly one PDF attachment block.
 
 ## Image attachment block
 
-一般 Markdown image 語法不會被目前的 Atlassian CLI 轉成 Confluence attachment image，故每張圖使用 fenced JSON block：
+Because the current Atlassian CLI does not convert ordinary Markdown image syntax to a Confluence attachment image, use one fenced JSON block for each image:
 
 ````markdown
 ```paper-image
@@ -91,40 +94,41 @@ Confluence page title 充當唯一頁面標題，body 依下列順序使用 16 �
 ```
 ````
 
-規則：
+Rules:
 
-- `file` 必須是 `assets/images/` 下的 PNG、JPG 或 JPEG 相對路徑，且檔案存在、非空、signature 正確。不得使用 `..`、反斜線、URL 或絕對路徑。
-- `label` 只能是 `Figure N`、`Table N` 或 `Algorithm N` 形式的原物件編號；panel 可寫 `Figure 3(a)` 或 `Figure 3 (a)`。不可加入「原論文」、句點、頁碼或擷取說明。
-- `evidence` 必須是 `作者主張`、`實驗事實`、`分析` 或 `推測`，用來標示自撰導讀的證據類型；renderer 會顯示成粗體 label。
-- `alt` 描述圖片本身；`guide` 是非空的自撰導讀，不要自行加「導讀：」前綴，轉換器會加入。
-- `source` 至少包含原文章節、`PDF p.N` 與原物件編號。頁碼是證據定位，不混入 `label`。
-- `width` 可省略；若提供，必須是 200–1600 的整數。不要用寬度掩蓋解析度不足。
-- 同一 attachment filename 在同一頁只能代表同一張圖；更新圖檔會建立附件新版本。
-- 轉換器會將 `assets/images/` 的 PNG/JPEG 視為待審核 manifest，預設要求每張都被一個 `paper-image` 引用。若資料夾含確定不屬於此頁的保留素材，可在人工核對後使用 `--allow-unreferenced-images`；不得為了讓驗證通過而隨意刪除既有檔案。
-- 若論文有圖但摘要判斷無需擷取，不放 block，改寫 `**[分析]** 本摘要未擷取圖表：<理由>（來源：<原文章節> · PDF p.N）`。只有原文確實沒有相應資訊時才寫「論文未提供」。
+- `file` must be a relative PNG, JPG, or JPEG path under `assets/images/`. The file must exist, be nonempty, and have a valid signature. Do not use `..`, backslashes, URLs, or absolute paths.
+- `label` may contain only the original object number in the form `Figure N`, `Table N`, or `Algorithm N`. A panel may be written as `Figure 3(a)` or `Figure 3 (a)`. Do not add `原論文`, punctuation, a page number, or extraction notes.
+- `evidence` must be one of `作者主張`, `實驗事實`, `分析`, or `推測` to identify the evidence type of the original reading guide; the renderer displays it as a bold label.
+- `alt` describes the image itself. `guide` is a nonempty, original reading guide. Do not add the `導讀：` prefix yourself; the converter adds it.
+- `source` must include at least the source section, `PDF p.N`, and original object number. The page number is an evidence location and must not be mixed into `label`.
+- `width` is optional; when supplied, it must be an integer from 200 through 1600. Do not use width to hide inadequate resolution.
+- Within one page, a given attachment filename may represent only one image. Updating the image file creates a new attachment version.
+- The converter treats PNG/JPEG files under `assets/images/` as a manifest requiring review and, by default, requires each one to be referenced by a `paper-image` block. If the folder contains retained material confirmed not to belong on this page, use `--allow-unreferenced-images` only after manual review. Never delete an existing file casually just to make validation pass.
+- If the paper has figures but the summary does not require an extraction, omit the block and write `**[分析]** 本摘要未擷取圖表：<理由>（來源：<原文章節> · PDF p.N）` instead. Write `論文未提供` only when the source paper truly lacks the corresponding information.
 
-## 公式、表格與引用
+## Equations, Tables, and Quotations
 
-- 公式以可複製的 LaTeX 或清楚純文字呈現。行內公式放在 backticks；多行公式用 fenced code block。目前 renderer 不提供 equation directive，因此一律不要手寫、注入或事後修改成特定公式 macro。
-- 每個關鍵公式後說明變數、單位／系統意義、假設、與方法的關係及原文來源。不要把公式只做成圖片。
-- 可結構化數據優先用 Markdown table 重整；只有熱圖、複雜表頭或視覺配置本身重要時才以圖片附件呈現。
-- 不得從百分比反推論文未披露的絕對值，不得把不同工作負載的 best case 拼成單一代表數字。
-- 引用只做短摘錄與忠實改寫，保留 canonical link；不要大段複製原文。
+- Present equations as copyable LaTeX or clear plain text. Put inline equations in backticks and multiline equations in fenced code blocks. The current renderer provides no equation directive, so never hand-write, inject, or later convert them into a particular formula macro.
+- After every important equation, explain its variables, units or system meaning, assumptions, relationship to the method, and source in the paper. Do not present an equation only as an image.
+- Prefer restructuring data that can be represented structurally as a Markdown table. Use an image attachment only when a heatmap, complex header, or visual arrangement is itself important.
+- Do not derive undisclosed absolute values from percentages, and do not combine best cases from different workloads into one representative number.
+- Use only short excerpts and faithful paraphrases, retain the canonical link, and do not copy long passages from the paper.
 
-## Publish 模式的頁面與附件安全
+## Page and Attachment Safety in Publish Mode
 
-1. 只有進入 Publish 模式才先執行 `atl check`。不可在對話中詢問或保存 token。
-2. space key 必須明確；parent page 若未指定可放 space root，但必須在寫入前清楚告知。不可從同名 space 或 page 猜測。
-3. 建立前以 space + exact title 查重。若搜尋得到多個候選，停止並請使用者選擇。
-4. 由搜尋推得的 target 先 dry-run。任何 body replacement 都先讀取 current page 並取得使用者明確確認。
-5. 新頁用完整最終 storage body 一次建立，再上傳被引用的 PDF 與圖片。若其中一個附件失敗，保留已建立頁面，不自動刪除；修正後只重試缺失附件。
-6. 既有頁確認後以 `conf-update <pageId> --format storage --body-file <storage-file>` 完整重建 body；不以 append 發佈完整摘要，否則會產生第二套 16 章。沿用未變的既有附件，只上傳缺少或確實更新的檔案；append 只適合使用者明確要求的附錄或增補。
-7. 附件超過站台限制、權限不足或 API 部分失敗時，回報精確剩餘項目，不宣稱完整交付。
-8. create 回應不確定或連線中斷時，先以 space + exact title 查詢是否已建立，不能直接重送。attachment 回應不確定時，先依 pageId + filename 查附件與版本，避免無意建立新版本。
-9. Publish 成功 read-back 後，在論文資料夾原子寫入 `.confluence-page.json`，保存 site／spaceKey／pageId／title／parentId／page version，以及各 attachment 的 filename、本地 bytes／SHA-256、遠端 id／version。這是操作 sidecar，不可放入 page body。後續先以它解析 custom title 與 remote identity；identity 漂移時停止確認。
-10. 同名與同大小不能證明附件相同。只有 sidecar 的本地 hash 仍匹配目前檔案，且遠端 id／version 仍匹配 sidecar，才略過上傳；本地 hash 改變時建立新附件版本。缺 sidecar 或遠端 version 漂移時，先取得重傳決定，不能盲目增加版本。
+1. Run `atl check` only after entering Publish mode. Never request or store a token in the conversation.
+2. Require an explicit space key. An unspecified parent page may default to the space root, but disclose that destination clearly before writing. Do not guess from similarly named spaces or pages.
+3. Before creation, check for duplicates by space plus exact title. If the search returns multiple candidates, stop and ask the user to choose.
+4. Dry-run any target inferred from search. Before replacing a page body, read the current page and obtain the user's explicit confirmation.
+5. Create a new page once with the complete final storage body, then upload its referenced PDF and images. If an attachment fails, preserve the created page rather than deleting it automatically; after correction, retry only the missing attachment.
+6. After confirming an existing page, rebuild its complete body with `conf-update <pageId> --format storage --body-file <storage-file>`. Do not publish a complete summary with append, which would create a second set of 16 sections. Reuse unchanged existing attachments and upload only files that are missing or genuinely updated. Append is appropriate only for an appendix or supplement explicitly requested by the user.
+7. If an attachment exceeds the site limit, permissions are insufficient, or an API operation partially fails, report the exact remaining work and do not claim complete delivery.
+8. If a create response is uncertain or the connection is interrupted, query by space plus exact title before retrying. If an attachment response is uncertain, query by pageId plus filename and version to avoid creating an unintended new version.
+9. After successful Publish read-back, atomically write `.confluence-page.json` in the paper folder. Store the site, spaceKey, pageId, title, parentId, page version, and each attachment's filename, local bytes and SHA-256, plus remote id and version. This is an operational sidecar and must not enter the page body. Use it first on later runs to resolve a custom title and remote identity; stop for confirmation if identity has drifted.
+10. A matching filename and size do not prove that attachments are identical. Skip an upload only when the sidecar's local hash still matches the current file and the remote id and version still match the sidecar. Create a new attachment version when the local hash changes. If the sidecar is missing or the remote version has drifted, obtain a retransmission decision rather than blindly adding a version.
+11. If the source draft removes or renames an attachment, preserve the old remote attachment as historical stale content by default. The current body no longer references it, and the sidecar records only current references. Never delete it automatically merely to make the sets equal. Delete an attachment only when the user explicitly requests cleanup, after listing the exact filename and attachment id and rechecking the page references.
 
-Sidecar 使用下列最小 schema；不得加入 credential。`parentId` 沒有 parent 時為 `null`，附件陣列必須涵蓋 page 引用的 PDF 與每張圖片：
+Use the following minimum sidecar schema and never add credentials. `parentId` is `null` when no parent exists. The attachment array must contain exactly the PDF and images referenced by the current page and must exclude unreferenced historical stale attachments:
 
 ```json
 {
@@ -147,17 +151,17 @@ Sidecar 使用下列最小 schema；不得加入 credential。`parentId` 沒有 
 }
 ```
 
-## 發佈後驗證
+## Post-publish Verification
 
-- `conf-page <id> --format storage`：確認頁面是 current、title／space／parent／version 正確、含 TOC macro、16 個章節和所有 `ri:attachment` reference，且無 placeholder 或本地絕對路徑。
-- `conf-page <id>`：確認 Markdown read-back 可讀、標題順序正確、表格與 code 未丟失，重要數字仍有來源。
-- `/wiki/api/v2/pages/<id>/attachments?limit=250`：逐一核對 PDF／圖片 filename、media type、file size、version 與 pageId。`raw` 不會代替呼叫端自動分頁；只要回應仍有 `_links.next`／cursor，就用該 cursor 續查並累積結果，直到沒有下一頁，再做 reference、附件清單與 sidecar 的一一對應。
-- 瀏覽器：確認 TOC、圖片、caption、表格、長標題與窄視窗。圖片不可只顯示 broken placeholder；caption 不可混入裁圖／上傳日誌。
-- 本地轉換後：解析 storage XHTML 並再次核對唯一 TOC、無 H1、16 個 H2 的文字與順序、所有表格、公式／code block、evidence 與 PDF 來源標記、canonical link、圖片屬性與 caption，以及每個 attachment reference 恰好一次。產物含 `paper-reading-confluence` generator marker；`.storage.xhtml` 已存在時預設不覆寫，且 `--overwrite-output` 只接受含該 marker 的舊產物。
-- 若沒有 UI 或權限完成某項檢查，將它列為未完成驗證；不要把「尚未檢查」寫成「通過」。
+- `conf-page <id> --format storage`: Confirm that the page is current; title, space, parent, and version are correct; the TOC macro, all 16 sections, and every `ri:attachment` reference are present; and no placeholder or absolute local path remains.
+- `conf-page <id>`: Confirm that the Markdown read-back is readable, headings remain in order, tables and code are intact, and important numbers still have sources.
+- `/wiki/api/v2/pages/<id>/attachments?limit=250`: Verify the filename, media type, file size, version, and pageId of every currently referenced PDF and image. `raw` does not paginate automatically for its caller. While the response contains `_links.next` or a cursor, follow it and accumulate results until no next page remains. Every current reference must have exactly one match in the complete remote list and agree with the sidecar. Additional unreferenced historical attachments may be reported as stale; do not delete them automatically or fail this read-back because of them.
+- Browser: Verify the TOC, images, captions, tables, long title, and narrow viewport. Images must not appear only as broken placeholders, and captions must not contain cropping or upload logs.
+- After local conversion: Parse the storage XHTML and recheck that it contains exactly one TOC, no H1, all 16 H2 headings in order, every table, formulas or code blocks, evidence and PDF source markers, the canonical link, image attributes and captions, and each attachment reference exactly once. The artifact carries the `paper-reading-confluence` generator marker. An existing `.storage.xhtml` file is not overwritten by default, and `--overwrite-output` accepts only an old artifact containing that marker.
+- If UI access or permissions prevent a check, list it as incomplete verification. Never describe an unchecked item as passed.
 
-## 讀者內容邊界
+## Reader-visible Content Boundary
 
-頁面只保留理解、引用、評估或討論論文所需資訊。禁止寫入搜尋／下載過程、PDF signature／bytes／hash、頁碼 mapping 的操作說明、Windows 字元替換、檔案命名理由、絕對路徑、CLI／API request、認證狀態、渲染／裁圖命令、QA log 或「已檢查但無差異」的負面確認。
+Keep only information needed to understand, cite, evaluate, or discuss the paper. Do not include search or download procedures, PDF signatures, byte counts or hashes, operational page-number mapping details, Windows character substitutions, filename rationale, absolute paths, CLI or API requests, authentication state, rendering or cropping commands, QA logs, or negative confirmations that a check found no difference.
 
-這些資訊不得改標成「分析」或「推測」後留在頁面。若例外 materially 影響交付，只在最後回覆簡短說明。
+Do not relabel this operational information as `分析` or `推測` and leave it on the page. If an exception materially affects delivery, mention it briefly only in the final response.

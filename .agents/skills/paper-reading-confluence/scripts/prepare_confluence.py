@@ -29,6 +29,7 @@ from typing import Any, Iterable, Optional
 
 TEMPLATE_MARKER = "<!-- paper-reading-confluence-template:v1 -->"
 STORAGE_GENERATOR_MARKER = "<!-- generated-by:paper-reading-confluence/v1 -->"
+ESCAPED_PIPE_TOKEN = "PAPERCONFLUENCEESCAPEDPIPE"
 NO_IMAGE_MARKER = "**[分析]** 本摘要未擷取圖表："
 NO_IMAGE_ABSENCE_MARKER = "**[作者主張]** 論文未提供圖表"
 EXPECTED_SECTIONS = [
@@ -71,10 +72,11 @@ MARKDOWN_IMAGE_RE = re.compile(
     r"!\[[^\]\r\n]*\](?:\([^\r\n)]*\)|\[[^\]\r\n]*\])?"
 )
 WINDOWS_PATH_RE = re.compile(
-    r"(?i)(?:\b[A-Z]:[\\/]|\\\\\?\\|\\\\\.\\|(?<!:)(?:\\\\|//)[^\\/\s]+[\\/][^\\/\s]+)"
+    r"(?i)(?:(?<![A-Z0-9])[A-Z]:[\\/]|\\\\\?\\|\\\\\.\\|"
+    r"(?<!:)(?:\\\\|//)[^\\/\s]+[\\/][^\\/\s]+)"
 )
 POSIX_PATH_RE = re.compile(
-    r"(?<![:/A-Za-z0-9._-])/(?!/)[^/\s<>()\[\]{}，、。；！？]+"
+    r"(?<![/A-Za-z0-9._-])/(?!/)[^/\s<>()\[\]{}，、。；！？]+"
     r"(?:/[^/\s<>()\[\]{}，、。；！？]+)*"
 )
 FILESYSTEM_ROOTS = {
@@ -100,12 +102,52 @@ FILESYSTEM_ROOTS = {
     "var",
     "workspace",
 }
+LOCAL_FILE_SUFFIXES = {
+    ".bin",
+    ".ckpt",
+    ".csv",
+    ".dll",
+    ".docx",
+    ".exe",
+    ".gz",
+    ".html",
+    ".jpeg",
+    ".jpg",
+    ".js",
+    ".json",
+    ".log",
+    ".md",
+    ".pdf",
+    ".png",
+    ".pptx",
+    ".ps1",
+    ".pt",
+    ".pth",
+    ".py",
+    ".safetensors",
+    ".sh",
+    ".so",
+    ".tar",
+    ".toml",
+    ".ts",
+    ".tsv",
+    ".tsx",
+    ".txt",
+    ".xlsx",
+    ".xhtml",
+    ".xml",
+    ".yaml",
+    ".yml",
+    ".zip",
+}
 API_ROUTE_ROOTS = {"api", "generate", "graphql", "health", "healthz", "metrics"}
 HTTP_METHOD_PREFIX_RE = re.compile(
     r"(?:^|\s)(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+$", re.I
 )
 PATH_CUE_RE = re.compile(
-    r"(?:位於|路徑|檔案|目錄|資料夾|儲存(?:於|至)?|寫入(?:至|到)?|讀取自)$"
+    r"(?:位於|位在|路徑(?:是|為|在)?|檔案(?:在|位於)?|目錄(?:在|位於)?|"
+    r"資料夾(?:在|位於)?|儲存(?:在|於|至)?|存放(?:在|於|至)?|"
+    r"寫入(?:至|到)?|讀取(?:自)?|使用|載入(?:自)?|來自|取自|開啟|指向)$"
 )
 NESTED_PAREN_LINK_RE = re.compile(r"(?<!\!)\[[^\]\r\n]*\]\([^\r\n)]*\(")
 RAW_HTML_RE = re.compile(
@@ -187,6 +229,90 @@ def _inline_plain(text: str, markup: ModuleType, *, omit_code: bool = False) -> 
     )
 
 
+def _mask_escaped_table_pipes(text: str) -> str:
+    """Protect escaped pipes in table cells from the shared Markdown splitter."""
+    lines = text.splitlines(keepends=True)
+    plain_lines = [line.rstrip("\r\n") for line in lines]
+    fenced: list[bool] = []
+    in_fence = False
+    fence_start = re.compile(r"^\s*(?:`{3,}|~{3,})\s*[\w+#.-]*\s*$")
+    fence_end = re.compile(r"^\s*(?:`{3,}|~{3,})\s*$")
+    for line in plain_lines:
+        if in_fence:
+            fenced.append(True)
+            if fence_end.match(line):
+                in_fence = False
+        elif fence_start.match(line):
+            fenced.append(True)
+            in_fence = True
+        else:
+            fenced.append(False)
+
+    def is_table_delimiter(line: str) -> bool:
+        cells = line.strip().strip("|").split("|")
+        return bool(cells) and all(
+            re.fullmatch(r"\s*:?-+:?\s*", cell) for cell in cells
+        )
+
+    table_lines: set[int] = set()
+    index = 0
+    while index + 1 < len(lines):
+        if (
+            not fenced[index]
+            and not fenced[index + 1]
+            and "|" in plain_lines[index].strip()
+            and is_table_delimiter(plain_lines[index + 1])
+        ):
+            table_lines.update({index, index + 1})
+            cursor = index + 2
+            while (
+                cursor < len(lines)
+                and not fenced[cursor]
+                and "|" in plain_lines[cursor]
+                and plain_lines[cursor].strip()
+            ):
+                table_lines.add(cursor)
+                cursor += 1
+            index = cursor
+        else:
+            index += 1
+
+    escaped_pipe = re.compile(r"(\\+)\|")
+
+    def protect(match: re.Match[str]) -> str:
+        slashes = match.group(1)
+        if len(slashes) % 2 == 0:
+            return match.group(0)
+        return "\\" * (len(slashes) // 2) + ESCAPED_PIPE_TOKEN
+
+    output: list[str] = []
+    for index, line in enumerate(lines):
+        if index not in table_lines:
+            output.append(line)
+            continue
+        body = line.rstrip("\r\n")
+        newline = line[len(body) :]
+        # Normalizing internal table lines with outer separators preserves the
+        # shared parser's row detection even when a one-cell row's only pipe
+        # was escaped and has therefore become a token.
+        output.append("|" + escaped_pipe.sub(protect, body.strip()) + "|" + newline)
+    return "".join(output)
+
+
+def _restore_escaped_pipes(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.replace(ESCAPED_PIPE_TOKEN, "|")
+    if isinstance(value, list):
+        return [_restore_escaped_pipes(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _restore_escaped_pipes(item) for key, item in value.items()}
+    return value
+
+
+def _parse_blocks(text: str, markup: ModuleType) -> list[dict[str, Any]]:
+    return _restore_escaped_pipes(markup.parse_blocks(_mask_escaped_table_pipes(text)))
+
+
 def _contains_material_number(statement: str) -> bool:
     """Detect numbers other than source/object locators and canonical URLs."""
     scrubbed = re.sub(r"https://\S+", "", statement, flags=re.I)
@@ -221,11 +347,19 @@ def _contains_posix_path(text: str, *, allow_api_endpoint: bool = False) -> bool
         candidate = match.group(0)
         endpoint = candidate.rstrip(".,;:!?。；，、'\"")
         route_path = re.split(r"[?#]", endpoint, maxsplit=1)[0]
+        route_tail = endpoint[len(route_path) :]
         components = [part for part in route_path.lstrip("/").split("/") if part]
         first_component = components[0].casefold() if components else ""
         prefix = text[max(0, match.start() - 24) : match.start()]
 
         if allow_api_endpoint:
+            safe_route_tail = not route_tail or not _contains_posix_path(
+                route_tail, allow_api_endpoint=True
+            )
+            if not safe_route_tail:
+                # A valid route does not excuse an absolute path embedded in a
+                # query or fragment, e.g. GET /load?path=/home/user/file.pdf.
+                return True
             route_syntax = re.fullmatch(
                 r"/[A-Za-z0-9._~:%-]+(?:/[A-Za-z0-9._~:%-]+)*(?:[?#][^\s]*)?",
                 endpoint,
@@ -244,18 +378,28 @@ def _contains_posix_path(text: str, *, allow_api_endpoint: bool = False) -> bool
         previous = text[match.start() - 1] if match.start() else ""
         previous_is_cjk = "\u3400" <= previous <= "\u9fff"
         lexical_components = bool(components) and all(
-            re.fullmatch(r"[\w~-]+", component, re.UNICODE)
+            re.fullmatch(r"[\w.~-]+", component, re.UNICODE)
             for component in components
         )
+        first_starts_ascii = bool(
+            first_component and re.match(r"[A-Za-z0-9._~-]", first_component)
+        )
+        location_context = first_starts_ascii and bool(
+            PATH_CUE_RE.search(prefix) or re.search(r"[從由往向於到至在]$", prefix)
+        )
+        last_component = components[-1] if components else ""
+        last_ascii_match = re.match(r"[A-Za-z0-9._~-]+", last_component)
+        last_ascii = last_ascii_match.group(0) if last_ascii_match else last_component
+        last_suffix = PurePosixPath(last_ascii).suffix.casefold()
         has_path_signal = (
             first_component in FILESYSTEM_ROOTS
-            or any("." in component for component in components)
+            or last_suffix in LOCAL_FILE_SUFFIXES
             or any(component in {".", ".."} for component in components)
         )
         if (
             previous_is_cjk
             and lexical_components
-            and not PATH_CUE_RE.search(prefix)
+            and not location_context
             and not has_path_signal
         ):
             # Slash-delimited Chinese prose and bilingual terms, such as
@@ -463,7 +607,7 @@ def _parse_directives(text: str, paper_dir: Path, errors: list[str]) -> list[Dir
 
 
 def _analyze_markdown(text: str, markup: ModuleType) -> SemanticSummary:
-    blocks = markup.parse_blocks(text.replace(TEMPLATE_MARKER, ""))
+    blocks = _parse_blocks(text.replace(TEMPLATE_MARKER, ""), markup)
     headings: list[tuple[str, str]] = []
     content_counts: dict[int, int] = {index: 0 for index in range(1, 17)}
     prose_units: dict[int, list[str]] = {index: [] for index in range(1, 17)}
@@ -586,6 +730,8 @@ def validate_draft(
         errors.append(f"來源稿必須恰有一個模板版本標記 `{TEMPLATE_MARKER}`")
     if XML_INVALID_RE.search(text):
         errors.append("來源稿含 XML 1.0 不允許的控制字元或 Unicode surrogate")
+    if ESCAPED_PIPE_TOKEN in text:
+        errors.append("來源稿含保留的內部 escaped-pipe token")
 
     placeholders = sorted(set(PLACEHOLDER_RE.findall(text)))
     if placeholders:
@@ -594,9 +740,6 @@ def validate_draft(
         errors.append(f"仍有未填 placeholder：{preview}{suffix}")
     if re.search(r"(?im)^\s*(?:TODO|TBD)(?:\s|:|$)", text):
         errors.append("來源稿仍含 TODO／TBD")
-    if re.search(r"(?m)^\s*\|.*\\\|.*\|\s*$", text):
-        errors.append("目前 Confluence converter 不支援 table cell 內的 escaped pipe；請改寫內容")
-
     semantic = _analyze_markdown(text, markup)
     prose_by_section = {
         section: "\n".join(units) for section, units in semantic.prose_units.items()
@@ -1042,7 +1185,7 @@ def _validate_storage_structure(
     if image_count != expected_images:
         errors.append(f"storage XHTML 圖片數量不符：預期 {expected_images}，實際 {image_count}")
 
-    source_blocks = markup.parse_blocks(source_text.replace(TEMPLATE_MARKER, ""))
+    source_blocks = _parse_blocks(source_text.replace(TEMPLATE_MARKER, ""), markup)
     expected_tables: list[list[list[str]]] = []
     expected_code: list[tuple[str, str]] = []
     for block in source_blocks:
@@ -1136,7 +1279,7 @@ def _validate_storage_structure(
                 active_text.append(str(span.get("text") or ""))
         flush()
 
-    for block in markup.parse_blocks(contract_source):
+    for block in _parse_blocks(contract_source, markup):
         kind = block["type"]
         if kind in {"paragraph", "heading", "quote"}:
             block_text = str(block.get("text") or "")
@@ -1322,7 +1465,8 @@ def render_storage(text: str, directives: Iterable[Directive], markup: ModuleTyp
 
     prepared = DIRECTIVE_RE.sub(replace_block, text)
     prepared = prepared.replace(TEMPLATE_MARKER, "")
-    storage = markup.md_to_storage(prepared)
+    storage = markup.md_to_storage(_mask_escaped_table_pipes(prepared))
+    storage = storage.replace(ESCAPED_PIPE_TOKEN, "|")
 
     for item in directive_list:
         token_paragraph = f"<p>{item.token}</p>"
@@ -1520,6 +1664,29 @@ def run_self_test(atlassian_cli: Path) -> None:
     source = paper_dir / "confluence-summary.md"
     draft = _sample_markdown("Formal Paper Title.pdf")
     markup = _load_atlassian_markup(atlassian_cli)
+    one_column_table = "A\\|B\n---\nC\\|D\n"
+    one_column_blocks = _parse_blocks(one_column_table, markup)
+    if not (
+        len(one_column_blocks) == 1
+        and one_column_blocks[0].get("type") == "table"
+        and one_column_blocks[0].get("header") == ["A|B"]
+        and one_column_blocks[0].get("rows") == [["C|D"]]
+    ):
+        raise DraftError("self-test one-column escaped-pipe table parsing failed")
+    one_column_storage = markup.md_to_storage(
+        _mask_escaped_table_pipes(one_column_table)
+    ).replace(ESCAPED_PIPE_TOKEN, "|")
+    if "A|B" not in one_column_storage or "C|D" not in one_column_storage:
+        raise DraftError("self-test one-column escaped-pipe table rendering failed")
+    padded_table = "  | A | B |  \n  | --- | --- |  \n  | C\\|D | E |  \n"
+    padded_blocks = _parse_blocks(padded_table, markup)
+    if not (
+        len(padded_blocks) == 1
+        and padded_blocks[0].get("type") == "table"
+        and padded_blocks[0].get("header") == ["A", "B"]
+        and padded_blocks[0].get("rows") == [["C|D", "E"]]
+    ):
+        raise DraftError("self-test padded escaped-pipe table parsing failed")
 
     def validate_without_disk(
         candidate: str, *, allow_legacy_folder_title: bool = False
@@ -1598,6 +1765,35 @@ def run_self_test(atlassian_cli: Path) -> None:
         raise DraftError("self-test safe title punctuation loss unexpectedly passed")
     if not _folder_matches_formal_title("Title: Subtitle", "Title - Subtitle"):
         raise DraftError("self-test Windows-unsafe title substitution unexpectedly failed")
+    escaped_pipe_title = draft.replace(
+        "| 正式標題 | Formal Paper Title |",
+        "| 正式標題 | Formal\\|Paper Title |",
+        1,
+    )
+    escaped_pipe_directives = validate_without_disk(escaped_pipe_title)
+    escaped_pipe_storage = render_storage(
+        escaped_pipe_title, escaped_pipe_directives, markup
+    )
+    if "Formal|Paper Title" not in escaped_pipe_storage or "Formal\\|Paper Title" in escaped_pipe_storage:
+        raise DraftError("self-test escaped metadata pipe 未無損轉換")
+    borderless_pipe_title = re.sub(
+        r"(?m)^\| (.*?) \|$", r"\1", escaped_pipe_title
+    )
+    borderless_directives = validate_without_disk(borderless_pipe_title)
+    borderless_storage = render_storage(
+        borderless_pipe_title, borderless_directives, markup
+    )
+    if "Formal|Paper Title" not in borderless_storage:
+        raise DraftError("self-test borderless table escaped pipe 未無損轉換")
+    odd_pipe_author = draft.replace(
+        "| 作者 | 測試作者 |",
+        "| 作者 | A" + "\\" * 3 + "|B |",
+        1,
+    )
+    odd_pipe_directives = validate_without_disk(odd_pipe_author)
+    odd_pipe_storage = render_storage(odd_pipe_author, odd_pipe_directives, markup)
+    if "A\\|B" not in odd_pipe_storage or "A" + "\\" * 3 + "|B" in odd_pipe_storage:
+        raise DraftError("self-test odd-parity escaped pipe 未依 CommonMark 語意轉換")
 
     legitimate_validation_claim = draft.replace(
         "**[分析]** 測試內容。（來源：§1 · PDF p.1）",
@@ -1605,7 +1801,9 @@ def run_self_test(atlassian_cli: Path) -> None:
         1,
     ).replace(
         "**[作者主張]** 測試摘要。",
-        "**[作者主張]** 測試摘要，並討論讀取/寫入/同步、效能/performance 與 inline code `<table>`。",
+        "**[作者主張]** 測試摘要，並討論讀取/寫入/同步、效能/performance、"
+        "模型/Llama-3.1/評估、版本/v1.2/比較、精度/FP8/BF16、"
+        "架構/client/server、流程/read/write/sync 與 inline code `<table>`。",
         1,
     ).replace(
         "T = max(a, b)",
@@ -1615,7 +1813,10 @@ def run_self_test(atlassian_cli: Path) -> None:
         "POST /generate\n"
         "/healthz\n"
         "/metrics\n"
-        "/graphql",
+        "/graphql\n"
+        "GET /proxy?target=/v1/models\n"
+        "GET /redirect?next=/healthz\n"
+        "/api/v1/test?endpoint=/generate",
         1,
     )
     validate_without_disk(legitimate_validation_claim)
@@ -1778,8 +1979,13 @@ def run_self_test(atlassian_cli: Path) -> None:
             "**[作者主張]** [測試](https://example.com/item_(v2)) 摘要。",
             1,
         ),
-        "escaped pipe inside table": draft.replace(
-            "| 作者 | 測試作者 |", "| 作者 | p50 \\| p99 |", 1
+        "reserved escaped-pipe token": draft.replace(
+            "| 作者 | 測試作者 |", f"| 作者 | {ESCAPED_PIPE_TOKEN} |", 1
+        ),
+        "even-parity table pipe remains delimiter": draft.replace(
+            "| 作者 | 測試作者 |",
+            "| 作者 | A" + "\\" * 2 + "|B |",
+            1,
         ),
         "raw HTML": draft.replace(
             "**[作者主張]** 測試摘要。",
@@ -1789,6 +1995,11 @@ def run_self_test(atlassian_cli: Path) -> None:
         "Windows path": draft.replace(
             "**[作者主張]** 測試摘要。",
             "**[作者主張]** 測試摘要位於 C:/Users/example/paper。",
+            1,
+        ),
+        "CJK-adjacent Windows path": draft.replace(
+            "**[作者主張]** 測試摘要。",
+            "**[作者主張]** 測試摘要位於C:\\Users\\example\\paper.pdf。",
             1,
         ),
         "forward-slash UNC path": draft.replace(
@@ -1811,6 +2022,36 @@ def run_self_test(atlassian_cli: Path) -> None:
             "**[作者主張]** 摘要來源位於/home/user/paper.pdf。",
             1,
         ),
+        "ASCII-colon-adjacent POSIX absolute path": draft.replace(
+            "**[作者主張]** 測試摘要。",
+            "**[作者主張]** 摘要路徑:/home/user/paper.pdf。",
+            1,
+        ),
+        "CJK-adjacent unknown POSIX root": draft.replace(
+            "**[作者主張]** 測試摘要。",
+            "**[作者主張]** 從/scratch/models載入權重的測試摘要。",
+            1,
+        ),
+        "CJK noun-location unknown POSIX root": draft.replace(
+            "**[作者主張]** 測試摘要。",
+            "**[作者主張]** 測試檔案在/scratch/project。",
+            1,
+        ),
+        "CJK use-prefix unknown POSIX root": draft.replace(
+            "**[作者主張]** 測試摘要。",
+            "**[作者主張]** 使用/scratch/models中的權重。",
+            1,
+        ),
+        "CJK use-prefix glued file path": draft.replace(
+            "**[作者主張]** 測試摘要。",
+            "**[作者主張]** 使用/scratch/model.bin載入。",
+            1,
+        ),
+        "CJK use-prefix single path": draft.replace(
+            "**[作者主張]** 測試摘要。",
+            "**[作者主張]** 使用/scratch 載入。",
+            1,
+        ),
         "single-component POSIX absolute path": draft.replace(
             "**[作者主張]** 測試摘要。",
             "**[作者主張]** 測試摘要位於 /tmp。",
@@ -1827,6 +2068,22 @@ def run_self_test(atlassian_cli: Path) -> None:
         ),
         "POSIX path hidden in fenced code": draft.replace(
             "T = max(a, b)", "/data/user/paper.pdf",
+            1,
+        ),
+        "POSIX path hidden in API query": draft.replace(
+            "T = max(a, b)", "GET /load?path=/home/user/secret.pdf",
+            1,
+        ),
+        "POSIX path disguised as query route": draft.replace(
+            "T = max(a, b)", "/home/user?download=1",
+            1,
+        ),
+        "unknown-root POSIX path disguised as query route": draft.replace(
+            "T = max(a, b)", "/scratch/models?download=1",
+            1,
+        ),
+        "POSIX path disguised as fragment route": draft.replace(
+            "T = max(a, b)", "/tmp/file#details",
             1,
         ),
         "paper image without evidence type": draft.replace(
