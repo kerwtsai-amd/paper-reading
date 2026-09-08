@@ -1,0 +1,84 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Validate public summary sources
+        shell: pwsh
+        run: |
+          $root = (Get-Location).Path
+          $validator = Join-Path $root '.agents/skills/paper-reading/scripts/validate-summary.ps1'
+          $summaries = @(
+            Get-ChildItem -LiteralPath $root -Recurse -File -Filter 'summary.html' |
+              Where-Object {
+                $relative = [IO.Path]::GetRelativePath($root, $_.FullName)
+                $parts = @($relative -split '[\\/]')
+                $parts.Count -eq 4 -and
+                  @($parts | Where-Object { $_.StartsWith('.') }).Count -eq 0
+              } |
+              Sort-Object FullName
+          )
+          if ($summaries.Count -eq 0) {
+            throw 'No paper summaries were found.'
+          }
+          foreach ($summary in $summaries) {
+            & pwsh -NoProfile -File $validator -PaperDirectory $summary.DirectoryName -PublicCheck
+            if ($LASTEXITCODE -ne 0) {
+              throw "Public summary validation failed: $($summary.DirectoryName)"
+            }
+          }
+
+      - name: Test site builder
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Test public validator mode
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/test-public-validator.ps1
+
+      - name: Check publishable summaries
+        run: python3 scripts/build_site.py --check
+
+      - name: Build static site
+        run: python3 scripts/build_site.py
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./_site
+          include-hidden-files: true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -1,0 +1,8 @@
+{
+  "teams": {
+    "destinationType": "chat",
+    "chatId": "<verified-chat-or-channel-id>",
+    "notifyOnFailure": true,
+    "notifyWhenNoPaperQualifies": false
+  }
+}

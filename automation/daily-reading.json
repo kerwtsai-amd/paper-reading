@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "timezone": "Asia/Taipei",
+  "selection": {
+    "dailyMaxPapers": 1,
+    "lookback": {
+      "days": 7,
+      "dateField": "submittedOrPublished"
+    }
+  },
+  "topics": [],
+  "quality": {
+    "requireCanonicalLandingPage": true,
+    "requireFullText": true,
+    "requireAbstract": true,
+    "requireCompleteAuthorList": true,
+    "preferPrimarySources": true,
+    "preferPeerReviewed": false
+  },
+  "deduplication": {
+    "keysInPriorityOrder": [
+      "doi",
+      "arxivId",
+      "normalizedTitle"
+    ],
+    "scanExistingSummaries": true,
+    "skipPreviouslyProcessed": true
+  }
+}

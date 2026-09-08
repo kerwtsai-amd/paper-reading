@@ -1,0 +1,947 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="1.2.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="notion-inspired-v1">
+  <meta name="description" content="{{META_DESCRIPTION}}">
+  <title>{{PAPER_TITLE}}｜Paper Reading</title>
+
+  <style>
+    :root {
+      --page: #ffffff;
+      --text: #37352f;
+      --heading: #2f2e2a;
+      --muted: #787774;
+      --subtle: #9b9a97;
+      --line: #e9e9e7;
+      --surface: #f7f6f3;
+      --surface-hover: #efefed;
+      --link: #0b6bcb;
+      --selection: #d9eaf7;
+      --claim-bg: #f3f0ff;
+      --claim-accent: #6940a5;
+      --fact-bg: #edf7ed;
+      --fact-accent: #287d3c;
+      --analysis-bg: #eef5fb;
+      --analysis-accent: #276f9e;
+      --speculation-bg: #fff4e5;
+      --speculation-accent: #a05a00;
+      --content-width: 780px;
+      --toc-width: 232px;
+      --layout-gap: 44px;
+      --radius: 8px;
+      --shadow: 0 1px 2px rgb(15 15 15 / 4%), 0 3px 12px rgb(15 15 15 / 3%);
+      --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 28px;
+      background: var(--page);
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--page);
+      font-family: var(--font-sans);
+      font-size: 16.5px;
+      line-height: 1.75;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: var(--selection); }
+
+    a {
+      color: var(--link);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(11 107 203 / 34%);
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: 12px;
+      left: 12px;
+      transform: translateY(-160%);
+      padding: 8px 12px;
+      color: #fff;
+      background: var(--heading);
+      border-radius: 6px;
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .reading-progress {
+      position: fixed;
+      z-index: 90;
+      inset: 0 0 auto;
+      height: 3px;
+      background: transparent;
+    }
+
+    .reading-progress__bar {
+      display: block;
+      width: 0;
+      height: 100%;
+      background: var(--heading);
+      transition: width 100ms linear;
+    }
+
+    .paper-hero {
+      width: min(calc(100% - 40px), calc(var(--toc-width) + var(--layout-gap) + var(--content-width)));
+      margin: 0 auto;
+      padding: 68px 0 34px calc(var(--toc-width) + var(--layout-gap));
+      border-bottom: 1px solid var(--line);
+    }
+
+    .page-icon {
+      display: grid;
+      width: 64px;
+      height: 64px;
+      margin-bottom: 22px;
+      place-items: center;
+      color: #4b4a46;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      font-size: 32px;
+      line-height: 1;
+    }
+
+    .breadcrumb {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .015em;
+    }
+
+    .breadcrumb span[aria-hidden="true"] { color: var(--subtle); }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      line-height: 1.25;
+      letter-spacing: -.018em;
+    }
+
+    h1 {
+      max-width: 930px;
+      margin: 0;
+      font-size: clamp(2.15rem, 4.5vw, 3.45rem);
+      font-weight: 750;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-byline {
+      max-width: 850px;
+      margin: 15px 0 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .properties {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0 28px;
+      max-width: 780px;
+      margin: 30px 0 0;
+      padding: 0;
+    }
+
+    .property {
+      display: grid;
+      grid-template-columns: 112px minmax(0, 1fr);
+      gap: 12px;
+      align-items: baseline;
+      min-width: 0;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .property dt {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .property dd {
+      min-width: 0;
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 25px;
+      padding: 2px 9px;
+      color: #4d4c48;
+      background: #e9e9e7;
+      border-radius: 999px;
+      font-size: 12.5px;
+      font-weight: 650;
+      line-height: 1.4;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .button-link {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      min-height: 38px;
+      padding: 7px 12px;
+      color: var(--text);
+      background: var(--page);
+      border: 1px solid #d8d8d5;
+      border-radius: 7px;
+      box-shadow: 0 1px 1px rgb(15 15 15 / 3%);
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .button-link:hover { background: var(--surface); }
+
+    .page-layout {
+      display: grid;
+      grid-template-columns: var(--toc-width) minmax(0, var(--content-width));
+      gap: var(--layout-gap);
+      width: min(calc(100% - 40px), calc(var(--toc-width) + var(--layout-gap) + var(--content-width)));
+      margin: 0 auto;
+      padding: 44px 0 88px;
+    }
+
+    .toc-shell { min-width: 0; }
+
+    .toc {
+      position: sticky;
+      top: 28px;
+      max-height: calc(100vh - 56px);
+      overflow: auto;
+      padding-right: 10px;
+      scrollbar-width: thin;
+    }
+
+    .toc__label {
+      margin: 0 0 10px;
+      color: var(--subtle);
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+
+    .toc ol {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .toc a {
+      display: grid;
+      grid-template-columns: 25px minmax(0, 1fr);
+      gap: 5px;
+      padding: 5px 7px;
+      color: var(--muted);
+      border-radius: 5px;
+      font-size: 12.5px;
+      line-height: 1.4;
+      text-decoration: none;
+    }
+
+    .toc a:hover,
+    .toc a[aria-current="location"] {
+      color: var(--text);
+      background: var(--surface);
+    }
+
+    .toc__number {
+      color: var(--subtle);
+      font-variant-numeric: tabular-nums;
+    }
+
+    main { min-width: 0; }
+
+    .reading-note {
+      margin: 0 0 44px;
+      padding: 18px 20px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .reading-note h2 {
+      margin: 0 0 7px;
+      font-size: 15px;
+    }
+
+    .reading-note p,
+    .reading-note ul { margin-top: 7px; margin-bottom: 0; }
+
+    .paper-section {
+      padding: 9px 0 48px;
+      scroll-margin-top: 26px;
+    }
+
+    .paper-section + .paper-section { border-top: 1px solid var(--line); }
+
+    .section-heading {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 8px;
+      align-items: baseline;
+      margin: 25px 0 22px;
+    }
+
+    .section-number {
+      color: var(--subtle);
+      font-size: 13px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .section-heading h2 {
+      margin: 0;
+      font-size: clamp(1.45rem, 3vw, 1.9rem);
+      font-weight: 720;
+    }
+
+    h3 {
+      margin: 32px 0 10px;
+      font-size: 1.16rem;
+      font-weight: 700;
+    }
+
+    h4 {
+      margin: 25px 0 8px;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    p { margin: 0 0 1em; }
+
+    ul, ol { padding-left: 1.45em; }
+    li + li { margin-top: .32em; }
+
+    strong { color: var(--heading); }
+
+    .lead {
+      color: var(--heading);
+      font-size: 1.17rem;
+      line-height: 1.7;
+    }
+
+    .muted { color: var(--muted); }
+
+    .statement {
+      margin: 20px 0;
+      padding: 15px 18px 15px 20px;
+      border: 1px solid transparent;
+      border-left-width: 4px;
+      border-radius: var(--radius);
+    }
+
+    .statement p:last-child { margin-bottom: 0; }
+
+    .statement__label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .055em;
+    }
+
+    .statement--claim {
+      background: var(--claim-bg);
+      border-color: #ded5f0;
+      border-left-color: var(--claim-accent);
+    }
+    .statement--claim .statement__label { color: var(--claim-accent); }
+
+    .statement--fact {
+      background: var(--fact-bg);
+      border-color: #cfe7d2;
+      border-left-color: var(--fact-accent);
+    }
+    .statement--fact .statement__label { color: var(--fact-accent); }
+
+    .statement--analysis {
+      background: var(--analysis-bg);
+      border-color: #d0e1ee;
+      border-left-color: var(--analysis-accent);
+    }
+    .statement--analysis .statement__label { color: var(--analysis-accent); }
+
+    .statement--speculation {
+      background: var(--speculation-bg);
+      border-color: #efdabc;
+      border-left-color: var(--speculation-accent);
+    }
+    .statement--speculation .statement__label { color: var(--speculation-accent); }
+
+    .source-ref {
+      display: inline-flex;
+      align-items: center;
+      min-height: 23px;
+      margin: 2px 2px 2px 0;
+      padding: 2px 8px;
+      color: #5c5b57;
+      background: rgb(255 255 255 / 72%);
+      border: 1px solid rgb(55 53 47 / 16%);
+      border-radius: 999px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      line-height: 1.35;
+      text-decoration: none;
+      vertical-align: .08em;
+    }
+
+    .source-ref:hover { background: #fff; }
+
+    .key-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 20px 0;
+    }
+
+    .key-card {
+      min-width: 0;
+      padding: 15px 16px;
+      background: var(--page);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .key-card__eyebrow {
+      margin: 0 0 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 30px 0;
+      padding: 10px;
+      background: #fbfbfa;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+
+    figure > a {
+      display: block;
+      line-height: 0;
+    }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+      border-radius: 6px;
+    }
+
+    figcaption {
+      padding: 11px 5px 4px;
+      color: var(--muted);
+      font-size: 13.5px;
+      line-height: 1.55;
+    }
+
+    figcaption strong { color: var(--text); }
+
+    .reading-guide {
+      display: block;
+      margin-top: 5px;
+      color: var(--text);
+    }
+
+    .formula-block {
+      margin: 22px 0;
+      padding: 18px 20px;
+      overflow-x: auto;
+      background: #fbfbfa;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .formula-block__meaning {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 22px 0;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    caption {
+      padding: 12px 14px;
+      color: var(--muted);
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+      font-size: 12.5px;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 118px;
+      padding: 10px 12px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    tr:last-child > * { border-bottom: 0; }
+    tr > *:last-child { border-right: 0; }
+    th { color: var(--heading); background: #fbfbfa; font-weight: 700; }
+
+    code, pre { font-family: var(--font-mono); }
+
+    :not(pre) > code {
+      padding: .12em .32em;
+      color: #c7254e;
+      background: #f7f6f3;
+      border-radius: 4px;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 22px 0;
+      padding: 16px 18px;
+      overflow: auto;
+      color: #383a42;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      font-size: 13px;
+      line-height: 1.6;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 20px 0;
+      padding: 2px 0 2px 18px;
+      color: var(--muted);
+      border-left: 3px solid #d3d3d0;
+    }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(140px, .75fr) minmax(0, 2fr);
+      margin: 20px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: 11px 8px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 20px 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 8px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      content: counter(source, decimal-leading-zero);
+      color: var(--subtle);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .page-footer {
+      width: min(calc(100% - 40px), var(--content-width));
+      margin: 0 auto;
+      padding: 25px 0 45px;
+      color: var(--subtle);
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 1099px) {
+      .paper-hero {
+        width: min(calc(100% - 48px), var(--content-width));
+        padding: 56px 0 30px;
+      }
+
+      .page-layout {
+        display: block;
+        width: min(calc(100% - 48px), var(--content-width));
+        padding-top: 28px;
+      }
+
+      .toc {
+        position: static;
+        max-height: none;
+        margin-bottom: 44px;
+        padding: 15px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+
+      .toc ol { columns: 2; column-gap: 18px; }
+      .toc li { break-inside: avoid; }
+    }
+
+    @media (max-width: 699px) {
+      body { font-size: 16px; }
+
+      .paper-hero,
+      .page-layout,
+      .page-footer { width: min(calc(100% - 30px), var(--content-width)); }
+
+      .paper-hero { padding-top: 38px; }
+      .page-icon { width: 54px; height: 54px; font-size: 27px; }
+
+      .properties,
+      .key-grid { grid-template-columns: 1fr; }
+
+      .property { grid-template-columns: 96px minmax(0, 1fr); }
+      .toc ol { columns: 1; }
+      .section-heading { grid-template-columns: 29px minmax(0, 1fr); }
+      .paper-section { padding-bottom: 38px; }
+      .statement { padding-right: 14px; padding-left: 15px; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: 2px; border-bottom: 0; }
+      .term-list dd { padding-top: 2px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition-duration: .01ms !important; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 15mm 14mm 17mm; }
+
+      .skip-link,
+      .reading-progress,
+      .toc-shell,
+      .screen-only { display: none !important; }
+
+      body {
+        color: #000;
+        background: #fff;
+        font-size: 10.5pt;
+      }
+
+      .paper-hero,
+      .page-layout,
+      .page-footer {
+        display: block;
+        width: 100%;
+        margin: 0;
+        padding-right: 0;
+        padding-left: 0;
+      }
+
+      .paper-hero { padding-top: 0; }
+      .page-icon { box-shadow: none; }
+      .button-link { box-shadow: none; }
+      .button-link::after { content: " (" attr(href) ")"; font-weight: 400; }
+      a { color: #000; }
+
+      figure,
+      table,
+      pre,
+      .statement,
+      .formula-block,
+      .key-card { break-inside: avoid; }
+
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .statement { background: #fff !important; border-color: #777 !important; }
+      .source-ref { background: #fff; border-color: #999; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+  <div class="reading-progress screen-only" aria-hidden="true"><span class="reading-progress__bar"></span></div>
+
+  <header class="paper-hero">
+    <div class="page-icon" aria-hidden="true">▤</div>
+    <p class="breadcrumb">
+      <span>Paper Reading</span>
+      <span aria-hidden="true">/</span>
+      <span>{{TOPIC}}</span>
+      <span aria-hidden="true">/</span>
+      <span>{{SUBTOPIC}}</span>
+    </p>
+    <h1>{{PAPER_TITLE}}</h1>
+    <p class="paper-byline">{{AUTHORS_TEXT}}</p>
+
+    <dl class="properties">
+      <div class="property">
+        <dt>發表資訊</dt>
+        <dd>{{VENUE_OR_ARCHIVE}}</dd>
+      </div>
+      <div class="property">
+        <dt>年份</dt>
+        <dd>{{YEAR}}</dd>
+      </div>
+      <div class="property">
+        <dt>分類</dt>
+        <dd><span class="tag">{{TOPIC}} / {{SUBTOPIC}}</span></dd>
+      </div>
+      <div class="property">
+        <dt>摘要更新</dt>
+        <dd><time datetime="{{LAST_UPDATED_ISO}}">{{LAST_UPDATED_DISPLAY}}</time></dd>
+      </div>
+    </dl>
+
+    <div class="hero-actions">
+      <a class="button-link" href="{{PAPER_URL}}" target="_blank" rel="noopener noreferrer">↗ 論文頁面</a>
+      <a class="button-link" href="{{LOCAL_PDF_HREF}}">↓ 開啟本地 PDF</a>
+    </div>
+  </header>
+
+  <div class="page-layout">
+    <aside class="toc-shell">
+      <nav class="toc" aria-label="文章目錄">
+        <p class="toc__label">Contents</p>
+        <ol>
+          <li><a href="#paper-info"><span class="toc__number">01</span><span>論文基本資料</span></a></li>
+          <li><a href="#one-sentence-summary"><span class="toc__number">02</span><span>一句話總結</span></a></li>
+          <li><a href="#executive-summary"><span class="toc__number">03</span><span>Executive Summary</span></a></li>
+          <li><a href="#background-motivation"><span class="toc__number">04</span><span>背景與動機</span></a></li>
+          <li><a href="#problem-definition"><span class="toc__number">05</span><span>問題定義</span></a></li>
+          <li><a href="#core-method"><span class="toc__number">06</span><span>核心方法</span></a></li>
+          <li><a href="#formulas-theory"><span class="toc__number">07</span><span>公式與理論</span></a></li>
+          <li><a href="#figures-guide"><span class="toc__number">08</span><span>圖片與圖表導讀</span></a></li>
+          <li><a href="#experimental-setup"><span class="toc__number">09</span><span>實驗設計</span></a></li>
+          <li><a href="#experimental-results"><span class="toc__number">10</span><span>實驗結果</span></a></li>
+          <li><a href="#ablation-sensitivity"><span class="toc__number">11</span><span>Ablation 與敏感度</span></a></li>
+          <li><a href="#strengths-limitations-risks"><span class="toc__number">12</span><span>優點、限制與風險</span></a></li>
+          <li><a href="#related-work"><span class="toc__number">13</span><span>與相關工作的比較</span></a></li>
+          <li><a href="#personal-analysis"><span class="toc__number">14</span><span>個人分析與延伸</span></a></li>
+          <li><a href="#discussion-questions"><span class="toc__number">15</span><span>組會討論問題</span></a></li>
+          <li><a href="#glossary-index"><span class="toc__number">16</span><span>術語表與重點索引</span></a></li>
+        </ol>
+      </nav>
+    </aside>
+
+    <main id="main-content">
+      <aside class="reading-note" aria-labelledby="reading-note-title">
+        <h2 id="reading-note-title">優先閱讀</h2>
+        {{PRIORITY_READS_HTML}}
+      </aside>
+
+      <!--
+        可重用元件：
+        作者主張：<aside class="statement statement--claim" data-kind="author-claim"><span class="statement__label">作者主張</span><p>...</p></aside>
+        實驗事實：<aside class="statement statement--fact" data-kind="experimental-fact"><span class="statement__label">實驗事實</span><p>...</p></aside>
+        分析：<aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>...</p></aside>
+        推測：<aside class="statement statement--speculation" data-kind="speculation"><span class="statement__label">推測</span><p>...</p></aside>
+        來源：<a class="source-ref" href="#source-fig3-p7">§4.2 · PDF p.7 · Fig. 3</a>
+        圖片：src 與 href 僅用 assets/images/...。固定格式：<figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>...</span></figcaption>。來源標籤只顯示 Figure／Table／Algorithm 與原編號，不加「原論文」、句點、頁碼、來源敘述或產製資訊；頁碼放正文來源標記或重點索引。
+        基本資料頁數欄固定寫法：<td data-summary-field="pdf-page-count">共 N 頁</td>（也可使用 dd）；完成頁面中必須恰有一個此 marker。
+        禁止把頁碼 offset 檢查、檔名／路徑處理、PDF signature／hash、下載／解析／裁圖工具或 QA 過程寫進讀者可見內容。
+      -->
+
+      <section id="paper-info" class="paper-section">
+        <div class="section-heading"><span class="section-number">01</span><h2>論文基本資料</h2></div>
+        {{SECTION_01_BODY}}
+      </section>
+
+      <section id="one-sentence-summary" class="paper-section">
+        <div class="section-heading"><span class="section-number">02</span><h2>一句話總結</h2></div>
+        {{SECTION_02_BODY}}
+      </section>
+
+      <section id="executive-summary" class="paper-section">
+        <div class="section-heading"><span class="section-number">03</span><h2>Executive Summary</h2></div>
+        {{SECTION_03_BODY}}
+      </section>
+
+      <section id="background-motivation" class="paper-section">
+        <div class="section-heading"><span class="section-number">04</span><h2>背景與動機</h2></div>
+        {{SECTION_04_BODY}}
+      </section>
+
+      <section id="problem-definition" class="paper-section">
+        <div class="section-heading"><span class="section-number">05</span><h2>問題定義</h2></div>
+        {{SECTION_05_BODY}}
+      </section>
+
+      <section id="core-method" class="paper-section">
+        <div class="section-heading"><span class="section-number">06</span><h2>核心方法</h2></div>
+        {{SECTION_06_BODY}}
+      </section>
+
+      <section id="formulas-theory" class="paper-section">
+        <div class="section-heading"><span class="section-number">07</span><h2>公式與理論</h2></div>
+        {{SECTION_07_BODY}}
+      </section>
+
+      <section id="figures-guide" class="paper-section">
+        <div class="section-heading"><span class="section-number">08</span><h2>圖片與圖表導讀</h2></div>
+        {{SECTION_08_BODY}}
+      </section>
+
+      <section id="experimental-setup" class="paper-section">
+        <div class="section-heading"><span class="section-number">09</span><h2>實驗設計</h2></div>
+        {{SECTION_09_BODY}}
+      </section>
+
+      <section id="experimental-results" class="paper-section">
+        <div class="section-heading"><span class="section-number">10</span><h2>實驗結果</h2></div>
+        {{SECTION_10_BODY}}
+      </section>
+
+      <section id="ablation-sensitivity" class="paper-section">
+        <div class="section-heading"><span class="section-number">11</span><h2>Ablation 與敏感度分析</h2></div>
+        {{SECTION_11_BODY}}
+      </section>
+
+      <section id="strengths-limitations-risks" class="paper-section">
+        <div class="section-heading"><span class="section-number">12</span><h2>優點、限制與風險</h2></div>
+        {{SECTION_12_BODY}}
+      </section>
+
+      <section id="related-work" class="paper-section">
+        <div class="section-heading"><span class="section-number">13</span><h2>與相關工作的比較</h2></div>
+        {{SECTION_13_BODY}}
+      </section>
+
+      <section id="personal-analysis" class="paper-section">
+        <div class="section-heading"><span class="section-number">14</span><h2>個人分析與可延伸方向</h2></div>
+        {{SECTION_14_BODY}}
+      </section>
+
+      <section id="discussion-questions" class="paper-section">
+        <div class="section-heading"><span class="section-number">15</span><h2>組會討論問題</h2></div>
+        {{SECTION_15_BODY}}
+      </section>
+
+      <section id="glossary-index" class="paper-section">
+        <div class="section-heading"><span class="section-number">16</span><h2>術語表與重點索引</h2></div>
+        {{SECTION_16_BODY}}
+      </section>
+    </main>
+  </div>
+
+  <footer class="page-footer">
+    <p>Paper Reading · {{PAPER_TITLE}} · 最後更新 {{LAST_UPDATED_DISPLAY}}</p>
+    <p>模板版本 1.2.0。頁面中的分析與推測不代表原論文作者立場。</p>
+  </footer>
+
+  <script>
+    (() => {
+      const progressBar = document.querySelector('.reading-progress__bar');
+      const tocLinks = [...document.querySelectorAll('.toc a[href^="#"]')];
+      const sections = tocLinks
+        .map((link) => document.querySelector(link.getAttribute('href')))
+        .filter(Boolean);
+
+      const updateProgress = () => {
+        const root = document.documentElement;
+        const distance = root.scrollHeight - root.clientHeight;
+        const percent = distance > 0 ? Math.min(100, Math.max(0, root.scrollTop / distance * 100)) : 0;
+        if (progressBar) progressBar.style.width = `${percent}%`;
+      };
+
+      updateProgress();
+      document.addEventListener('scroll', updateProgress, { passive: true });
+      window.addEventListener('resize', updateProgress);
+
+      if ('IntersectionObserver' in window && sections.length) {
+        const byId = new Map(tocLinks.map((link) => [link.hash.slice(1), link]));
+        const observer = new IntersectionObserver((entries) => {
+          const visible = entries
+            .filter((entry) => entry.isIntersecting)
+            .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+          if (!visible) return;
+          tocLinks.forEach((link) => link.removeAttribute('aria-current'));
+          byId.get(visible.target.id)?.setAttribute('aria-current', 'location');
+        }, { rootMargin: '-12% 0px -72% 0px', threshold: 0 });
+        sections.forEach((section) => observer.observe(section));
+      }
+    })();
+  </script>
+</body>
+</html>

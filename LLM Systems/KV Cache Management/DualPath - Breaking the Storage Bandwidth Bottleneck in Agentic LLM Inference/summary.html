@@ -1,0 +1,1356 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="1.2.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="notion-inspired-v1">
+  <meta name="description" content="DualPath 論文深度閱讀：雙路徑 KV-Cache 載入、CNIC 流量隔離、自適應排程與實驗證據的繁體中文分析。">
+  <title>DualPath: Breaking the Storage Bandwidth Bottleneck in Agentic LLM Inference｜Paper Reading</title>
+
+  <style>
+    :root {
+      --page: #ffffff;
+      --text: #37352f;
+      --heading: #2f2e2a;
+      --muted: #787774;
+      --subtle: #9b9a97;
+      --line: #e9e9e7;
+      --surface: #f7f6f3;
+      --surface-hover: #efefed;
+      --link: #0b6bcb;
+      --selection: #d9eaf7;
+      --claim-bg: #f3f0ff;
+      --claim-accent: #6940a5;
+      --fact-bg: #edf7ed;
+      --fact-accent: #287d3c;
+      --analysis-bg: #eef5fb;
+      --analysis-accent: #276f9e;
+      --speculation-bg: #fff4e5;
+      --speculation-accent: #a05a00;
+      --content-width: 780px;
+      --toc-width: 232px;
+      --layout-gap: 44px;
+      --radius: 8px;
+      --shadow: 0 1px 2px rgb(15 15 15 / 4%), 0 3px 12px rgb(15 15 15 / 3%);
+      --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 28px;
+      background: var(--page);
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--page);
+      font-family: var(--font-sans);
+      font-size: 16.5px;
+      line-height: 1.75;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: var(--selection); }
+
+    a {
+      color: var(--link);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(11 107 203 / 34%);
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: 12px;
+      left: 12px;
+      transform: translateY(-160%);
+      padding: 8px 12px;
+      color: #fff;
+      background: var(--heading);
+      border-radius: 6px;
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .reading-progress {
+      position: fixed;
+      z-index: 90;
+      inset: 0 0 auto;
+      height: 3px;
+      background: transparent;
+    }
+
+    .reading-progress__bar {
+      display: block;
+      width: 0;
+      height: 100%;
+      background: var(--heading);
+      transition: width 100ms linear;
+    }
+
+    .paper-hero {
+      width: min(calc(100% - 40px), calc(var(--toc-width) + var(--layout-gap) + var(--content-width)));
+      margin: 0 auto;
+      padding: 68px 0 34px calc(var(--toc-width) + var(--layout-gap));
+      border-bottom: 1px solid var(--line);
+    }
+
+    .page-icon {
+      display: grid;
+      width: 64px;
+      height: 64px;
+      margin-bottom: 22px;
+      place-items: center;
+      color: #4b4a46;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      font-size: 32px;
+      line-height: 1;
+    }
+
+    .breadcrumb {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .015em;
+    }
+
+    .breadcrumb span[aria-hidden="true"] { color: var(--subtle); }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      line-height: 1.25;
+      letter-spacing: -.018em;
+    }
+
+    h1 {
+      max-width: 930px;
+      margin: 0;
+      font-size: clamp(2.15rem, 4.5vw, 3.45rem);
+      font-weight: 750;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-byline {
+      max-width: 850px;
+      margin: 15px 0 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .properties {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0 28px;
+      max-width: 780px;
+      margin: 30px 0 0;
+      padding: 0;
+    }
+
+    .property {
+      display: grid;
+      grid-template-columns: 112px minmax(0, 1fr);
+      gap: 12px;
+      align-items: baseline;
+      min-width: 0;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .property dt {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .property dd {
+      min-width: 0;
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 25px;
+      padding: 2px 9px;
+      color: #4d4c48;
+      background: #e9e9e7;
+      border-radius: 999px;
+      font-size: 12.5px;
+      font-weight: 650;
+      line-height: 1.4;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .button-link {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      min-height: 38px;
+      padding: 7px 12px;
+      color: var(--text);
+      background: var(--page);
+      border: 1px solid #d8d8d5;
+      border-radius: 7px;
+      box-shadow: 0 1px 1px rgb(15 15 15 / 3%);
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .button-link:hover { background: var(--surface); }
+
+    .page-layout {
+      display: grid;
+      grid-template-columns: var(--toc-width) minmax(0, var(--content-width));
+      gap: var(--layout-gap);
+      width: min(calc(100% - 40px), calc(var(--toc-width) + var(--layout-gap) + var(--content-width)));
+      margin: 0 auto;
+      padding: 44px 0 88px;
+    }
+
+    .toc-shell { min-width: 0; }
+
+    .toc {
+      position: sticky;
+      top: 28px;
+      max-height: calc(100vh - 56px);
+      overflow: auto;
+      padding-right: 10px;
+      scrollbar-width: thin;
+    }
+
+    .toc__label {
+      margin: 0 0 10px;
+      color: var(--subtle);
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+
+    .toc ol {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .toc a {
+      display: grid;
+      grid-template-columns: 25px minmax(0, 1fr);
+      gap: 5px;
+      padding: 5px 7px;
+      color: var(--muted);
+      border-radius: 5px;
+      font-size: 12.5px;
+      line-height: 1.4;
+      text-decoration: none;
+    }
+
+    .toc a:hover,
+    .toc a[aria-current="location"] {
+      color: var(--text);
+      background: var(--surface);
+    }
+
+    .toc__number {
+      color: var(--subtle);
+      font-variant-numeric: tabular-nums;
+    }
+
+    main { min-width: 0; }
+
+    .reading-note {
+      margin: 0 0 44px;
+      padding: 18px 20px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .reading-note h2 {
+      margin: 0 0 7px;
+      font-size: 15px;
+    }
+
+    .reading-note p,
+    .reading-note ul { margin-top: 7px; margin-bottom: 0; }
+
+    .paper-section {
+      padding: 9px 0 48px;
+      scroll-margin-top: 26px;
+    }
+
+    .paper-section + .paper-section { border-top: 1px solid var(--line); }
+
+    .section-heading {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 8px;
+      align-items: baseline;
+      margin: 25px 0 22px;
+    }
+
+    .section-number {
+      color: var(--subtle);
+      font-size: 13px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .section-heading h2 {
+      margin: 0;
+      font-size: clamp(1.45rem, 3vw, 1.9rem);
+      font-weight: 720;
+    }
+
+    h3 {
+      margin: 32px 0 10px;
+      font-size: 1.16rem;
+      font-weight: 700;
+    }
+
+    h4 {
+      margin: 25px 0 8px;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    p { margin: 0 0 1em; }
+
+    ul, ol { padding-left: 1.45em; }
+    li + li { margin-top: .32em; }
+
+    strong { color: var(--heading); }
+
+    .lead {
+      color: var(--heading);
+      font-size: 1.17rem;
+      line-height: 1.7;
+    }
+
+    .muted { color: var(--muted); }
+
+    .statement {
+      margin: 20px 0;
+      padding: 15px 18px 15px 20px;
+      border: 1px solid transparent;
+      border-left-width: 4px;
+      border-radius: var(--radius);
+    }
+
+    .statement p:last-child { margin-bottom: 0; }
+
+    .statement__label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .055em;
+    }
+
+    .statement--claim {
+      background: var(--claim-bg);
+      border-color: #ded5f0;
+      border-left-color: var(--claim-accent);
+    }
+    .statement--claim .statement__label { color: var(--claim-accent); }
+
+    .statement--fact {
+      background: var(--fact-bg);
+      border-color: #cfe7d2;
+      border-left-color: var(--fact-accent);
+    }
+    .statement--fact .statement__label { color: var(--fact-accent); }
+
+    .statement--analysis {
+      background: var(--analysis-bg);
+      border-color: #d0e1ee;
+      border-left-color: var(--analysis-accent);
+    }
+    .statement--analysis .statement__label { color: var(--analysis-accent); }
+
+    .statement--speculation {
+      background: var(--speculation-bg);
+      border-color: #efdabc;
+      border-left-color: var(--speculation-accent);
+    }
+    .statement--speculation .statement__label { color: var(--speculation-accent); }
+
+    .source-ref {
+      display: inline-flex;
+      align-items: center;
+      min-height: 23px;
+      margin: 2px 2px 2px 0;
+      padding: 2px 8px;
+      color: #5c5b57;
+      background: rgb(255 255 255 / 72%);
+      border: 1px solid rgb(55 53 47 / 16%);
+      border-radius: 999px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      line-height: 1.35;
+      text-decoration: none;
+      vertical-align: .08em;
+    }
+
+    .source-ref:hover { background: #fff; }
+
+    .key-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 20px 0;
+    }
+
+    .key-card {
+      min-width: 0;
+      padding: 15px 16px;
+      background: var(--page);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .key-card__eyebrow {
+      margin: 0 0 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 30px 0;
+      padding: 10px;
+      background: #fbfbfa;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+
+    figure > a {
+      display: block;
+      line-height: 0;
+    }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+      border-radius: 6px;
+    }
+
+    figcaption {
+      padding: 11px 5px 4px;
+      color: var(--muted);
+      font-size: 13.5px;
+      line-height: 1.55;
+    }
+
+    figcaption strong { color: var(--text); }
+
+    .reading-guide {
+      display: block;
+      margin-top: 5px;
+      color: var(--text);
+    }
+
+    .formula-block {
+      margin: 22px 0;
+      padding: 18px 20px;
+      overflow-x: auto;
+      background: #fbfbfa;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .formula-block__meaning {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 22px 0;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    caption {
+      padding: 12px 14px;
+      color: var(--muted);
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+      font-size: 12.5px;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 118px;
+      padding: 10px 12px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    tr:last-child > * { border-bottom: 0; }
+    tr > *:last-child { border-right: 0; }
+    th { color: var(--heading); background: #fbfbfa; font-weight: 700; }
+
+    code, pre { font-family: var(--font-mono); }
+
+    :not(pre) > code {
+      padding: .12em .32em;
+      color: #c7254e;
+      background: #f7f6f3;
+      border-radius: 4px;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 22px 0;
+      padding: 16px 18px;
+      overflow: auto;
+      color: #383a42;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      font-size: 13px;
+      line-height: 1.6;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 20px 0;
+      padding: 2px 0 2px 18px;
+      color: var(--muted);
+      border-left: 3px solid #d3d3d0;
+    }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(140px, .75fr) minmax(0, 2fr);
+      margin: 20px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: 11px 8px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 20px 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 8px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      content: counter(source, decimal-leading-zero);
+      color: var(--subtle);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .page-footer {
+      width: min(calc(100% - 40px), var(--content-width));
+      margin: 0 auto;
+      padding: 25px 0 45px;
+      color: var(--subtle);
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 1099px) {
+      .paper-hero {
+        width: min(calc(100% - 48px), var(--content-width));
+        padding: 56px 0 30px;
+      }
+
+      .page-layout {
+        display: block;
+        width: min(calc(100% - 48px), var(--content-width));
+        padding-top: 28px;
+      }
+
+      .toc {
+        position: static;
+        max-height: none;
+        margin-bottom: 44px;
+        padding: 15px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+
+      .toc ol { columns: 2; column-gap: 18px; }
+      .toc li { break-inside: avoid; }
+    }
+
+    @media (max-width: 699px) {
+      body { font-size: 16px; }
+
+      .paper-hero,
+      .page-layout,
+      .page-footer { width: min(calc(100% - 30px), var(--content-width)); }
+
+      .paper-hero { padding-top: 38px; }
+      .page-icon { width: 54px; height: 54px; font-size: 27px; }
+
+      .properties,
+      .key-grid { grid-template-columns: 1fr; }
+
+      .property { grid-template-columns: 96px minmax(0, 1fr); }
+      .toc ol { columns: 1; }
+      .section-heading { grid-template-columns: 29px minmax(0, 1fr); }
+      .paper-section { padding-bottom: 38px; }
+      .statement { padding-right: 14px; padding-left: 15px; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: 2px; border-bottom: 0; }
+      .term-list dd { padding-top: 2px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition-duration: .01ms !important; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 15mm 14mm 17mm; }
+
+      .skip-link,
+      .reading-progress,
+      .toc-shell,
+      .screen-only { display: none !important; }
+
+      body {
+        color: #000;
+        background: #fff;
+        font-size: 10.5pt;
+      }
+
+      .paper-hero,
+      .page-layout,
+      .page-footer {
+        display: block;
+        width: 100%;
+        margin: 0;
+        padding-right: 0;
+        padding-left: 0;
+      }
+
+      .paper-hero { padding-top: 0; }
+      .page-icon { box-shadow: none; }
+      .button-link { box-shadow: none; }
+      .button-link::after { content: " (" attr(href) ")"; font-weight: 400; }
+      a { color: #000; }
+
+      figure,
+      table,
+      pre,
+      .statement,
+      .formula-block,
+      .key-card { break-inside: avoid; }
+
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .statement { background: #fff !important; border-color: #777 !important; }
+      .source-ref { background: #fff; border-color: #999; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+  <div class="reading-progress screen-only" aria-hidden="true"><span class="reading-progress__bar"></span></div>
+
+  <header class="paper-hero">
+    <div class="page-icon" aria-hidden="true">▤</div>
+    <p class="breadcrumb">
+      <span>Paper Reading</span>
+      <span aria-hidden="true">/</span>
+      <span>LLM Systems</span>
+      <span aria-hidden="true">/</span>
+      <span>KV Cache Management</span>
+    </p>
+    <h1>DualPath: Breaking the Storage Bandwidth Bottleneck in Agentic LLM Inference</h1>
+    <p class="paper-byline">Yongtong Wu、Shaoyuan Chen、Yinmin Zhong、Rilin Huang、Yixuan Tan、Wentao Zhang、Liyue Zhang、Shangyan Zhou、Yuxuan Liu、Shunfeng Zhou、Mingxing Zhang、Xin Jin、Panpan Huang</p>
+
+    <dl class="properties">
+      <div class="property">
+        <dt>發表資訊</dt>
+        <dd>arXiv:2602.21548v2 [cs.DC]</dd>
+      </div>
+      <div class="property">
+        <dt>年份</dt>
+        <dd>2026</dd>
+      </div>
+      <div class="property">
+        <dt>分類</dt>
+        <dd><span class="tag">LLM Systems / KV Cache Management</span></dd>
+      </div>
+      <div class="property">
+        <dt>摘要更新</dt>
+        <dd><time datetime="2026-09-08">2026 年 9 月 8 日</time></dd>
+      </div>
+    </dl>
+
+    <div class="hero-actions">
+      <a class="button-link" href="https://arxiv.org/abs/2602.21548" target="_blank" rel="noopener noreferrer">↗ 論文頁面</a>
+      <a class="button-link" href="DualPath-arXiv-2602.21548.pdf">↓ 開啟本地 PDF</a>
+    </div>
+  </header>
+
+  <div class="page-layout">
+    <aside class="toc-shell">
+      <nav class="toc" aria-label="文章目錄">
+        <p class="toc__label">Contents</p>
+        <ol>
+          <li><a href="#paper-info"><span class="toc__number">01</span><span>論文基本資料</span></a></li>
+          <li><a href="#one-sentence-summary"><span class="toc__number">02</span><span>一句話總結</span></a></li>
+          <li><a href="#executive-summary"><span class="toc__number">03</span><span>Executive Summary</span></a></li>
+          <li><a href="#background-motivation"><span class="toc__number">04</span><span>背景與動機</span></a></li>
+          <li><a href="#problem-definition"><span class="toc__number">05</span><span>問題定義</span></a></li>
+          <li><a href="#core-method"><span class="toc__number">06</span><span>核心方法</span></a></li>
+          <li><a href="#formulas-theory"><span class="toc__number">07</span><span>公式與理論</span></a></li>
+          <li><a href="#figures-guide"><span class="toc__number">08</span><span>圖片與圖表導讀</span></a></li>
+          <li><a href="#experimental-setup"><span class="toc__number">09</span><span>實驗設計</span></a></li>
+          <li><a href="#experimental-results"><span class="toc__number">10</span><span>實驗結果</span></a></li>
+          <li><a href="#ablation-sensitivity"><span class="toc__number">11</span><span>Ablation 與敏感度</span></a></li>
+          <li><a href="#strengths-limitations-risks"><span class="toc__number">12</span><span>優點、限制與風險</span></a></li>
+          <li><a href="#related-work"><span class="toc__number">13</span><span>與相關工作的比較</span></a></li>
+          <li><a href="#personal-analysis"><span class="toc__number">14</span><span>個人分析與延伸</span></a></li>
+          <li><a href="#discussion-questions"><span class="toc__number">15</span><span>組會討論問題</span></a></li>
+          <li><a href="#glossary-index"><span class="toc__number">16</span><span>術語表與重點索引</span></a></li>
+        </ol>
+      </nav>
+    </aside>
+
+    <main id="main-content">
+      <aside class="reading-note" aria-labelledby="reading-note-title">
+        <h2 id="reading-note-title">優先閱讀</h2>
+        <ul>
+          <li><a href="#core-method">核心方法</a>：先掌握 storage→PE 與 storage→DE→PE 兩條 KV-Cache 路徑，以及為何所有 GPU I/O 都繞經 CNIC。</li>
+          <li><a href="#experimental-results">實驗結果</a>：辨認 1.87×、1.96× 與 1,152 GPU 分別是在什麼 workload、baseline 與 scaling 定義下成立。</li>
+          <li><a href="#strengths-limitations-risks">優點、限制與風險</a>：重點看 baseline 公平性、理論前提、真實 agent replay 差距，以及公式 (1) 的條件缺口。</li>
+        </ul>
+      </aside>
+
+      <!--
+        可重用元件：
+        作者主張：<aside class="statement statement--claim" data-kind="author-claim"><span class="statement__label">作者主張</span><p>...</p></aside>
+        實驗事實：<aside class="statement statement--fact" data-kind="experimental-fact"><span class="statement__label">實驗事實</span><p>...</p></aside>
+        分析：<aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>...</p></aside>
+        推測：<aside class="statement statement--speculation" data-kind="speculation"><span class="statement__label">推測</span><p>...</p></aside>
+        來源：<a class="source-ref" href="#source-fig3-p7">§4.2 · PDF p.7 · Fig. 3</a>
+        圖片：src 與 href 僅用 assets/images/...。固定格式：<figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>...</span></figcaption>。來源標籤只顯示 Figure／Table／Algorithm 與原編號，不加「原論文」、句點、頁碼、來源敘述或產製資訊；頁碼放正文來源標記或重點索引。
+        基本資料頁數欄固定寫法：<td data-summary-field="pdf-page-count">共 N 頁</td>（也可使用 dd）；完成頁面中必須恰有一個此 marker。
+        禁止把頁碼 offset 檢查、檔名／路徑處理、PDF signature／hash、下載／解析／裁圖工具或 QA 過程寫進讀者可見內容。
+      -->
+
+      <section id="paper-info" class="paper-section">
+        <div class="section-heading"><span class="section-number">01</span><h2>論文基本資料</h2></div>
+        <div class="table-scroll">
+          <table>
+            <caption>書目與分類資訊</caption>
+            <tbody>
+              <tr><th scope="row">正式標題</th><td>DualPath: Breaking the Storage Bandwidth Bottleneck in Agentic LLM Inference</td></tr>
+              <tr><th scope="row">作者</th><td>Yongtong Wu、Shaoyuan Chen、Yinmin Zhong、Rilin Huang、Yixuan Tan、Wentao Zhang、Liyue Zhang、Shangyan Zhou、Yuxuan Liu、Shunfeng Zhou、Mingxing Zhang、Xin Jin、Panpan Huang</td></tr>
+              <tr><th scope="row">機構</th><td>北京大學、清華大學、DeepSeek-AI</td></tr>
+              <tr><th scope="row">發表資訊</th><td>arXiv:2602.21548v2 [cs.DC]；v1 於 2026-02-25 提交，v2 於 2026-02-26 修訂；論文未標示正式會議或期刊</td></tr>
+              <tr><th scope="row">年份</th><td>2026</td></tr>
+              <tr><th scope="row">頁數</th><td data-summary-field="pdf-page-count">共 17 頁</td></tr>
+              <tr><th scope="row">Canonical link</th><td><a href="https://arxiv.org/abs/2602.21548" target="_blank" rel="noopener noreferrer">arXiv 摘要頁</a> · <a href="https://doi.org/10.48550/arXiv.2602.21548" target="_blank" rel="noopener noreferrer">DOI</a></td></tr>
+              <tr><th scope="row">分類</th><td>LLM Systems / KV Cache Management</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <aside class="statement statement--analysis" data-kind="analysis">
+          <span class="statement__label">分析</span>
+          <p>分類理由：論文的主要新意不是模型結構或一般 serving scheduler，而是改寫 KV-Cache 從外部儲存回載至 prefill engine 的資料路徑，並把 decode-side storage NIC 納入同一資源池；排程與流量隔離是讓這項 KV-Cache 管理設計可落地的配套。</p>
+        </aside>
+        <p><a class="source-ref" href="#source-metadata-p1">標題頁 · PDF p.1</a> <a class="source-ref" href="#source-intro-p2">§1 · PDF pp.1–2</a></p>
+      </section>
+
+      <section id="one-sentence-summary" class="paper-section">
+        <div class="section-heading"><span class="section-number">02</span><h2>一句話總結</h2></div>
+        <p class="lead">在高 KV-Cache 命中、長上下文、短追加的 agentic LLM workload 中，DualPath 讓命中 cache 可由 prefill engine（PE）或 decode engine（DE）的 storage NIC 載入，再透過 RDMA 串回 PE，藉此把原本閒置的 DE I/O 頻寬轉成可排程容量；搭配 CNIC QoS 與跨／內 engine 排程後，作者在自家系統上報告 offline 對 Basic 最高 1.87×、online 可承載 arrival rate 平均 1.96×。 <a class="source-ref" href="#source-intro-p2">Abstract、§1 · PDF pp.1–2</a> <a class="source-ref" href="#source-offline-p10">§7.3 · PDF p.10 · Fig. 7</a> <a class="source-ref" href="#source-online-p12">§7.4 · PDF pp.11–12 · Fig. 10</a></p>
+        <aside class="statement statement--analysis" data-kind="analysis">
+          <span class="statement__label">分析</span>
+          <p>這不是「減少 KV bytes」的方法，而是「重新分配 KV bytes 經過哪些 NIC」；因此它與量化、部分重算、DRAM cache 等手段原理上互補，但效益會隨 cache hit rate、append／generation 長度與網路拓撲而大幅改變。</p>
+        </aside>
+      </section>
+
+      <section id="executive-summary" class="paper-section">
+        <div class="section-heading"><span class="section-number">03</span><h2>Executive Summary</h2></div>
+        <div class="key-grid">
+          <article class="key-card"><p class="key-card__eyebrow">Problem</p><p>PD-disaggregated 系統把命中 KV-Cache 的外部讀取集中在 PE 的 storage NIC（SNIC）；PE 飽和時，DE 的 SNIC 卻可能閒置。</p></article>
+          <article class="key-card"><p class="key-card__eyebrow">Insight</p><p>命中 KV 不必先到 PE。若先讀到 DE host buffer，再經高聚合頻寬的 compute network 傳給 PE，就能同時利用兩側 SNIC。</p></article>
+          <article class="key-card"><p class="key-card__eyebrow">Mechanism</p><p>雙讀取路徑、Full／Layer Block、CNIC-centric RDMA copy、InfiniBand virtual-lane QoS，以及同時平衡 token、disk queue、HBM 的兩層 scheduler。</p></article>
+          <article class="key-card"><p class="key-card__eyebrow">Evidence</p><p>3 個模型與 production RL coding traces；offline JCT、online TTFT／TTST／TPOT、累積式 ablation，以及最高 1,152 GPU 的 weak-scaling 實驗。</p></article>
+        </div>
+        <h3>最重要的閱讀結論</h3>
+        <ol>
+          <li><strong>瓶頸辨識有說服力。</strong>64K trace 平均 157 輪、context 32,721、append 429，對應約 98.7% 命中；此時每輪大量搬舊 KV、只計算少量新 token，storage I/O 容易壓過 prefill 計算。 <a class="source-ref" href="#source-motivation-p4">§3 · PDF pp.3–4 · Table 1</a> <a class="source-ref" href="#source-setup-p9">§7.2 · PDF p.9 · Table 2</a></li>
+          <li><strong>核心設計是頻寬池化。</strong>PE-read 走 storage→PE→DE；DE-read 走 storage→DE→PE，後者讓 DE SNIC 也替 prefill 載入命中 KV。兩者均逐層串流以配合 layerwise prefill。 <a class="source-ref" href="#source-fig4-p5">§4.1 · PDF p.5 · Fig. 4</a></li>
+          <li><strong>headline 數字需帶條件。</strong>1.87× 是 DS 660B 對同一 in-house stack 的 Basic 最佳 offline speedup；1.96× 是 DS 27B 的 1.67× 與 DS 660B 的 2.25× online capacity gain 的平均，不含 Qwen 32B。 <a class="source-ref" href="#source-offline-p10">§7.3 · PDF p.10 · Fig. 7</a> <a class="source-ref" href="#source-online-p12">§7.4 · PDF pp.11–12 · Fig. 10</a></li>
+          <li><strong>完整系統不只 DualPath。</strong>累積 ablation 顯示 layerwise prefill、dual-path loading 與 scheduler 都貢獻 JCT 降幅；把完整 45.62% 降幅全歸因於雙路徑會過度解讀。 <a class="source-ref" href="#source-ablation-p12">§7.5 · PDF p.12 · Fig. 12</a></li>
+        </ol>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>論文最有價值之處，是把「decode engine 的 storage NIC 為何閒著」轉成一個跨 storage／compute fabric 的資料面設計；最需要保留懷疑之處，則是內部系統 baseline、理想化 replay 與拓撲前提，讓結果較像 production design case study，而非已證明可普遍移植的 serving 定律。</p></aside>
+      </section>
+
+      <section id="background-motivation" class="paper-section">
+        <div class="section-heading"><span class="section-number">04</span><h2>背景與動機</h2></div>
+        <h3>為什麼 agent workload 會把 KV-Cache 變成 I/O 問題？</h3>
+        <p>傳統聊天常只有少數回合；agent 則反覆呼叫工具、接收短輸出並把既有上下文全部帶到下一輪。舊 token 的 key/value 多半已計算過，可直接命中持久化 KV-Cache；新追加 token 很少，真正要做的 prefill 計算反而不多。這形成「長 context、短 append、高 reuse」的工作負載。作者的 64K coding trace 平均 context 為 32,721、append 為 429、generation 為 176、共 157 輪。 <a class="source-ref" href="#source-background-p3">§2.2 · PDF p.3 · Fig. 2</a> <a class="source-ref" href="#source-setup-p9">§7.2 · PDF p.9 · Table 2</a></p>
+        <h3>既有 serving stack 的三個結構</h3>
+        <ul>
+          <li><strong>Prefill–Decode disaggregation（PD 分離）</strong>：PE 負責 prefill，DE 負責自回歸 decode；PE 完成後把完整 prompt KV 傳到 DE。</li>
+          <li><strong>Layerwise prefill</strong>：一次只讓一層所需的 KV 常駐 HBM，釋放 batch-size 的容量上限，並讓傳輸與計算逐層重疊。</li>
+          <li><strong>外部 KV 儲存</strong>：長 trajectory 的 working set 超過 HBM／DRAM 經濟容量，故用 SSD 型分散式儲存保存跨回合 KV。</li>
+        </ul>
+        <p><a class="source-ref" href="#source-background-p3">§2.1–2.2 · PDF pp.2–3</a></p>
+        <h3>硬體不對稱</h3>
+        <p>論文以典型 8-GPU 節點說明：每張 GPU 可配一張 400 Gbps compute NIC（CNIC），但整台機器通常只共享一張最高 400 Gbps SNIC；compute 與 storage network 又彼此隔離。既有資料流讓命中 KV 一律由 PE 的 SNIC 讀入，造成 PE SNIC 飽和、DE SNIC 閒置。作者另觀察 collective traffic 呈 sub-millisecond burst，因而推論 compute fabric 的空檔可承載低優先 KV traffic。 <a class="source-ref" href="#source-background-p3">§2.3 · PDF p.3</a> <a class="source-ref" href="#source-motivation-p4">§3 · PDF p.4 · Fig. 3</a></p>
+        <div class="table-scroll">
+          <table>
+            <caption>Table 1 重整：append=429、context 16K–64K 時的 cache-compute ratio；除另註者外，KV-Cache 為 FP8</caption>
+            <thead><tr><th scope="col">模型</th><th scope="col">GB/PFLOP（16K–64K）</th><th scope="col">解讀</th></tr></thead>
+            <tbody>
+              <tr><td>Qwen2.5-32B（FP16 KV）</td><td>117–267</td><td>搬移量相對計算最高，最易 storage-bound</td></tr>
+              <tr><td>GPT-OSS-120B</td><td>47–95</td><td>仍有很高的 I/O／compute 比</td></tr>
+              <tr><td>Qwen3-235B-A22B</td><td>39–60</td><td>MoE 也不免受載入量限制</td></tr>
+              <tr><td>DeepSeek-V3.2 660B</td><td>13–36</td><td>稀疏 attention 降低計算後，比值高於 V3</td></tr>
+              <tr><td>DeepSeek-V3 660B</td><td>4.8–5.8</td><td>比較組中最低</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-motivation-p4">§3 · PDF p.4 · Table 1</a></p>
+        <aside class="statement statement--claim" data-kind="author-claim"><span class="statement__label">作者主張</span><p>從 NVIDIA Ampere 到 Blackwell，圖中的 dense FLOPS 成長 28.8×，PCIe bandwidth 僅 2.0×、HBM capacity 僅 2.4×；作者把 I/O-to-compute ratio 的 14.4× 下降視為 agentic inference storage bottleneck 會加劇的硬體趨勢。 <a class="source-ref" href="#source-motivation-p4">§3 · PDF p.4 · Fig. 3</a></p></aside>
+      </section>
+
+      <section id="problem-definition" class="paper-section">
+        <div class="section-heading"><span class="section-number">05</span><h2>問題定義</h2></div>
+        <h3>系統目標</h3>
+        <p>給定一批會重用長前綴 KV-Cache 的多輪 agent requests，以及一組 PD-disaggregated PE／DE 節點，DualPath 要在不讓 latency-sensitive model communication 顯著退化的前提下，使用所有節點的 SNIC 共同回載命中 KV。Offline 以整批 rollout 的 job completion time（JCT）為主；online 以在 TTFT／TPOT SLO 內可承載的 agents per second（APS）為主。 <a class="source-ref" href="#source-intro-p2">§1 · PDF pp.1–2</a> <a class="source-ref" href="#source-setup-p9">§7.2 · PDF p.9</a></p>
+        <h3>每個 request 的決策</h3>
+        <ol>
+          <li>選擇 PE 與 DE engine group／engine，使 GPU token load、HBM 容量與 node disk queue 盡量平衡。</li>
+          <li>比較 PE node 與 DE node 的讀取 queue，整個 request 選其中一側載入命中 KV。</li>
+          <li>PE 端以預估 attention layer time 的 compute quota 決定本輪 batch，必要時對 request 做 chunked prefill。</li>
+          <li>以 Full Block 與 storage 互動；以 Layer Block 在 PE HBM、PE buffer、DE buffer 間逐層串流。</li>
+        </ol>
+        <p><a class="source-ref" href="#source-scheduler-p8">§6.1–6.2 · PDF pp.7–9 · Alg. 1、Figs. 5–6</a> <a class="source-ref" href="#source-appendix-p16">§A.4–A.5 · PDF pp.16–17</a></p>
+        <h3>輸入、狀態、輸出與限制</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>問題形式化（論文敘述與摘要者重組）</caption>
+            <thead><tr><th scope="col">類別</th><th scope="col">內容</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">Request 輸入</th><td>cached token 數、新增 prefill token 數 (bsz)、預計 context／request length、decode 生成長度與 KV 命中位置</td></tr>
+              <tr><th scope="row">Engine 狀態</th><td>未完成 request 數 <code>seq_e</code>、未完成 token 數 <code>tok_e</code>、node 讀取 queue <code>read_q[n(e)]</code>、DE 可用 HBM</td></tr>
+              <tr><th scope="row">控制輸出</th><td>PE／DE 指派、KV 由 PE 或 DE 讀取、PE forward batch 與 chunk size</td></tr>
+              <tr><th scope="row">硬限制</th><td>HBM capacity、每張 CNIC 與每 node SNIC／DRAM bandwidth、可配置硬體 QoS、PE／DE ratio</td></tr>
+              <tr><th scope="row">成功條件</th><td>SNIC 高利用率、較短 JCT／TTFT、TPOT 不劣化、engine 間 max/avg load ratio 接近 1</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>DualPath 解的不是通用 KV eviction／placement 問題。評估中 DualPath、Basic 與 Oracle 的 hit length 由 client 端直接計算，只允許 trajectory 內命中且假設不需 eviction；因此其核心問題可更精確地描述為「已知命中長度後的 KV 回載路徑與執行負載平衡」。 <a class="source-ref" href="#source-appendix-p16">§A.4 · PDF p.16</a></p></aside>
+      </section>
+
+      <section id="core-method" class="paper-section">
+        <div class="section-heading"><span class="section-number">06</span><h2>核心方法</h2></div>
+        <h3>6.1 元件與端到端流程</h3>
+        <ul>
+          <li><strong>Inference engines</strong>：每個 engine 管理一張 GPU；PE 做 prefill，DE 做 decode。</li>
+          <li><strong>Traffic manager</strong>：負責 host↔device copy、PE↔DE KV 傳輸、storage read／write，並把 GPU I/O 統一交由 paired CNIC 仲裁。</li>
+          <li><strong>Central request scheduler</strong>：選 PE／DE、選讀取路徑，再由 PE 的 intra-engine scheduler 決定 forward batch。</li>
+        </ul>
+        <p><a class="source-ref" href="#source-system-p4">§4 · PDF p.4</a></p>
+        <h3>6.2 兩條 KV-Cache 載入路徑</h3>
+        <h4>路徑 A：PE read（既有路徑）</h4>
+        <ol>
+          <li>SNIC 把命中 token 的 Full Blocks 讀到 PE host DRAM buffer。</li>
+          <li>每一層開始前，把該層 hit KV 的 Layer Blocks 搬進 PE HBM。</li>
+          <li>PE 計算 cache-miss／新追加 token 的 KV；再把 hit+miss KV 逐層送往 DE buffer。</li>
+          <li>重複所有 layer，傳輸與 prefill 計算重疊；DE 最後把完整 prompt KV 搬入 HBM 開始 decode。</li>
+        </ol>
+        <h4>路徑 B：DE read（新增路徑）</h4>
+        <ol>
+          <li>DE SNIC 先把命中 KV 讀進 DE buffer。</li>
+          <li>每一層 prefill 前，DE 透過 compute network RDMA 把該層 hit KV 送至 PE HBM。</li>
+          <li>PE 只把新 token 的 miss KV 傳回 DE 並與 hit KV 合併；不必把舊 KV 再傳一次。</li>
+          <li>完整 prompt KV 已在 DE buffer 後，再做 H2D 並釋放 host buffer；decode 每累積一個 full block（文中例為 64 tokens）便寫回 storage。</li>
+        </ol>
+        <p><a class="source-ref" href="#source-fig4-p5">§4.1 · PDF p.5 · Fig. 4</a></p>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>DE-read 之所以有用，是它把 PE SNIC 的工作轉移到 DE SNIC；代價不是消失，而是增加 DE DRAM、CNIC 與一次 H2D 壓力。作者選 host buffer 而非讓完整 KV 直接常駐 DE HBM，是以額外搬移換取較低 HBM 佔用與較低 preemption 風險。</p></aside>
+        <h3>6.3 CNIC-centric traffic manager</h3>
+        <p>DualPath 不直接讓 CUDA copy engine 或 GPUDirect Storage 自行穿越 PCIe，而是先把 storage data 放到 host DRAM，再向 GPU 的 paired CNIC 提交 local RDMA Write；D2H／store 則反向操作。如此一來，H2D、D2H、PE↔DE KV 與 model collective 都經過 CNIC，可使用同一組硬體 QoS。 <a class="source-ref" href="#source-traffic-p7">§5、§5.2 · PDF p.7</a></p>
+        <p>在 InfiniBand 上，model collective 被放入高優先 virtual lane（VL），KV traffic 放入低優先 VL；weighted round robin 約為高優先保留 99% bandwidth，低優先保有少量配額避免 starvation。論文主張 RoCE 可用 DSCP、traffic class 與 PFC 實作相同概念，但沒有 RoCE 實驗。 <a class="source-ref" href="#source-traffic-p7">§5.1 · PDF p.7</a> <a class="source-ref" href="#source-appendix-p16">§A.1 · PDF p.16</a></p>
+        <aside class="statement statement--claim" data-kind="author-claim"><span class="statement__label">作者主張</span><p>對大量小 chunks，單次 <code>cudaMemcpyAsync</code> submission 約需 5–7 μs，RDMA Write work request 約 1 μs，且後者可用 doorbell batching 攤提。這是提交開銷比較，不是完整 copy latency 或 throughput 曲線。 <a class="source-ref" href="#source-traffic-p7">§5.2 · PDF p.7</a></p></aside>
+        <h3>6.4 Inter-engine scheduler</h3>
+        <p>每個 engine 回報 <code>seq_e</code>、<code>tok_e</code> 與 node 級 <code>read_q[n(e)]</code>。PE 被分成：<code>tok_e &gt; β</code> 的 overloaded 類別、queue 短且 token 未超標的首選類別、queue 長但 token 未超標的備選類別；scheduler 保持 request FIFO，先在首選類別選 <code>tok_e</code> 最小者，再退到備選類別。 <a class="source-ref" href="#source-scheduler-p8">§6.1 · PDF p.8 · Fig. 5、Alg. 1</a></p>
+        <p>DE 先在 engine groups 間以總 <code>tok_e</code> 最小者分流，再在 group 內排除 HBM 不足者；以閾值 <code>Z</code> 區分高 token DE，優先在低 token 類別中選 <code>seq_e</code> 最小者。PE／DE 選定後，整個 request 由兩側 node 中 read queue 較短的一側讀取；單一 request 同時拆成雙路讀取被留作 future work。</p>
+        <h3>6.5 Intra-engine scheduler</h3>
+        <p>PE 將每個 request 表成 <code>(cached, bsz)</code>，用理論 attention 工作量與預先 profiling 的映射估計 layer time。它依 FIFO 填入 request，直到預測時間碰到 compute quota；下一個 request 若放不下，就二分搜尋較小的 <code>bsz′</code> 做 chunked prefill。這讓 data-parallel GPUs 的 attention time 更接近，減少同步進入 FFN 前的 bubble。 <a class="source-ref" href="#source-scheduler-p8">§6.2 · PDF pp.8–9 · Fig. 6</a></p>
+        <h3>6.6 Block layout</h3>
+        <p>Layer Block 形狀為 <code>[1, tokens, bytes]</code>，只存一層；Full Block 為 <code>[layer, tokens, bytes]</code>，用於 storage trie。將 <code>n</code> 個 Layer Blocks 直接串接即可形成 Full Block，避免額外 layout conversion；代價是 layerwise prefill 讓 block 數量增加約 layer 倍，要求高效的小 block 傳輸。 <a class="source-ref" href="#source-appendix-p16">§A.5 · PDF pp.16–17</a></p>
+      </section>
+
+      <section id="formulas-theory" class="paper-section">
+        <div class="section-heading"><span class="section-number">07</span><h2>公式與理論</h2></div>
+        <h3>7.1 每對 PE–DE 的流量</h3>
+        <p>令 <code>P, D</code> 分別為 prefill／decode nodes 數；每 node 有 <code>g</code> 張 GPU，每張 paired CNIC bandwidth 為 <code>B</code>；每 node SNIC bandwidth 為 <code>sB</code>，DRAM bandwidth 為 <code>M</code>。若 storage bandwidth 已滿載且所有 pair 均衡，PE-read 與 DE-read 在單一 PE–DE pair 上的流量為：</p>
+        <div class="formula-block">
+          \[
+          T_p=\frac{Bs}{Dg^2},\qquad T_c=\frac{Bs}{Pg^2}.
+          \]
+          <p class="formula-block__meaning"><code>T_p, T_c</code> 的單位都是 bandwidth；分母反映 node／GPU pairs 如何分攤一個 node 的 SNIC 流量。</p>
+        </div>
+        <p><a class="source-ref" href="#source-theory-p6">§4.2 · PDF pp.5–6 · Eqs. 1–9</a></p>
+        <h3>7.2 作者給出的 bottleneck-free P/D 範圍</h3>
+        <p>分別限制 PE CNIC write、DE CNIC read／write 與 DE DRAM 壓力後，論文合併為：</p>
+        <div class="formula-block">
+          \[
+          \frac{s}{g-s}\leq\frac{P}{D}\leq
+          \min\left\{
+          \frac{g-2s}{s},
+          \frac{g-s}{2s},
+          \frac{M/(Bs)-3}{2}
+          \right\}.
+          \]
+          <p class="formula-block__meaning">下界避免 PE write 壅塞；三個上界依序來自 DE read、DE write 與 DE DRAM。代入 <code>g=8, s=1, M≈500 GB/s</code>、<code>Bs≈50 GB/s</code>，作者得到 <code>1/7 ≤ P/D ≤ 7/2</code>。</p>
+        </div>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>此式是理想化 capacity accounting，不是 arbitrary workload 下的 latency 保證。推導先假設 GPU–NIC 位於相同 PCIe switch、task 已負載平衡、storage read 可滿載，且 compute network 無 congestion；未建模 switch bisection、burst queueing、storage jitter 或 tail latency。</p></aside>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p><strong>Eq. (1) 有條件缺口：</strong>PE CNIC read 壓力被寫為 <code>2T_pDg=2Bs/g ≤ B</code>，實際需要 <code>s ≤ g/2</code>；正文卻以「<code>s ≤ g</code> 在實務上成立」就推論永不成瓶頸。作者的 <code>g=8, s=1</code> 範例仍滿足較強條件，但「always bottleneck-free」的一般化並未由該代數支持。 <a class="source-ref" href="#source-theory-p6">§4.2 · PDF p.6 · Eq. 1</a></p></aside>
+        <h3>7.3 DE group 的負載閾值</h3>
+        <div class="formula-block">
+          \[
+          Z=1.05\times\frac{\sum_{r\in R}len_r+\sum_{e\in E}tok_e}{|E|}.
+          \]
+          <p class="formula-block__meaning"><code>R</code> 是依 group 剩餘 HBM 得到的可排程 request 上界集合；<code>E</code> 為 group 內 DEs；<code>Z</code> 把「目前 token＋將加入 token」的平均值加 5% margin，用來辨識 high-token DE。</p>
+        </div>
+        <p><a class="source-ref" href="#source-scheduler-p8">§6.1 · PDF p.8</a></p>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>係數 1.05 是 heuristic；論文沒有推導、敏感度 sweep 或線上重校準。Appendix 另把 <code>α</code> 設為 3 秒可讀 token 數、<code>β</code> 設為單 GPU 5 秒可處理 token 數，compute quota 固定 300 ms，均需事前 profiling。 <a class="source-ref" href="#source-appendix-p16">§A.4 · PDF p.16</a></p></aside>
+        <h3>7.4 Online working set 估算</h3>
+        <div class="formula-block">
+          \[
+          W\approx\lambda\bar{T}\times\frac{total\_len_{avg}}{2}.
+          \]
+          <p class="formula-block__meaning"><code>λ</code> 為新 trajectories／秒，<code>T̄</code> 為平均 JCT（秒），<code>total_len_avg</code> 為平均總序列長度；除以 2 是作者對 trajectory 逐步成長的平均化近似。DS 660B 的評估範圍約由 APS 0.1 時 69 GB 增至 APS 0.45 時 681 GB。</p>
+        </div>
+        <p><a class="source-ref" href="#source-discussion-p13">§8.2 · PDF p.13</a></p>
+      </section>
+
+      <section id="figures-guide" class="paper-section">
+        <div class="section-heading"><span class="section-number">08</span><h2>圖片與圖表導讀</h2></div>
+        <p>以下保留理解資料流、排程與主要證據所需的五張圖。頁面定位另列於每張圖前的來源標記。</p>
+        <p><a class="source-ref" href="#source-fig4-p5">§4.1 · PDF p.5 · Fig. 4</a></p>
+        <figure>
+          <a href="assets/images/fig-04-p05-dual-path-loading.png"><img src="assets/images/fig-04-p05-dual-path-loading.png" alt="DualPath 的 PE read 與 DE read 兩條 KV-Cache 載入路徑，標示 storage、SNIC、DRAM、CNIC、GPU 與 Full Block、Layer Block 的傳輸方向"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>左圖的舊 KV 先到 PE，再把完整 prompt KV 送給 DE；右圖則先由 DE SNIC 讀舊 KV、逐層送回 PE，PE 只回傳新 token KV。先沿粗箭頭看 Full Block，再沿細箭頭追 Layer Block，能看出頻寬轉移而非資料量消失。</span></figcaption>
+        </figure>
+        <p><a class="source-ref" href="#source-scheduler-p8">§6.2 · PDF p.9 · Fig. 6</a></p>
+        <figure>
+          <a href="assets/images/fig-06-p09-intra-engine-schedule.png"><img src="assets/images/fig-06-p09-intra-engine-schedule.png" alt="Compute quota 與 chunked prefill 的 intra-engine scheduling 示意，以及套用前後 attention 與 FFN GPU timeline 的同步 bubble 對比"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 6</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>左側以同一 compute quota 截斷過大的 request，右側顯示各 data-parallel GPU 的 attention 時間更接近；閱讀重點是它在同步進 FFN 前縮短等待 bubble，而不是改變 attention kernel 本身。</span></figcaption>
+        </figure>
+        <p><a class="source-ref" href="#source-offline-p10">§7.3 · PDF p.10 · Fig. 7</a></p>
+        <figure>
+          <a href="assets/images/fig-07-p10-offline-performance.png"><img src="assets/images/fig-07-p10-offline-performance.png" alt="DS 27B、DS 660B 與 Qwen 32B 在三種最大 agent context 和多種 agent 數量下的 offline JCT 長條圖，比較 Oracle、DualPath、Basic 與 SGLang Mooncake"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 7</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>逐列看模型、逐欄看最大 context；agent 數或 context 增加時，DualPath 與 Basic 的差距通常放大。灰色 Oracle 是零 I/O 上界，藍色 SGL(MC) 的 N/A 與實作差異使其不適合拿來計算公平 speedup。</span></figcaption>
+        </figure>
+        <p><a class="source-ref" href="#source-online-p12">§7.4 · PDF p.12 · Fig. 10</a></p>
+        <figure>
+          <a href="assets/images/fig-10-p12-online-latency.png"><img src="assets/images/fig-10-p12-online-latency.png" alt="DS 27B 與 DS 660B 的 TTFT、TTST、TPOT 隨 agent arrival rate 變化的六個折線圖，比較 Basic、DualPath、Oracle 與 SGLang Mooncake"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 10</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>上排是 DS 27B、下排是 DS 660B；最先急升的是 TTFT，說明排隊／KV read 才是容量崩潰的訊號。TTST 與 TPOT 沒明顯惡化支持「decode 未被額外 KV traffic 拖慢」，但超過 SLO 的 TTST／TPOT 點被作者省略。</span></figcaption>
+        </figure>
+        <p><a class="source-ref" href="#source-ablation-p12">§7.5 · PDF p.12 · Fig. 12</a></p>
+        <figure>
+          <a href="assets/images/fig-12-p12-ablation.png"><img src="assets/images/fig-12-p12-ablation.png" alt="DualPath 的 online TTFT 組成與 offline 累積式消融圖，分解 scheduling、allocation、KV reading、prefill 以及 Layerwise、Dual-path、Scheduler 的 JCT 貢獻"></a>
+          <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 12</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>左圖看 Basic 隨 APS 增加時 scheduling／queue 部分膨脹；右圖依序加入 Layerwise、DPL、Scheduler，是累積配置而非三個互斥單因子，因此各柱與 Basic 的差不能直接相加。</span></figcaption>
+        </figure>
+      </section>
+
+      <section id="experimental-setup" class="paper-section">
+        <div class="section-heading"><span class="section-number">09</span><h2>實驗設計</h2></div>
+        <h3>實作</h3>
+        <p>DualPath 建在 DeepSeek 的 in-house inference framework 上，約修改 5K lines；GPU kernels 組合使用 FlashMLA、DeepGEMM、DeepEP，storage backend 為 3FS，介面類似 <code>io_uring</code> 並採 kernel bypass。 <a class="source-ref" href="#source-setup-p9">§7.1 · PDF p.9</a></p>
+        <h3>Testbed 與模型</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>主要硬體與模型設定</caption>
+            <tbody>
+              <tr><th scope="row">每節點 GPU／CPU</th><td>8× NVIDIA Hopper GPUs、dual processors；論文未提供確切 GPU／CPU 型號</td></tr>
+              <tr><th scope="row">Compute fabric</th><td>8×400 Gbps RDMA NICs／node，InfiniBand</td></tr>
+              <tr><th scope="row">Storage fabric</th><td>1×400 Gbps storage NIC／node，連接 3FS；與 compute network 實體隔離</td></tr>
+              <tr><th scope="row">Storage cache</th><td>cluster-wide 3FS 無內部 DRAM cache，作者稱可灌滿 400 Gbps SNIC</td></tr>
+              <tr><th scope="row">模型</th><td>DeepSeek V3.2 660B（MoE、DeepSeek Sparse Attention）、內部縮小版 DS 27B、Qwen2.5-32B（dense、GQA）</td></tr>
+              <tr><th scope="row">數值精度</th><td>Evaluation 的 weight／KV／activation precision 論文未提供；Table 1 的「KV 預設 FP8」只屬 motivation 計算，不能當成 §7 實驗設定</td></tr>
+              <tr><th scope="row">軟體版本</th><td>SGLang baseline 為 commit 19089aa；CUDA、driver、InfiniBand firmware、3FS 版本與完整 in-house stack 版本論文未提供</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-setup-p9">§7.1–7.2 · PDF p.9</a></p>
+        <h3>Production agent traces</h3>
+        <p>三個資料集都來自 production agentic RL training 的 coding workloads，每組 500 trajectories。Agent 在含已知 bug 與錯誤訊息的 repository sandbox 中反覆產生工具呼叫；評估採 trace replay，依原資料指定每輪 append 與應生成的 token 數。Figure 7 最高使用 4,096 agents，超過每組 500 條原始 trajectories；Appendix 說額外 trajectories 會重抽既有 trajectory 並 prepend 隨機 token round，但未報實際重複率。 <a class="source-ref" href="#source-setup-p9">§7.2 · PDF p.9 · Table 2</a> <a class="source-ref" href="#source-offline-p10">§7.3 · PDF p.10 · Fig. 7</a> <a class="source-ref" href="#source-appendix-p16">§A.3 · PDF p.16</a></p>
+        <div class="table-scroll">
+          <table>
+            <caption>Table 2 重整：每組 500 trajectories 的平均統計</caption>
+            <thead><tr><th scope="col">MaxLen</th><th scope="col">Turns</th><th scope="col">Append／turn</th><th scope="col">Gen／turn</th><th scope="col">Total</th><th scope="col">Context</th></tr></thead>
+            <tbody>
+              <tr><td>32K</td><td>60</td><td>608</td><td>148</td><td>28,639</td><td>17,183</td></tr>
+              <tr><td>48K</td><td>106</td><td>474</td><td>172</td><td>42,607</td><td>25,120</td></tr>
+              <tr><td>64K</td><td>157</td><td>429</td><td>176</td><td>55,958</td><td>32,721</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Baselines 與配置公平性</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>實驗比較組</caption>
+            <thead><tr><th scope="col">名稱</th><th scope="col">定義</th><th scope="col">可支持的比較</th></tr></thead>
+            <tbody>
+              <tr><td>Basic</td><td>未修改的同一 in-house framework</td><td>作者只以 Basic→Ours 計算主要 speedup，實作控制最好，但 Basic 同時缺 layerwise、DPL 與新 scheduler</td></tr>
+              <tr><td>Oracle</td><td>以 DualPath 為底，略過所有 disk reads、D2H／H2D 與 inter-PD KV transfer</td><td>零 I/O 的理論上界，不是可部署 baseline</td></tr>
+              <tr><td>SGL(MC)</td><td>SGLang + HiCache + Mooncake Store + 3FS + Mooncake Transfer Engine</td><td>作者明言因 implementation differences 不公平，故不報 Ours 對它的 speedup</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>SGL(MC) 不支援 DS 27B；Qwen 32B 上 DualPath 使用 DP，而 SGL(MC) 因不支援 DP attention 使用 TP=8；SGL(MC) 在部分大配置執行失敗。這些差異使 Figure 7 的藍柱只適合作背景，不適合作 headline 相對比較。 <a class="source-ref" href="#source-setup-p9">§7.2 · PDF p.9</a> <a class="source-ref" href="#source-offline-p10">§7.3 · PDF p.10 · Fig. 7</a></p>
+        <h3>Resource 與 scheduler 設定</h3>
+        <ul>
+          <li>預設 P/D：DS 660B 為 2P4D、Qwen 32B 為 1P2D、DS 27B 為 1P1D；DS models 使用 EP+DP，Qwen 在 DualPath 中使用 DP。</li>
+          <li>DualPath host DRAM：DeepSeek models 每 node 80 GB、Qwen 32B 每 node 320 GB；SGL(MC) 每 node 共 1.5 TB。</li>
+          <li><code>α</code>：3 秒可讀 tokens；<code>β</code>：單 GPU 5 秒可處理 tokens；compute quota：300 ms。</li>
+          <li>Speculative decoding 全部關閉，所有組別都以 3FS 為 storage backend。</li>
+        </ul>
+        <p><a class="source-ref" href="#source-setup-p9">§7.2 · PDF p.9</a> <a class="source-ref" href="#source-appendix-p16">§A.4 · PDF p.16</a></p>
+        <h3>Offline／online 方法與指標</h3>
+        <p><strong>Offline：</strong>(n) 個 agents 同時開始 replay，測所有 trajectories 完成的 JCT。<strong>Online：</strong>agents 依 Poisson process 以指定 APS 到達，從第 0 輪連續 replay；SLO 設為 TTFT ≤ 4 s、TPOT ≤ 50 ms。實驗在 TTFT 超過 4 s，或 150 秒 sliding window 的 TTFT 相對 30 分鐘前變化低於 5% 時停止；TTST／TPOT 超過 SLO 的資料點不畫。 <a class="source-ref" href="#source-offline-p10">§7.3 · PDF p.10</a> <a class="source-ref" href="#source-online-p12">§7.4 · PDF pp.11–12 · Fig. 10</a></p>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>論文未提供重複次數、error bars、warmup、信賴區間／顯著性、percentile latency 定義、功耗與成本。線上 replay 還假設回合間 tool latency 為零，故不能直接等同真實 closed-loop agent serving。</p></aside>
+      </section>
+
+      <section id="experimental-results" class="paper-section">
+        <div class="section-heading"><span class="section-number">10</span><h2>實驗結果</h2></div>
+        <h3>Offline JCT</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>主要量化結果與支持邊界</caption>
+            <thead><tr><th scope="col">實驗</th><th scope="col">結果</th><th scope="col">正確解讀</th></tr></thead>
+            <tbody>
+              <tr><td>DS 660B offline</td><td>對 Basic 最高 1.87×</td><td>headline best case；不是對 SGL(MC) 的公平比較</td></tr>
+              <tr><td>DS 27B offline</td><td>對 Basic 最高 1.78×；仍比 Oracle 慢 1.09–1.85×</td><td>1P1D storage bandwidth 仍不足，未消除全部 I/O gap</td></tr>
+              <tr><td>Append scale sensitivity</td><td>對 Basic 報告 1.82–1.99×</td><td>append 變長時 Basic 趨近 DualPath／Oracle，優勢來源逐漸由 I/O 轉向 compute</td></tr>
+              <tr><td>P/D ratio sensitivity</td><td>平均 1.64×、最高 2.46×</td><td>僅 DS 27B 的 1P1D、2P1D、1P2D</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-offline-p10">§7.3 · PDF p.10 · Fig. 7</a> <a class="source-ref" href="#source-sensitivity-p11">§7.3 · PDF p.11 · Figs. 8–9</a></p>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p><strong>作者文字與 Figure 7 有疑似不一致：</strong>Abstract／§7.3 把 offline 最大值寫成 1.87×，但依 Figure 7 同一座標軸的 Basic／Ours 柱高比估算，Qwen 32B 至少有三個 panel 超過 1.87×：32K／512 agents 約 2.13×、48K／256 約 2.01×、48K／512 約 2.04×。圖上沒有柱值標籤，因此這些只能視為幾何估算，不能取代作者表列數字；它表示「up to 1.87×」應理解為作者明確報告的 DS 660B 最大值，而非 Figure 7 全部模型的可驗證全域最大值。 <a class="source-ref" href="#source-offline-p10">§7.3 · PDF p.10 · Fig. 7</a></p></aside>
+        <aside class="statement statement--fact" data-kind="experimental-fact"><span class="statement__label">實驗事實</span><p>Figure 8 中，Basic 1P1D≈Basic 1P2D、DualPath 1P1D≈Basic 2P1D、DualPath 2P1D≈DualPath 1P2D。這些配對具有近似可用 SNIC 數，支持「aggregate storage bandwidth 是此 workload 的主瓶頸」；但證據只覆蓋 DS 27B 與三個 P/D configurations。 <a class="source-ref" href="#source-sensitivity-p11">§7.3 · PDF p.11 · Fig. 8</a></p></aside>
+        <h3>Online serving capacity 與 latency</h3>
+        <ul>
+          <li>DS 27B：在作者 SLO 下，DualPath 的 APS capacity 為 Basic 的 1.67×。</li>
+          <li>DS 660B：APS capacity 為 Basic 的 2.25×。</li>
+          <li>兩者算術平均為 1.96×，即 Abstract 的 online headline；Qwen 32B 沒有 online 結果。</li>
+          <li>DualPath 的 TTST 與 Basic 相近，TPOT 未呈現額外 decode overhead；但 Basic／DualPath 的 TPOT 都明顯高於 Oracle，作者認為小模型上的基本 P→D transfer 仍有可觀成本。</li>
+        </ul>
+        <p><a class="source-ref" href="#source-online-p12">§7.4 · PDF pp.11–12 · Figs. 10–12</a></p>
+        <aside class="statement statement--fact" data-kind="experimental-fact"><span class="statement__label">實驗事實</span><p>TTFT breakdown 顯示 DualPath 各部分隨 APS 大致穩定，而 Basic 的 scheduling／queueing time 隨負載急升；這比單看平均 TTFT 更直接支持「PE-side storage bandwidth 造成排隊」。 <a class="source-ref" href="#source-ablation-p12">§7.4 · PDF p.12 · Fig. 12（左）</a></p></aside>
+        <h3>大規模 weak scaling</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>Table 3 重整：小配置與最高 1,152 GPU 配置</caption>
+            <thead><tr><th scope="col">模式</th><th scope="col">設定</th><th scope="col">JCT</th><th scope="col">TTFT</th><th scope="col">TTST</th><th scope="col">TPOT</th></tr></thead>
+            <tbody>
+              <tr><td>Offline</td><td>2P4D、2K agents</td><td>3,167 s</td><td>—</td><td>—</td><td>—</td></tr>
+              <tr><td>Offline</td><td>48P96D、48K agents</td><td>3,201 s</td><td>—</td><td>—</td><td>—</td></tr>
+              <tr><td>Online</td><td>2P4D、0.4 APS</td><td>—</td><td>1.739 s</td><td>0.228 s</td><td>0.039 s</td></tr>
+              <tr><td>Online</td><td>44P88D、8.8 APS</td><td>—</td><td>1.847 s</td><td>0.194 s</td><td>0.036 s</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Offline 將資源與 agents 同增 24×而 JCT 近似；online 將資源與 APS 同增 22×而 latency 近似。Scheduler CPU 使用低於 10 cores。這證明接近線性的 <em>weak scaling</em>，不是固定資源下的 22× speedup。作者也明言，因未細調 parallelism 與 P/D ratio，大配置相較等成本多個小 units 沒有額外 JCT／capacity gain。 <a class="source-ref" href="#source-scale-p13">§7.6 · PDF p.13 · Table 3、Fig. 15</a></p>
+      </section>
+
+      <section id="ablation-sensitivity" class="paper-section">
+        <div class="section-heading"><span class="section-number">11</span><h2>Ablation 與敏感度分析</h2></div>
+        <h3>累積式元件消融</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>DS 660B、64K MAL、1024／2048 agents；每列在前一列上再加入元件</caption>
+            <thead><tr><th scope="col">配置</th><th scope="col">相對 Basic 的平均 JCT 降幅</th><th scope="col">可歸因內容</th></tr></thead>
+            <tbody>
+              <tr><td>Basic + Layerwise prefill</td><td>17.21%</td><td>放大 PE batch、降低 HBM 壓力並隱藏 transfer</td></tr>
+              <tr><td>+ Dual-Path Loading</td><td>38.19%</td><td>主要增益；開始同時使用 PE／DE SNIC</td></tr>
+              <tr><td>+ Scheduler</td><td>45.62%</td><td>選路徑並改善 SNIC／attention load balance</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-ablation-p12">§7.5 · PDF p.12 · Fig. 12（右）</a></p>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>上述百分比是各累積配置相對 Basic 的總降幅，不是三個獨立 effect sizes。若換算增量，dual-path 是從 17.21% 降幅推進到 38.19%，scheduler 再推進到 45.62%；仍需 factorial ablation 才能分離元件互動。</p></aside>
+        <h3>Load-balance 證據</h3>
+        <ul>
+          <li>Storage NIC traffic 的 max/avg ratio：round-robin 1.53，DualPath scheduler 1.18；1.0 為完美平衡。</li>
+          <li>Attention execution time 的 max/avg ratio：task 前 5% 最低可達 1.06，支持 compute quota 減少 data-parallel bubbles。</li>
+          <li>作者不顯示 workload 尾段，因系統 underloaded 後 max/avg ratio 失去代表性。</li>
+        </ul>
+        <p><a class="source-ref" href="#source-ablation-p12">§7.5 · PDF p.12 · Figs. 13–14</a></p>
+        <h3>Workload 與 P/D 敏感度</h3>
+        <p>Figure 9 顯示 append 或 generation 增長時，Basic 逐漸接近 DualPath：append 越長，prefill compute 比重越高；generation 越長，兩次 prefill 間隔越大，KV read pressure 越低。這直接限定了方法最適場景為高 reuse、短 append、短 generation。P/D sweep 則顯示可用 SNIC 數比 engine 名稱更能解釋 JCT。 <a class="source-ref" href="#source-sensitivity-p11">§7.3 · PDF p.11 · Figs. 8–9</a></p>
+        <h3>未提供的關鍵 ablation</h3>
+        <p>論文未提供 QoS on/off、99% bandwidth reservation sweep、<code>α／β／Z</code> 與 300 ms compute quota 敏感度、CNIC copy 的 block-size／throughput sweep、host buffer size、DE-read 的額外 H2D 成本、request split read、storage backend 變更、RoCE 實測，以及各元件對 p99／p999 latency 的影響。這使 traffic isolation 與 scheduler robustness 主要靠端到端結果與少量平均指標間接支持。</p>
+      </section>
+
+      <section id="strengths-limitations-risks" class="paper-section">
+        <div class="section-heading"><span class="section-number">12</span><h2>優點、限制與風險</h2></div>
+        <h3>優點</h3>
+        <ul>
+          <li><strong>抓到跨角色的閒置資源。</strong>不要求新 storage hardware，就把 DE SNIC 從旁觀者變成 KV ingress。</li>
+          <li><strong>跨層 co-design 完整。</strong>資料路徑、block layout、RDMA submission、network QoS、inter-engine 與 intra-engine scheduler 形成一致的 end-to-end design。</li>
+          <li><strong>證據種類多。</strong>有三個模型、production-derived traces、offline／online、P/D sweep、累積 ablation、load balance 與千卡 weak scaling。</li>
+          <li><strong>對外推邊界部分自覺。</strong>作者明列 request splitting、動態 P/D、large-scale tail TTFT 與小模型 P→D transfer 為未來工作。</li>
+        </ul>
+        <h3>限制與效度風險</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>限制、來源與可能影響</caption>
+            <thead><tr><th scope="col">限制</th><th scope="col">證據</th><th scope="col">影響</th></tr></thead>
+            <tbody>
+              <tr><td>In-house baseline 與不可公平的公開 baseline</td><td>作者只計 Basic→Ours；SGL(MC) 實作／parallelism 不同且部分失敗</td><td>無法由本文證明優於成熟公開系統</td></tr>
+              <tr><td>Trace replay 非 closed-loop agent</td><td>工具回應與 round structure 預先固定，原生成 token 內容未保留，只強制同長度</td><td>真實分支、相關 burst、tool latency 可能改變 queue 與 hit pattern</td></tr>
+              <tr><td>理想化 hit／eviction</td><td>client 已知 hit length，只允許 trajectory 內命中且不需 eviction</td><td>metadata lookup、eviction、跨 session prefix sharing 未被量測</td></tr>
+              <tr><td>昂貴且特殊的拓撲</td><td>每 GPU paired 400 Gbps CNIC、每 node 400 Gbps SNIC、良好 PCIe、可管 QoS</td><td>shared／oversubscribed fabric 或一般 cluster 的收益未知</td></tr>
+              <tr><td>單一硬體／storage 生態</td><td>僅 NVIDIA Hopper + InfiniBand + 3FS</td><td>AMD／ROCm、RoCE、其他 GPU 與 storage backend 未驗證</td></tr>
+              <tr><td>Host DRAM 並非極小</td><td>DeepSeek 80 GB／node、Qwen 320 GB／node</td><td>雖低於 SGL(MC) 1.5 TB，仍可能與 RL rollout 的 DRAM 壓力衝突</td></tr>
+              <tr><td>Latency 統計不足</td><td>無重複次數、error bars、percentiles；超過 SLO 的 TTST／TPOT 點省略，但方法只定義 TTFT／TPOT SLO，未定義 TTST SLO</td><td>tail risk、穩定性與圖點篩選規則難判斷</td></tr>
+              <tr><td>效益依賴 I/O-bound regime</td><td>append／generation 變長時 Basic 追近</td><td>低 reuse、長輸出、compute-bound workload 的增益有限</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a class="source-ref" href="#source-setup-p9">§7.1–7.2 · PDF p.9</a> <a class="source-ref" href="#source-online-p12">§7.4 · PDF pp.11–12</a> <a class="source-ref" href="#source-discussion-p13">§8 · PDF p.13</a> <a class="source-ref" href="#source-appendix-p16">§A.3–A.4 · PDF p.16</a></p>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>摘要所稱 data path「inherently avoids network congestion」比正文證據強：§4.2 的推導先假設 compute network 無 congestion，且只做端點 bandwidth accounting；真正能否避免 switch queueing 與 collective tail interference，仍需 QoS on/off 與 fabric saturation 實驗。 <a class="source-ref" href="#source-theory-p6">§4.2 · PDF pp.5–6</a> <a class="source-ref" href="#source-traffic-p7">§5.1 · PDF p.7</a></p></aside>
+        <aside class="statement statement--speculation" data-kind="speculation"><span class="statement__label">推測</span><p>在多租戶或 sustained collective traffic 下，99% 高優先 reservation 可能讓 KV traffic 長時間只剩保底頻寬；此時 DE SNIC 雖有資料，compute fabric 的低優先 lane 仍可能成為新的 tail bottleneck。論文未做此情境的壓力測試。</p></aside>
+        <h3>作者承認的未完成事項</h3>
+        <ul>
+          <li>同一 request 還不能由 PE／DE 雙側拆分並行讀取。 <a class="source-ref" href="#source-scheduler-p8">§6.1 · PDF p.8</a></li>
+          <li>小模型的基本 P→D transfer overhead 仍明顯。 <a class="source-ref" href="#source-online-p12">§7.4 · PDF p.11</a></li>
+          <li>動態 workload 仍需 simulator 或 online P/D／parallelism adjustment；大型部署的 TTFT percentiles 仍可改善。 <a class="source-ref" href="#source-discussion-p13">§8.1 · PDF p.13</a></li>
+        </ul>
+      </section>
+
+      <section id="related-work" class="paper-section">
+        <div class="section-heading"><span class="section-number">13</span><h2>與相關工作的比較</h2></div>
+        <p>DualPath 與多數 KV-Cache work 的差別，在於它不先減少、壓縮或快取 bytes，而是改變 bytes 可從哪一側進入系統。以下只比較論文直接描述的技術定位；除 SGL(MC) 外，相關工作均未做 head-to-head 實驗。 <a class="source-ref" href="#source-related-p13">§9 · PDF pp.13–14</a></p>
+        <div class="table-scroll">
+          <table>
+            <caption>技術路線、取捨與本文實證狀態</caption>
+            <thead><tr><th scope="col">系統／路線</th><th scope="col">主要作法</th><th scope="col">相對 DualPath 的差異</th><th scope="col">本文實證</th></tr></thead>
+            <tbody>
+              <tr><td>Mooncake、TokenLake</td><td>分散式 DRAM／segment-level prefix cache pool，提高 memory-tier hit</td><td>DualPath 直接面向外部 storage，降低大 DRAM pool 需求並平衡所有 SNIC；原理上可與中間 DRAM cache 疊加</td><td>沒有公平的純系統對照；Mooncake 只嵌在 SGL(MC)</td></tr>
+              <tr><td>Strata</td><td>Hierarchical cache、GPU-assisted I/O 與 cache-aware scheduling co-design</td><td>論文把它歸為 single-path I/O 優化；DualPath 以 PE／DE 雙 ingress 聚合 SNIC</td><td>未比較</td></tr>
+              <tr><td>KVPR、TailorKV</td><td>部分重算重疊、layer-granular hybrid quantization，降低單一路徑 bandwidth 壓力</td><td>減少／壓縮搬移量；DualPath 重分配路徑，理論上可互補</td><td>未比較</td></tr>
+              <tr><td>HCache、TARDIS、Phoenix</td><td>減少需要取回的 KV 或降低 retrieval stack overhead</td><td>作者認為沒有處理 PE／DE 之間的 storage-I/O imbalance</td><td>僅 Introduction 概括</td></tr>
+              <tr><td>LayerKV、PrefillOnly</td><td>Layerwise KV 管理，只讓單層 cache 常駐 HBM，擴大 prefill batch</td><td>是 DualPath 直接採用的基礎，不是雙路徑創新</td><td>只有自家「Basic+Layer」累積消融，未重跑原系統</td></tr>
+              <tr><td>DistServe、Splitwise</td><td>把 prefill／decode 放到不同 GPUs，以不同 parallelism 與資源配置隔離兩階段</td><td>DualPath 建在 PD disaggregation 之上，修補其 PE-side storage bandwidth 不平衡</td><td>架構引用，非 baseline</td></tr>
+              <tr><td>SGL(MC)</td><td>SGLang + HiCache + Mooncake Store + 3FS + Mooncake Transfer Engine</td><td>唯一具體外部 baseline，但 DP／TP、model support、hit accounting 與實作均不同</td><td>作者明言不公平，部分配置 N/A，未報相對 speedup</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>最值得做的後續組合是「先減 bytes，再擴 ingress」：例如 layerwise quantization／partial recomputation 降低單次讀量，DualPath 再把剩餘讀量分散到 PE／DE SNIC。不過兩者都消耗 scheduler state 與 overlap window，疊加後未必線性相乘，需同一 stack 的 factorial evaluation。</p></aside>
+      </section>
+
+      <section id="personal-analysis" class="paper-section">
+        <div class="section-heading"><span class="section-number">14</span><h2>個人分析與可延伸方向</h2></div>
+        <h3>可借鑑的系統設計</h3>
+        <ol>
+          <li><strong>把「角色固定」的資源表重新畫一次。</strong>PE 與 DE 是軟體角色，SNIC 卻是節點資源；DualPath 的關鍵是拒絕接受「只有 PE 能讀 prefill KV」這個歷史慣例。</li>
+          <li><strong>先統一仲裁點，再談隔離。</strong>若 CUDA copy、GDS、RDMA 走不同控制域，priority 很難端到端成立；CNIC-centric path 雖繞路，卻把 QoS decision 收斂到同一硬體。</li>
+          <li><strong>capacity model 與 scheduler 要互相驗證。</strong>Eq. (9) 只在均衡前提下有意義；Figures 12–14 的 scheduler evidence 才是系統接近模型前提的關鍵。</li>
+        </ol>
+        <h3>建議的延伸實驗</h3>
+        <ul>
+          <li>建立同一公開 stack、相同 kernels／parallelism／storage／hit accounting 的 Basic、Layerwise-only、DPL-only、QoS-only、Scheduler-only 完整 factorial baseline。</li>
+          <li>用真實 closed-loop coding／browser agents，保留 tool latency、分支與生成內容，報 mean、p95、p99、p999 TTFT／TPOT 與任務成功率。</li>
+          <li>把 request 拆成多段，同時由 PE／DE SNIC 讀；以 flow completion time、block order 與 merge cost 決定是否值得。</li>
+          <li>用 online telemetry 直接估測 GPU compute、SNIC service time、CNIC low-priority queue 與 HBM，而非只用 token count proxy；讓 <code>α, β, Z</code> 與 P/D ratio 可動態調整。</li>
+          <li>在 RoCE、shared／oversubscribed fabrics、不同 storage backends 與其他 GPU software stacks 上做 portability matrix，特別量測 QoS tail isolation。</li>
+        </ul>
+        <aside class="statement statement--speculation" data-kind="speculation"><span class="statement__label">推測</span><p>若 compute fabric 的低優先閒置頻寬可即時估測，scheduler 可把 DualPath 改成三資源 min-cost flow：storage ingress、compute-fabric slack、DE HBM／DRAM。這會比「PE 或 DE queue 較短」更能處理多租戶與異質模型，但控制 loop 的延遲和量測雜訊也會變成新問題。</p></aside>
+        <aside class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>整體評價：DualPath 的核心洞察簡潔、資料流完整，且在其目標 production trace 上有強 end-to-end 證據；但目前最可靠的結論是「在特定 Hopper+InfiniBand+3FS、PD+layerwise stack 上，聚合 DE SNIC 能顯著改善高-hit agent workload」，而不是「任意 agentic LLM inference 都能得到約 2×」。</p></aside>
+      </section>
+
+      <section id="discussion-questions" class="paper-section">
+        <div class="section-heading"><span class="section-number">15</span><h2>組會討論問題</h2></div>
+        <ol>
+          <li><strong>1.87× 有多少真正來自 dual path？</strong>若 Basic 已具備相同 layerwise prefill、CNIC QoS 與 scheduler，只關閉 DE-read，跨三個模型與 workload 的增量還剩多少？</li>
+          <li><strong>「不干擾 collective」要如何被證偽？</strong>應加入哪些 QoS on/off、fabric oversubscription 與多租戶壓力測試，才能比較 EP AllToAll／TP collective 的 p99、p999 latency，而不只看平均 TPOT？</li>
+          <li><strong>真實 closed-loop agent 會不會破壞 token-count proxy？</strong>當 tool latency、分支、KV size、append／generation 比例與 attention 型態異質時，<code>tok_e</code> 還能同時代表 GPU、disk 與 network load 嗎？</li>
+          <li><strong>Eq. (9) 在取消理想假設後還剩多少適用性？</strong>把 Eq. (1) 的 <code>s ≤ g/2</code> 條件、switch bisection、burst queueing 與 storage jitter 放入模型後，bottleneck-free P/D range 是否仍覆蓋常見部署？</li>
+          <li><strong>1,152 GPU 結果證明 scalability 還是複製？</strong>既然 22× 資源只承載 22× APS，且作者承認不優於等成本小 pools，應用 fragmentation、burst absorption、成本／瓦或 tail SLO 中哪一項來證明單一大 pool 的額外價值？</li>
+        </ol>
+      </section>
+
+      <section id="glossary-index" class="paper-section">
+        <div class="section-heading"><span class="section-number">16</span><h2>術語表與重點索引</h2></div>
+        <h3>術語表</h3>
+        <dl class="term-list">
+          <dt>KV-Cache</dt><dd>Attention keys／values 的跨 token cache；在多輪 agent 中可跨回合重用舊 prefix，避免重新計算。</dd>
+          <dt>PE / DE</dt><dd>Prefill Engine／Decode Engine；PD disaggregation 中分別處理 prompt prefill 與 autoregressive decode。</dd>
+          <dt>SNIC / CNIC</dt><dd>Storage NIC／Compute NIC；前者連 storage backend，後者連 GPU 間 compute fabric。DualPath 把 DE SNIC 納入 KV ingress，並以 CNIC 做 GPU I/O QoS 仲裁。</dd>
+          <dt>PE-read / DE-read</dt><dd>命中 KV 分別先由 PE 或 DE node 的 SNIC 載入；DE-read 再用 compute-network RDMA 把 Layer Blocks 傳給 PE。</dd>
+          <dt>Layerwise prefill</dt><dd>逐 layer 載入／釋放 KV，只讓當前 layer cache 常駐 HBM，以擴大有效 token batch。</dd>
+          <dt>Full Block / Layer Block</dt><dd>跨所有 layers 的 storage block，與只含單 layer 的 streaming block；形狀分別為 ([layer,tokens,bytes]) 與 ([1,tokens,bytes])。</dd>
+          <dt>RDMA</dt><dd>Remote Direct Memory Access；本文也用 paired CNIC 的 local RDMA Write 實作 H2D copy。</dd>
+          <dt>VL / QoS</dt><dd>InfiniBand virtual lane／Quality of Service；model communication 走高優先 VL，KV traffic 走低優先 VL。</dd>
+          <dt>JCT</dt><dd>Job Completion Time；offline rollout 中所有 trajectories 完成的總時間，越低越好。</dd>
+          <dt>APS</dt><dd>Agents Per Second；online workload 的 trajectory arrival rate。</dd>
+          <dt>TTFT / TTST / TPOT</dt><dd>Time to First Token／Time to Second Token／Time Per Output Token；分別反映排隊+prefill、decode 啟動與穩態生成延遲。</dd>
+          <dt>MAL</dt><dd>Max Agent Length；實驗用來截斷 agent trajectory 的最大 context length。</dd>
+          <dt>Weak scaling</dt><dd>資源與 workload 同比例放大，觀察完成時間／latency 是否維持；不同於固定 workload 的 speedup。</dd>
+        </dl>
+        <h3>重點來源索引</h3>
+        <ol class="source-index">
+          <li id="source-metadata-p1"><span><strong>書目與作者</strong>：標題頁、Abstract，PDF p.1；arXiv:2602.21548v2。</span></li>
+          <li id="source-intro-p2"><span><strong>問題、貢獻與 headline results</strong>：§1，PDF pp.1–2；Figure 1。</span></li>
+          <li id="source-background-p3"><span><strong>PD、layerwise prefill、agent workload 與資料中心網路</strong>：§2.1–2.3，PDF pp.2–3；Figure 2。</span></li>
+          <li id="source-motivation-p4"><span><strong>Trace、cache-compute ratio 與硬體趨勢</strong>：§3，PDF pp.3–4；Table 1、Figure 3。</span></li>
+          <li id="source-system-p4"><span><strong>系統元件</strong>：§4，PDF p.4。</span></li>
+          <li id="source-fig4-p5"><span><strong>雙讀取路徑與 buffer 生命週期</strong>：§4.1，PDF p.5；Figure 4。</span></li>
+          <li id="source-theory-p6"><span><strong>CNIC／DRAM bandwidth 模型</strong>：§4.2，PDF pp.5–6；Equations 1–9。</span></li>
+          <li id="source-traffic-p7"><span><strong>CNIC-centric copy 與流量隔離</strong>：§5–5.2，PDF pp.6–7。</span></li>
+          <li id="source-scheduler-p8"><span><strong>Inter／intra-engine scheduling</strong>：§6–6.2，PDF pp.7–9；Figures 5–6、Algorithm 1。</span></li>
+          <li id="source-setup-p9"><span><strong>實作、testbed、模型、traces 與 baselines</strong>：§7.1–7.2，PDF p.9；Table 2。</span></li>
+          <li id="source-offline-p10"><span><strong>Offline 主結果</strong>：§7.3，PDF p.10；Figure 7。</span></li>
+          <li id="source-sensitivity-p11"><span><strong>P/D、append 與 generation sensitivity</strong>：§7.3，PDF p.11；Figures 8–9。</span></li>
+          <li id="source-online-p12"><span><strong>Online TTFT／TTST／TPOT 與 capacity</strong>：§7.4，PDF pp.11–12；Figures 10–11。</span></li>
+          <li id="source-ablation-p12"><span><strong>Ablation 與 load balance</strong>：§7.4–7.5，PDF p.12；Figures 12–14。</span></li>
+          <li id="source-scale-p13"><span><strong>最高 1,152 GPU weak scaling</strong>：§7.6，PDF pp.12–13；Table 3、Figure 15。</span></li>
+          <li id="source-discussion-p13"><span><strong>Future work 與 working set</strong>：§8.1–8.2，PDF p.13。</span></li>
+          <li id="source-related-p13"><span><strong>相關工作定位</strong>：§9，PDF pp.13–14。</span></li>
+          <li id="source-appendix-p16"><span><strong>QoS、27B、agent replay、配置與 block layout</strong>：§A.1–A.5，PDF pp.16–17。</span></li>
+        </ol>
+      </section>
+    </main>
+  </div>
+
+  <footer class="page-footer">
+    <p>Paper Reading · DualPath: Breaking the Storage Bandwidth Bottleneck in Agentic LLM Inference · 最後更新 2026 年 9 月 8 日</p>
+    <p>模板版本 1.2.0。頁面中的分析與推測不代表原論文作者立場。</p>
+  </footer>
+
+  <script>
+    (() => {
+      const progressBar = document.querySelector('.reading-progress__bar');
+      const tocLinks = [...document.querySelectorAll('.toc a[href^="#"]')];
+      const sections = tocLinks
+        .map((link) => document.querySelector(link.getAttribute('href')))
+        .filter(Boolean);
+
+      const updateProgress = () => {
+        const root = document.documentElement;
+        const distance = root.scrollHeight - root.clientHeight;
+        const percent = distance > 0 ? Math.min(100, Math.max(0, root.scrollTop / distance * 100)) : 0;
+        if (progressBar) progressBar.style.width = `${percent}%`;
+      };
+
+      updateProgress();
+      document.addEventListener('scroll', updateProgress, { passive: true });
+      window.addEventListener('resize', updateProgress);
+
+      if ('IntersectionObserver' in window && sections.length) {
+        const byId = new Map(tocLinks.map((link) => [link.hash.slice(1), link]));
+        const observer = new IntersectionObserver((entries) => {
+          const visible = entries
+            .filter((entry) => entry.isIntersecting)
+            .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+          if (!visible) return;
+          tocLinks.forEach((link) => link.removeAttribute('aria-current'));
+          byId.get(visible.target.id)?.setAttribute('aria-current', 'location');
+        }, { rootMargin: '-12% 0px -72% 0px', threshold: 0 });
+        sections.forEach((section) => observer.observe(section));
+      }
+    })();
+  </script>
+</body>
+</html>

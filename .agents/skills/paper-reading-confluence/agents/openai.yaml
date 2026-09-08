@@ -1,0 +1,6 @@
+interface:
+  display_name: "Paper Reading for Confluence"
+  short_description: "以可追溯證據製作繁中 Confluence 論文摘要"
+  default_prompt: "Use $paper-reading-confluence to deeply read this paper and publish its Traditional Chinese summary to Confluence."
+policy:
+  allow_implicit_invocation: true
