@@ -19,6 +19,14 @@ Daily Codex cron (local)
 
 At the beginning of every scheduled run, the automation first resumes any work that was already committed and pushed but whose Pages deployment or Teams notification was not confirmed. It starts new paper discovery only after all reconciliation work is complete. If no eligible unread paper is found that day, the recovery check still runs, but the automation does not create an empty commit or publication record and does not send a new “paper added” notification. If a previously pending commit is confirmed as not yet notified, its notification is sent exactly once.
 
+## Published Site Structure
+
+- `/` is the dashboard. It links to the library, shows up to three recently active Topic/Subtopic folders, and presents the three most recently updated paper readings.
+- `/library/` is the searchable repository. Its generated folder pages provide `Topic → Subtopic → Paper` navigation.
+- `/papers/<stable-slug>/` contains each published summary. A paper keeps this source-derived URL when its Topic or Subtopic classification changes.
+
+Recency comes from each summary's validated update-date metadata rather than filesystem timestamps or Git checkout time. All navigation pages contain only generated HTML and links to already approved public summary assets; local PDFs and internal workspace files remain excluded.
+
 ## Daily Reading Configuration
 
 The configuration file is [`automation/daily-reading.json`](automation/daily-reading.json). Its `topics` array is currently empty, so the automation will neither invent nor enable a research topic. Add at least one topic with `enabled: true` before automatic paper selection can begin.

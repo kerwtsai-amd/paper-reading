@@ -19,9 +19,10 @@ import time
 import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import date
 from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +50,14 @@ ROBOTS_META_RE = re.compile(
     r"<meta\b(?=[^>]*\bname\s*=\s*['\"]robots['\"])[^>]*>",
     re.IGNORECASE,
 )
+PARAGRAPH_ELEMENT_RE = re.compile(
+    r"<p\b(?P<attributes>[^>]*)>.*?</p\s*>", re.IGNORECASE | re.DOTALL
+)
+CLASS_ATTRIBUTE_RE = re.compile(
+    r"(?:^|\s)class\s*=\s*(?P<quote>['\"])(?P<value>.*?)(?P=quote)",
+    re.IGNORECASE | re.DOTALL,
+)
+INVALID_PERCENT_ESCAPE_RE = re.compile(r"%(?![0-9a-fA-F]{2})")
 PUBLISHABLE_IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"})
 
 
@@ -87,6 +96,7 @@ class Paper:
     source: Source | None
     slug: str
     image_paths: tuple[PurePosixPath, ...]
+    last_updated: date
 
 
 class SummaryMetadataParser(HTMLParser):
@@ -98,10 +108,15 @@ class SummaryMetadataParser(HTMLParser):
         self.title_parts: list[str] = []
         self.anchors: list[Anchor] = []
         self.image_sources: list[str] = []
+        self.summary_update_datetimes: list[list[str]] = []
         self._h1_depth = 0
         self._title_depth = 0
         self._anchor_href: str | None = None
         self._anchor_parts: list[str] = []
+        self._dt_depth = 0
+        self._dt_parts: list[str] = []
+        self._pending_summary_update_index: int | None = None
+        self._summary_update_dd_index: int | None = None
         self._suppressed_depth = 0
 
     def handle_starttag(
@@ -110,6 +125,26 @@ class SummaryMetadataParser(HTMLParser):
         tag = tag.casefold()
         if tag in {"script", "style"}:
             self._suppressed_depth += 1
+
+        # A summary date is metadata only when it belongs to the definition-list
+        # property labelled exactly "摘要更新".  Other <time> elements in the
+        # research report must not affect homepage recency.
+        if self._pending_summary_update_index is not None:
+            if tag == "dd":
+                self._summary_update_dd_index = self._pending_summary_update_index
+                self._pending_summary_update_index = None
+            else:
+                self._pending_summary_update_index = None
+        if tag == "dt":
+            self._dt_depth += 1
+            if self._dt_depth == 1:
+                self._dt_parts = []
+        elif tag == "time" and self._summary_update_dd_index is not None:
+            attr_map = {name.casefold(): value or "" for name, value in attrs}
+            self.summary_update_datetimes[self._summary_update_dd_index].append(
+                attr_map.get("datetime", "")
+            )
+
         if tag == "h1":
             self._h1_depth += 1
         elif tag == "title":
@@ -125,6 +160,18 @@ class SummaryMetadataParser(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         tag = tag.casefold()
+        if tag == "dt" and self._dt_depth:
+            self._dt_depth -= 1
+            if self._dt_depth == 0:
+                if _collapse_whitespace(self._dt_parts) == "摘要更新":
+                    self.summary_update_datetimes.append([])
+                    self._pending_summary_update_index = (
+                        len(self.summary_update_datetimes) - 1
+                    )
+                self._dt_parts = []
+        elif tag == "dd" and self._summary_update_dd_index is not None:
+            self._summary_update_dd_index = None
+
         if tag == "h1" and self._h1_depth:
             self._h1_depth -= 1
         elif tag == "title" and self._title_depth:
@@ -145,8 +192,33 @@ class SummaryMetadataParser(HTMLParser):
             self.h1_parts.append(data)
         if self._title_depth:
             self.title_parts.append(data)
+        if self._dt_depth:
+            self._dt_parts.append(data)
         if self._anchor_href is not None:
             self._anchor_parts.append(data)
+
+
+class GeneratedDocumentParser(HTMLParser):
+    """Collect generated URL-bearing attributes and local fragment targets."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.ids: list[str] = []
+        self.references: list[tuple[str, str, str]] = []
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        normalized_tag = tag.casefold()
+        for name, value in attrs:
+            normalized_name = name.casefold()
+            normalized_value = value or ""
+            if normalized_name == "id":
+                self.ids.append(normalized_value)
+            if normalized_name in {"href", "src"}:
+                self.references.append(
+                    (normalized_tag, normalized_name, normalized_value)
+                )
 
 
 def _collapse_whitespace(parts: list[str]) -> str:
@@ -155,6 +227,33 @@ def _collapse_whitespace(parts: list[str]) -> str:
 
 def _normalized_sort_key(value: str) -> str:
     return unicodedata.normalize("NFKC", value).casefold()
+
+
+def _summary_last_updated(parser: SummaryMetadataParser, path: Path) -> date:
+    fields = parser.summary_update_datetimes
+    if len(fields) != 1:
+        raise BuildError(
+            "Summary must contain exactly one <dt>摘要更新</dt> property followed "
+            f"by a <dd> date: {path}"
+        )
+    if len(fields[0]) != 1:
+        raise BuildError(
+            "The 摘要更新 property must contain exactly one <time datetime=\"YYYY-MM-DD\">: "
+            f"{path}"
+        )
+
+    raw_value = fields[0][0]
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw_value):
+        raise BuildError(
+            "The 摘要更新 datetime must use the exact YYYY-MM-DD format: "
+            f"{path}"
+        )
+    try:
+        return date.fromisoformat(raw_value)
+    except ValueError as exc:
+        raise BuildError(
+            f"The 摘要更新 datetime is not a valid calendar date in {path}: {raw_value}"
+        ) from exc
 
 
 def _read_summary(path: Path) -> tuple[str, SummaryMetadataParser]:
@@ -341,6 +440,7 @@ def discover_papers(root: Path) -> list[Paper]:
                 f"{relative_path}"
             )
         image_paths = _validate_image_references(summary_path, parser)
+        last_updated = _summary_last_updated(parser, relative_path)
         papers.append(
             Paper(
                 topic=topic,
@@ -352,6 +452,7 @@ def discover_papers(root: Path) -> list[Paper]:
                 source=source,
                 slug=_slug_for(source, relative_directory),
                 image_paths=image_paths,
+                last_updated=last_updated,
             )
         )
 
@@ -391,7 +492,50 @@ def _is_relative_pdf_href(value: str) -> bool:
     return unquote(parsed.path).casefold().endswith(".pdf")
 
 
-def _rewrite_summary(document: str, paper: Paper) -> str:
+def _rewrite_public_breadcrumb(
+    document: str, paper: Paper, topic_route: str, subtopic_route: str
+) -> str:
+    breadcrumb_matches: list[re.Match[str]] = []
+    for match in PARAGRAPH_ELEMENT_RE.finditer(document):
+        class_match = CLASS_ATTRIBUTE_RE.search(match.group("attributes"))
+        if class_match is None:
+            continue
+        class_tokens = {
+            token.casefold() for token in class_match.group("value").split()
+        }
+        if "breadcrumb" in class_tokens:
+            breadcrumb_matches.append(match)
+
+    if len(breadcrumb_matches) != 1:
+        raise BuildError(
+            "Summary must contain exactly one template <p class=\"breadcrumb\"> "
+            f"for public navigation: {paper.relative_directory}"
+        )
+
+    encoded_topic_route = _route_component(topic_route)
+    encoded_subtopic_route = _route_component(subtopic_route)
+    breadcrumb = (
+        '<nav class="breadcrumb" aria-label="麵包屑">\n'
+        '      <a href="../../">首頁</a>\n'
+        '      <span aria-hidden="true">/</span>\n'
+        '      <a href="../../library/">論文閱讀儲藏庫</a>\n'
+        '      <span aria-hidden="true">/</span>\n'
+        f'      <a href="../../library/{encoded_topic_route}/">'
+        f"{html.escape(paper.topic)}</a>\n"
+        '      <span aria-hidden="true">/</span>\n'
+        f'      <a href="../../library/{encoded_topic_route}/'
+        f'{encoded_subtopic_route}/">{html.escape(paper.subtopic)}</a>\n'
+        '      <span aria-hidden="true">/</span>\n'
+        f'      <span aria-current="page">{html.escape(paper.title)}</span>\n'
+        "    </nav>"
+    )
+    match = breadcrumb_matches[0]
+    return document[: match.start()] + breadcrumb + document[match.end() :]
+
+
+def _rewrite_summary(
+    document: str, paper: Paper, topic_route: str, subtopic_route: str
+) -> str:
     saw_relative_pdf = False
 
     def replace_anchor(match: re.Match[str]) -> str:
@@ -438,6 +582,9 @@ def _rewrite_summary(document: str, paper: Paper) -> str:
     )
     for old, new in replacements:
         rewritten = rewritten.replace(old, new)
+    rewritten = _rewrite_public_breadcrumb(
+        rewritten, paper, topic_route, subtopic_route
+    )
     return _inject_robots_policy(rewritten, paper.relative_directory)
 
 
@@ -569,113 +716,364 @@ def _copy_assets(
         shutil.copyfile(source_path, destination_path)
 
 
-def _render_index(papers: list[Paper]) -> str:
+SITE_STYLE = """
+    :root { color-scheme: light dark; --bg: #f4f6fb; --panel: #fff; --text: #172033; --muted: #647089; --line: #dce2ec; --accent: #3157d5; --accent-soft: #e9edff; --folder: #f1b84b; --folder-tab: #ffd77d; --shadow: 0 12px 32px rgb(16 24 40 / .07); }
+    @media (prefers-color-scheme: dark) { :root { --bg: #10131b; --panel: #181d29; --text: #eef2ff; --muted: #aab3c7; --line: #30394c; --accent: #a9baff; --accent-soft: #252e50; --folder: #c68d29; --folder-tab: #e3b453; --shadow: 0 12px 32px rgb(0 0 0 / .25); } }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.6; }
+    a { color: var(--accent); }
+    a:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    .shell { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; }
+    .site-header { padding: 2.4rem 0 1.5rem; }
+    .hero { padding-top: 4rem; }
+    .breadcrumbs { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0 0 1.4rem; color: var(--muted); font-size: .9rem; }
+    .breadcrumbs a { color: inherit; }
+    .eyebrow, .folder-kicker { margin: 0 0 .4rem; color: var(--accent); font-size: .76rem; font-weight: 780; letter-spacing: .1em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.12; }
+    h2 { margin: 0; font-size: clamp(1.35rem, 3vw, 1.8rem); }
+    .intro { max-width: 48rem; margin: .8rem 0 0; color: var(--muted); }
+    main { padding-bottom: 4rem; }
+    .section-block { margin-top: 2.8rem; }
+    .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+    .section-heading p { margin: 0; color: var(--muted); font-size: .92rem; }
+    .library-cta { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 1.1rem; margin-top: 2rem; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 1.15rem; background: linear-gradient(135deg, var(--panel), var(--accent-soft)); color: var(--text); padding: 1.25rem 1.35rem; text-decoration: none; box-shadow: var(--shadow); }
+    .library-cta:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .library-cta strong { display: block; font-size: 1.12rem; }
+    .library-cta small { color: var(--muted); }
+    .folder-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr)); gap: 1rem; }
+    .folder-card { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 1rem; min-height: 8.3rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--panel); color: var(--text); padding: 1.05rem; text-decoration: none; box-shadow: var(--shadow); }
+    .folder-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .folder-card strong { display: block; line-height: 1.35; }
+    .folder-card small { display: block; margin-top: .28rem; color: var(--muted); }
+    .folder-icon { position: relative; display: inline-block; width: 3.4rem; height: 2.55rem; border-radius: .25rem .45rem .45rem .45rem; background: var(--folder); box-shadow: inset 0 -5px 0 rgb(0 0 0 / .08); }
+    .folder-icon::before { position: absolute; left: 0; top: -.58rem; width: 1.7rem; height: .75rem; border-radius: .35rem .35rem 0 0; background: var(--folder-tab); content: ""; }
+    .folder-icon.compact { width: 2.6rem; height: 1.95rem; }
+    .folder-icon.compact::before { top: -.45rem; width: 1.3rem; height: .58rem; }
+    .paper-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1rem; }
+    .paper-card { display: flex; min-height: 12rem; flex-direction: column; border: 1px solid var(--line); border-radius: 1rem; background: var(--panel); padding: 1.1rem; box-shadow: var(--shadow); }
+    .paper-card h3 { margin: 0; font-size: 1.05rem; line-height: 1.45; }
+    .paper-card h3 a { color: var(--text); text-decoration: none; }
+    .paper-card h3 a:hover { color: var(--accent); text-decoration: underline; }
+    .paper-meta { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .8rem; color: var(--muted); font-size: .84rem; }
+    .paper-date { margin: .65rem 0 0; color: var(--muted); font-size: .84rem; }
+    .paper-actions { display: flex; flex-wrap: wrap; gap: .9rem; margin-top: auto; padding-top: 1rem; font-weight: 700; font-size: .9rem; }
+    .source-link { color: var(--muted); font-weight: 600; }
+    .search-box { max-width: 44rem; margin-top: 1.5rem; }
+    .search-box label { display: block; margin-bottom: .45rem; font-weight: 700; }
+    .search-box input { width: 100%; border: 1px solid var(--line); border-radius: .8rem; background: var(--panel); color: var(--text); padding: .85rem 1rem; font: inherit; }
+    #result-status { margin: .55rem 0 0; color: var(--muted); font-size: .92rem; }
+    .empty-state { border: 1px dashed var(--line); border-radius: .9rem; color: var(--muted); padding: 1rem; text-align: center; }
+    [hidden] { display: none !important; }
+    @media (max-width: 560px) { .hero { padding-top: 2.5rem; } .library-cta { grid-template-columns: auto 1fr; } .library-cta .cta-arrow { display: none; } .section-heading { align-items: start; flex-direction: column; } }
+    @media (prefers-reduced-motion: no-preference) { .library-cta, .folder-card { transition: border-color .16s ease, transform .16s ease; } }
+"""
+
+
+def _paper_taxonomy_key(paper: Paper) -> tuple[str, str, str, str]:
+    return (
+        _normalized_sort_key(paper.topic),
+        _normalized_sort_key(paper.subtopic),
+        _normalized_sort_key(paper.title),
+        _normalized_sort_key(paper.relative_directory.as_posix()),
+    )
+
+
+def _paper_recency_key(paper: Paper) -> tuple[int, str, str, str, str]:
+    return (-paper.last_updated.toordinal(), *_paper_taxonomy_key(paper))
+
+
+def _group_papers(
+    papers: list[Paper],
+) -> dict[str, dict[str, list[Paper]]]:
     grouped: dict[str, dict[str, list[Paper]]] = defaultdict(
         lambda: defaultdict(list)
     )
     for paper in papers:
         grouped[paper.topic][paper.subtopic].append(paper)
+    return grouped
 
-    topic_sections: list[str] = []
+
+def _folder_route_slug(label: str, identity: str) -> str:
+    normalized_label = unicodedata.normalize("NFKC", label).casefold()
+    parts: list[str] = []
+    saw_separator = False
+    for character in normalized_label:
+        if character.isalnum():
+            if saw_separator and parts:
+                parts.append("-")
+            parts.append(character)
+            saw_separator = False
+        else:
+            saw_separator = True
+    # Keep two nested route components below Windows' legacy MAX_PATH while the
+    # digest retains collision resistance for punctuation and Unicode variants.
+    readable = "".join(parts).strip("-")[:12].rstrip("-") or "folder"
+    digest_input = unicodedata.normalize("NFKC", identity).encode("utf-8")
+    digest = hashlib.sha256(digest_input).hexdigest()[:10]
+    return f"{readable}-{digest}"
+
+
+def _library_routes(
+    grouped: dict[str, dict[str, list[Paper]]],
+) -> tuple[dict[str, str], dict[tuple[str, str], str]]:
+    topic_routes: dict[str, str] = {}
+    subtopic_routes: dict[tuple[str, str], str] = {}
+    used_topic_routes: dict[str, str] = {}
+
     for topic in sorted(grouped, key=_normalized_sort_key):
-        subtopic_sections: list[str] = []
-        for subtopic in sorted(grouped[topic], key=_normalized_sort_key):
-            cards: list[str] = []
-            for paper in grouped[topic][subtopic]:
-                search_text = " ".join(
-                    (paper.topic, paper.subtopic, paper.title, paper.directory_name)
-                )
-                source_link = ""
-                if paper.source:
-                    source_link = (
-                        '<a class="source-link" href="'
-                        + html.escape(paper.source.url, quote=True)
-                        + '" target="_blank" rel="noopener noreferrer">原始來源 ↗</a>'
-                    )
-                cards.append(
-                    '<article class="paper-card" data-paper '
-                    f'data-search="{html.escape(search_text, quote=True)}">'
-                    f'<h3><a href="papers/{paper.slug}/">'
-                    f"{html.escape(paper.title)}</a></h3>"
-                    '<div class="paper-meta">'
-                    f"<span>{html.escape(paper.topic)}</span>"
-                    '<span aria-hidden="true">›</span>'
-                    f"<span>{html.escape(paper.subtopic)}</span>"
-                    "</div>"
-                    f'<div class="paper-actions"><a href="papers/{paper.slug}/">'
-                    f"閱讀摘要</a>{source_link}</div>"
-                    "</article>"
-                )
-            subtopic_sections.append(
-                '<section class="subtopic" data-subtopic-group>'
-                f"<h2>{html.escape(subtopic)}</h2>"
-                '<div class="paper-grid">'
-                + "".join(cards)
-                + "</div></section>"
+        topic_route = _folder_route_slug(topic, f"topic\0{topic}")
+        previous_topic = used_topic_routes.get(topic_route.casefold())
+        if previous_topic is not None and previous_topic != topic:
+            raise BuildError(
+                f"Topic folders resolve to the same route: {previous_topic!r} and {topic!r}"
             )
-        topic_sections.append(
-            '<section class="topic" data-topic-group>'
-            f"<h2>{html.escape(topic)}</h2>"
-            + "".join(subtopic_sections)
-            + "</section>"
-        )
+        used_topic_routes[topic_route.casefold()] = topic
+        topic_routes[topic] = topic_route
 
-    return """<!doctype html>
+        used_subtopic_routes: dict[str, str] = {}
+        for subtopic in sorted(grouped[topic], key=_normalized_sort_key):
+            subtopic_route = _folder_route_slug(
+                subtopic, f"subtopic\0{topic}\0{subtopic}"
+            )
+            previous_subtopic = used_subtopic_routes.get(subtopic_route.casefold())
+            if previous_subtopic is not None and previous_subtopic != subtopic:
+                raise BuildError(
+                    "Subtopic folders resolve to the same route under "
+                    f"{topic!r}: {previous_subtopic!r} and {subtopic!r}"
+                )
+            used_subtopic_routes[subtopic_route.casefold()] = subtopic
+            subtopic_routes[(topic, subtopic)] = subtopic_route
+
+    return topic_routes, subtopic_routes
+
+
+def _route_component(value: str) -> str:
+    return quote(value, safe="-")
+
+
+def _display_date(value: date) -> str:
+    return f"{value.year} 年 {value.month} 月 {value.day} 日"
+
+
+def _render_page(*, title: str, description: str, content: str, script: str = "") -> str:
+    return f"""<!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, noarchive">
-  <meta name="description" content="繁體中文論文深度閱讀摘要索引">
-  <title>Paper Reading｜論文閱讀</title>
-  <style>
-    :root { color-scheme: light dark; --bg: #f5f7fb; --panel: #fff; --text: #172033; --muted: #647089; --line: #dce2ec; --accent: #3157d5; --accent-soft: #e9edff; }
-    @media (prefers-color-scheme: dark) { :root { --bg: #10131b; --panel: #181d29; --text: #eef2ff; --muted: #aab3c7; --line: #30394c; --accent: #9db1ff; --accent-soft: #252e50; } }
-    * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.6; }
-    a { color: var(--accent); }
-    .shell { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; }
-    header { padding: 4rem 0 2rem; }
-    .eyebrow { margin: 0 0 .4rem; color: var(--accent); font-size: .78rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
-    h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.12; }
-    .intro { max-width: 46rem; margin: .8rem 0 1.5rem; color: var(--muted); }
-    .search-box { position: relative; max-width: 42rem; }
-    .search-box label { display: block; margin-bottom: .45rem; font-weight: 700; }
-    .search-box input { width: 100%; border: 1px solid var(--line); border-radius: .8rem; background: var(--panel); color: var(--text); padding: .85rem 1rem; font: inherit; }
-    .search-box input:focus { outline: 3px solid var(--accent-soft); border-color: var(--accent); }
-    #result-status { margin: .55rem 0 0; color: var(--muted); font-size: .92rem; }
-    main { padding-bottom: 4rem; }
-    .topic { margin-top: 2.5rem; }
-    .topic > h2 { margin: 0 0 1rem; font-size: 1.6rem; }
-    .subtopic { margin: 1.4rem 0 2rem; }
-    .subtopic > h2 { margin: 0 0 .75rem; color: var(--muted); font-size: 1.05rem; }
-    .paper-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1rem; }
-    .paper-card { display: flex; min-height: 11rem; flex-direction: column; border: 1px solid var(--line); border-radius: 1rem; background: var(--panel); padding: 1.1rem; box-shadow: 0 8px 24px rgb(16 24 40 / .05); }
-    .paper-card h3 { margin: 0; font-size: 1.05rem; line-height: 1.45; }
-    .paper-card h3 a { color: var(--text); text-decoration: none; }
-    .paper-card h3 a:hover { color: var(--accent); text-decoration: underline; }
-    .paper-meta { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .8rem; color: var(--muted); font-size: .84rem; }
-    .paper-actions { display: flex; flex-wrap: wrap; gap: .9rem; margin-top: auto; padding-top: 1rem; font-weight: 700; font-size: .9rem; }
-    .source-link { color: var(--muted); font-weight: 600; }
-    [hidden] { display: none !important; }
-  </style>
+  <meta name="description" content="{html.escape(description, quote=True)}">
+  <title>{html.escape(title)}</title>
+  <style>{SITE_STYLE}</style>
 </head>
 <body>
-  <header class="shell">
+{content}
+{script}
+</body>
+</html>
+"""
+
+
+def _source_link(paper: Paper) -> str:
+    if paper.source is None:
+        return ""
+    return (
+        '<a class="source-link" href="'
+        + html.escape(paper.source.url, quote=True)
+        + '" target="_blank" rel="noopener noreferrer">原始來源 ↗</a>'
+    )
+
+
+def _render_paper_card(
+    paper: Paper,
+    *,
+    paper_href: str,
+    latest: bool = False,
+    searchable: bool = False,
+    drilldown: bool = False,
+) -> str:
+    article_attributes = ['class="paper-card"']
+    if latest:
+        article_attributes.append(
+            f'data-latest-paper="{html.escape(paper.slug, quote=True)}"'
+        )
+    if searchable:
+        search_text = " ".join(
+            (paper.topic, paper.subtopic, paper.title, paper.directory_name)
+        )
+        article_attributes.extend(
+            ("data-paper", f'data-search="{html.escape(search_text, quote=True)}"')
+        )
+    link_attribute = (
+        ' data-folder-kind="paper" data-paper-slug="'
+        + html.escape(paper.slug, quote=True)
+        + '"'
+        if drilldown
+        else ""
+    )
+    escaped_href = html.escape(paper_href, quote=True)
+    return (
+        f"<article {' '.join(article_attributes)}>"
+        f'<h3><a{link_attribute} href="{escaped_href}">{html.escape(paper.title)}</a></h3>'
+        '<div class="paper-meta">'
+        f"<span>{html.escape(paper.topic)}</span>"
+        '<span aria-hidden="true">›</span>'
+        f"<span>{html.escape(paper.subtopic)}</span>"
+        "</div>"
+        '<p class="paper-date">摘要更新：'
+        f'<time datetime="{paper.last_updated.isoformat()}">{_display_date(paper.last_updated)}</time>'
+        "</p>"
+        f'<div class="paper-actions"><a href="{escaped_href}">閱讀摘要</a>'
+        f"{_source_link(paper)}</div>"
+        "</article>"
+    )
+
+
+def _folder_card(
+    *, href: str, kicker: str, title: str, detail: str, attributes: str
+) -> str:
+    return (
+        f'<a class="folder-card" {attributes} href="{html.escape(href, quote=True)}">'
+        '<span class="folder-icon" aria-hidden="true"></span>'
+        '<span><span class="folder-kicker">'
+        f"{html.escape(kicker)}</span><strong>{html.escape(title)}</strong>"
+        f"<small>{html.escape(detail)}</small></span></a>"
+    )
+
+
+def _render_home(
+    papers: list[Paper],
+    grouped: dict[str, dict[str, list[Paper]]],
+    topic_routes: dict[str, str],
+    subtopic_routes: dict[tuple[str, str], str],
+) -> str:
+    latest_papers = sorted(papers, key=_paper_recency_key)[:3]
+    recent_folders: list[tuple[date, str, str, list[Paper]]] = []
+    for topic in sorted(grouped, key=_normalized_sort_key):
+        for subtopic in sorted(grouped[topic], key=_normalized_sort_key):
+            children = grouped[topic][subtopic]
+            recent_folders.append(
+                (max(paper.last_updated for paper in children), topic, subtopic, children)
+            )
+    recent_folders.sort(
+        key=lambda item: (
+            -item[0].toordinal(),
+            _normalized_sort_key(item[1]),
+            _normalized_sort_key(item[2]),
+        )
+    )
+
+    recent_cards: list[str] = []
+    for newest, topic, subtopic, children in recent_folders[:3]:
+        topic_route = _route_component(topic_routes[topic])
+        subtopic_route = _route_component(subtopic_routes[(topic, subtopic)])
+        attributes = (
+            "data-recent-folder "
+            f'data-topic="{html.escape(topic, quote=True)}" '
+            f'data-subtopic="{html.escape(subtopic, quote=True)}"'
+        )
+        recent_cards.append(
+            _folder_card(
+                href=f"library/{topic_route}/{subtopic_route}/",
+                kicker=topic,
+                title=subtopic,
+                detail=f"{len(children)} 篇 · 最近更新 {_display_date(newest)}",
+                attributes=attributes,
+            )
+        )
+
+    latest_cards = [
+        _render_paper_card(
+            paper, paper_href=f"papers/{paper.slug}/", latest=True
+        )
+        for paper in latest_papers
+    ]
+    content = f"""  <header class="site-header hero shell">
     <p class="eyebrow">Paper Reading</p>
-    <h1>論文閱讀</h1>
-    <p class="intro">依技術主題整理的繁體中文深度閱讀摘要。搜尋會同時比對主題、子題與論文標題。</p>
+    <h1>論文閱讀首頁</h1>
+    <p class="intro">把近期研究焦點、最新完成的深度閱讀，以及依 Topic／Subtopic 整理的完整儲藏庫放在同一個入口。</p>
+    <a class="library-cta" href="library/">
+      <span class="folder-icon compact" aria-hidden="true"></span>
+      <span><strong>論文閱讀儲藏庫</strong><small>{len(papers)} 篇論文 · {len(grouped)} 個 Topic</small></span>
+      <span class="cta-arrow" aria-hidden="true">進入儲藏庫 →</span>
+    </a>
+  </header>
+  <main class="shell">
+    <section class="section-block" aria-labelledby="recent-topics-heading">
+      <div class="section-heading"><h2 id="recent-topics-heading">最近關注的主題</h2><p>依子題中最新完成的摘要排序</p></div>
+      <div class="folder-grid">{''.join(recent_cards)}</div>
+    </section>
+    <section class="section-block" aria-labelledby="latest-papers-heading">
+      <div class="section-heading"><h2 id="latest-papers-heading">最新三篇論文閱讀</h2><p>依摘要更新日期排序</p></div>
+      <div class="paper-grid">{''.join(latest_cards)}</div>
+    </section>
+  </main>"""
+    return _render_page(
+        title="Paper Reading｜論文閱讀首頁",
+        description="近期研究主題、最新三篇論文閱讀與完整論文儲藏庫",
+        content=content,
+    )
+
+
+def _render_library_index(
+    papers: list[Paper],
+    grouped: dict[str, dict[str, list[Paper]]],
+    topic_routes: dict[str, str],
+) -> str:
+    topic_cards: list[str] = []
+    for topic in sorted(grouped, key=_normalized_sort_key):
+        topic_papers = [
+            paper for subtopic in grouped[topic].values() for paper in subtopic
+        ]
+        newest = max(paper.last_updated for paper in topic_papers)
+        topic_cards.append(
+            _folder_card(
+                href=f"{_route_component(topic_routes[topic])}/",
+                kicker="Topic",
+                title=topic,
+                detail=(
+                    f"{len(grouped[topic])} 個 Subtopic · {len(topic_papers)} 篇 · "
+                    f"更新 {_display_date(newest)}"
+                ),
+                attributes=(
+                    'data-folder-kind="topic" data-topic="'
+                    + html.escape(topic, quote=True)
+                    + '"'
+                ),
+            )
+        )
+
+    paper_cards = [
+        _render_paper_card(
+            paper,
+            paper_href=f"../papers/{paper.slug}/",
+            searchable=True,
+        )
+        for paper in sorted(papers, key=_paper_taxonomy_key)
+    ]
+    content = f"""  <header class="site-header shell">
+    <nav class="breadcrumbs" aria-label="麵包屑"><a href="../">首頁</a><span aria-hidden="true">/</span><span aria-current="page">論文閱讀儲藏庫</span></nav>
+    <p class="eyebrow">Library</p>
+    <h1>論文閱讀儲藏庫</h1>
+    <p class="intro">先從 Topic 資料夾逐層瀏覽，或直接搜尋所有繁體中文深度閱讀摘要。</p>
     <div class="search-box">
-      <label for="paper-search">搜尋論文</label>
+      <label for="paper-search">搜尋全部論文</label>
       <input id="paper-search" type="search" placeholder="例如：KV cache、serving、Prefill" autocomplete="off">
-      <p id="result-status" role="status" aria-live="polite">共 PAPER_COUNT 篇</p>
+      <p id="result-status" role="status" aria-live="polite">共 {len(papers)} 篇</p>
     </div>
   </header>
-  <main class="shell" id="paper-list">
-    TOPIC_SECTIONS
-    <p id="empty-state" hidden>找不到符合條件的論文。</p>
-  </main>
-  <script>
+  <main class="shell">
+    <section aria-labelledby="topics-heading">
+      <div class="section-heading"><h2 id="topics-heading">Topic 資料夾</h2><p>{len(grouped)} 個 Topic</p></div>
+      <div class="folder-grid">{''.join(topic_cards)}</div>
+    </section>
+    <section class="section-block" aria-labelledby="all-papers-heading">
+      <div class="section-heading"><h2 id="all-papers-heading">全部論文</h2><p>搜尋會比對 Topic、Subtopic 與標題</p></div>
+      <div class="paper-grid" id="paper-list">{''.join(paper_cards)}</div>
+      <p class="empty-state" id="empty-state" hidden>找不到符合條件的論文。</p>
+    </section>
+  </main>"""
+    script = """  <script>
     (() => {
       const input = document.querySelector("#paper-search");
       const papers = [...document.querySelectorAll("[data-paper]")];
@@ -691,22 +1089,89 @@ def _render_index(papers: list[Paper]) -> str:
           paper.hidden = !matches;
           if (matches) visible += 1;
         }
-        for (const group of document.querySelectorAll("[data-subtopic-group]")) {
-          group.hidden = !group.querySelector("[data-paper]:not([hidden])");
-        }
-        for (const group of document.querySelectorAll("[data-topic-group]")) {
-          group.hidden = !group.querySelector("[data-paper]:not([hidden])");
-        }
         status.textContent = terms.length ? `顯示 ${visible} / ${papers.length} 篇` : `共 ${papers.length} 篇`;
         empty.hidden = visible !== 0;
       };
       input.addEventListener("input", update);
     })();
-  </script>
-</body>
-</html>
-""".replace("PAPER_COUNT", str(len(papers))).replace(
-        "TOPIC_SECTIONS", "".join(topic_sections)
+  </script>"""
+    return _render_page(
+        title="論文閱讀儲藏庫｜Paper Reading",
+        description="依 Topic 與 Subtopic 瀏覽或搜尋繁體中文論文閱讀摘要",
+        content=content,
+        script=script,
+    )
+
+
+def _render_topic_page(
+    topic: str,
+    subtopics: dict[str, list[Paper]],
+    subtopic_routes: dict[tuple[str, str], str],
+) -> str:
+    cards: list[str] = []
+    for subtopic in sorted(subtopics, key=_normalized_sort_key):
+        children = subtopics[subtopic]
+        newest = max(paper.last_updated for paper in children)
+        cards.append(
+            _folder_card(
+                href=f"{_route_component(subtopic_routes[(topic, subtopic)])}/",
+                kicker="Subtopic",
+                title=subtopic,
+                detail=f"{len(children)} 篇 · 更新 {_display_date(newest)}",
+                attributes=(
+                    'data-folder-kind="subtopic" data-topic="'
+                    + html.escape(topic, quote=True)
+                    + '" data-subtopic="'
+                    + html.escape(subtopic, quote=True)
+                    + '"'
+                ),
+            )
+        )
+    paper_count = sum(len(children) for children in subtopics.values())
+    content = f"""  <header class="site-header shell">
+    <nav class="breadcrumbs" aria-label="麵包屑"><a href="../../">首頁</a><span aria-hidden="true">/</span><a href="../">論文閱讀儲藏庫</a><span aria-hidden="true">/</span><span aria-current="page">{html.escape(topic)}</span></nav>
+    <p class="eyebrow">Topic</p>
+    <h1>{html.escape(topic)}</h1>
+    <p class="intro">{len(subtopics)} 個 Subtopic，共 {paper_count} 篇論文閱讀。</p>
+  </header>
+  <main class="shell">
+    <section aria-labelledby="subtopics-heading">
+      <div class="section-heading"><h2 id="subtopics-heading">Subtopic 資料夾</h2><p>選擇資料夾繼續瀏覽</p></div>
+      <div class="folder-grid">{''.join(cards)}</div>
+    </section>
+  </main>"""
+    return _render_page(
+        title=f"{topic}｜論文閱讀儲藏庫",
+        description=f"{topic} Topic 下的論文閱讀 Subtopic",
+        content=content,
+    )
+
+
+def _render_subtopic_page(topic: str, subtopic: str, papers: list[Paper]) -> str:
+    cards = [
+        _render_paper_card(
+            paper,
+            paper_href=f"../../../papers/{paper.slug}/",
+            drilldown=True,
+        )
+        for paper in sorted(papers, key=_paper_recency_key)
+    ]
+    content = f"""  <header class="site-header shell">
+    <nav class="breadcrumbs" aria-label="麵包屑"><a href="../../../">首頁</a><span aria-hidden="true">/</span><a href="../../">論文閱讀儲藏庫</a><span aria-hidden="true">/</span><a href="../">{html.escape(topic)}</a><span aria-hidden="true">/</span><span aria-current="page">{html.escape(subtopic)}</span></nav>
+    <p class="eyebrow">Subtopic</p>
+    <h1>{html.escape(subtopic)}</h1>
+    <p class="intro">{html.escape(topic)} 下共 {len(papers)} 篇論文閱讀，依摘要更新日期排列。</p>
+  </header>
+  <main class="shell">
+    <section aria-labelledby="papers-heading">
+      <div class="section-heading"><h2 id="papers-heading">論文</h2><p>選擇論文開啟完整摘要</p></div>
+      <div class="paper-grid">{''.join(cards)}</div>
+    </section>
+  </main>"""
+    return _render_page(
+        title=f"{subtopic}｜{topic}｜論文閱讀儲藏庫",
+        description=f"{topic} / {subtopic} 下的繁體中文論文閱讀摘要",
+        content=content,
     )
 
 
@@ -752,6 +1217,121 @@ def _normalize_timestamps(directory: Path) -> None:
     os.utime(directory, (NORMALIZED_MTIME, NORMALIZED_MTIME))
 
 
+def _validate_generated_references(site_directory: Path) -> None:
+    """Fail closed unless every generated href/src resolves safely."""
+
+    site_root = site_directory.resolve()
+    documents: dict[Path, GeneratedDocumentParser] = {}
+    for document_path in sorted(
+        site_directory.rglob("*.html"),
+        key=lambda path: _normalized_sort_key(
+            path.relative_to(site_directory).as_posix()
+        ),
+    ):
+        try:
+            document = document_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise BuildError(
+                f"Generated HTML is not valid UTF-8: {document_path}"
+            ) from exc
+        parser = GeneratedDocumentParser()
+        parser.feed(document)
+        parser.close()
+        duplicate_ids = sorted(
+            {identifier for identifier in parser.ids if parser.ids.count(identifier) > 1},
+            key=_normalized_sort_key,
+        )
+        if duplicate_ids:
+            relative_path = document_path.relative_to(site_directory)
+            raise BuildError(
+                f"Generated HTML contains ambiguous duplicate id {duplicate_ids[0]!r}: "
+                f"{relative_path}"
+            )
+        documents[document_path.resolve()] = parser
+
+    for document_path in sorted(
+        documents,
+        key=lambda path: _normalized_sort_key(path.relative_to(site_root).as_posix()),
+    ):
+        parser = documents[document_path]
+        relative_document = document_path.relative_to(site_root)
+        for tag, attribute, raw_reference in parser.references:
+            reference = raw_reference.strip()
+            context = f"{relative_document} <{tag}> {attribute}={raw_reference!r}"
+            if not reference or reference != raw_reference:
+                raise BuildError(f"Generated URL is empty or padded with whitespace: {context}")
+            if any(ord(character) < 0x20 or ord(character) == 0x7F for character in reference):
+                raise BuildError(f"Generated URL contains a control character: {context}")
+            if "\\" in reference:
+                raise BuildError(f"Generated URL contains a backslash: {context}")
+            if INVALID_PERCENT_ESCAPE_RE.search(reference):
+                raise BuildError(f"Generated URL has invalid percent encoding: {context}")
+
+            try:
+                parsed = urlsplit(reference)
+            except ValueError as exc:
+                raise BuildError(f"Generated URL cannot be parsed: {context}") from exc
+
+            if tag == "base":
+                raise BuildError(f"Generated HTML must not override its base URL: {context}")
+            scheme = parsed.scheme.casefold()
+            if scheme:
+                if scheme not in {"http", "https"} or not parsed.netloc:
+                    raise BuildError(f"Generated URL uses an unsafe scheme: {context}")
+                continue
+            if parsed.netloc or reference.startswith("//"):
+                raise BuildError(f"Generated URL is protocol-relative: {context}")
+
+            decoded_path = unquote(parsed.path)
+            if "%" in decoded_path:
+                raise BuildError(
+                    f"Generated local URL contains nested percent encoding: {context}"
+                )
+            if decoded_path.startswith(("/", "\\")) or "\\" in decoded_path:
+                raise BuildError(f"Generated local URL is root-relative: {context}")
+            if any(
+                ord(character) < 0x20 or ord(character) == 0x7F
+                for character in decoded_path
+            ):
+                raise BuildError(
+                    f"Generated local URL decodes to a control character: {context}"
+                )
+
+            path_parts = PurePosixPath(decoded_path).parts if decoded_path else ()
+            try:
+                target = document_path.parent.joinpath(*path_parts).resolve()
+                target.relative_to(site_root)
+            except (OSError, ValueError) as exc:
+                raise BuildError(f"Generated local URL escapes _site: {context}") from exc
+
+            if target.is_dir():
+                target = target / "index.html"
+            if not target.is_file():
+                raise BuildError(
+                    f"Generated local URL target does not exist: {context} -> {target}"
+                )
+
+            has_fragment_delimiter = "#" in reference
+            if has_fragment_delimiter and not parsed.fragment:
+                raise BuildError(f"Generated URL has an empty fragment: {context}")
+            if not parsed.fragment:
+                continue
+            if INVALID_PERCENT_ESCAPE_RE.search(parsed.fragment):
+                raise BuildError(f"Generated fragment has invalid encoding: {context}")
+            fragment = unquote(parsed.fragment)
+            if "%" in fragment or not fragment:
+                raise BuildError(f"Generated fragment is invalid: {context}")
+            target_parser = documents.get(target.resolve())
+            if target_parser is None:
+                raise BuildError(
+                    f"Generated fragment targets a non-HTML document: {context}"
+                )
+            if fragment not in set(target_parser.ids):
+                raise BuildError(
+                    f"Generated fragment target #{fragment} does not exist: {context}"
+                )
+
+
 def _assert_publication_boundary(site_directory: Path) -> None:
     for output_path in site_directory.rglob("*"):
         relative_path = output_path.relative_to(site_directory)
@@ -785,6 +1365,8 @@ def _build_site(
         raise BuildError(f"Output must remain inside project root: {output_directory}") from exc
 
     papers = discover_papers(root)
+    grouped = _group_papers(papers)
+    topic_routes, subtopic_routes = _library_routes(grouped)
     staging_directory = output_directory.with_name(
         f"{OUTPUT_DIRECTORY_NAME}.__building__"
     )
@@ -794,7 +1376,12 @@ def _build_site(
     try:
         for paper in papers:
             document = paper.summary_path.read_text(encoding="utf-8")
-            rewritten = _rewrite_summary(document, paper)
+            rewritten = _rewrite_summary(
+                document,
+                paper,
+                topic_routes[paper.topic],
+                subtopic_routes[(paper.topic, paper.subtopic)],
+            )
             paper_output = staging_directory / "papers" / paper.slug
             paper_output.mkdir(parents=True)
             (paper_output / "index.html").write_text(
@@ -803,11 +1390,44 @@ def _build_site(
             _copy_assets(paper.summary_path.parent, paper_output, paper.image_paths)
 
         (staging_directory / "index.html").write_text(
-            _render_index(papers), encoding="utf-8", newline="\n"
+            _render_home(
+                papers, grouped, topic_routes, subtopic_routes
+            ),
+            encoding="utf-8",
+            newline="\n",
         )
+
+        library_directory = staging_directory / "library"
+        library_directory.mkdir()
+        (library_directory / "index.html").write_text(
+            _render_library_index(papers, grouped, topic_routes),
+            encoding="utf-8",
+            newline="\n",
+        )
+        for topic in sorted(grouped, key=_normalized_sort_key):
+            topic_directory = library_directory / topic_routes[topic]
+            topic_directory.mkdir()
+            (topic_directory / "index.html").write_text(
+                _render_topic_page(topic, grouped[topic], subtopic_routes),
+                encoding="utf-8",
+                newline="\n",
+            )
+            for subtopic in sorted(grouped[topic], key=_normalized_sort_key):
+                subtopic_directory = (
+                    topic_directory / subtopic_routes[(topic, subtopic)]
+                )
+                subtopic_directory.mkdir()
+                (subtopic_directory / "index.html").write_text(
+                    _render_subtopic_page(
+                        topic, subtopic, grouped[topic][subtopic]
+                    ),
+                    encoding="utf-8",
+                    newline="\n",
+                )
         (staging_directory / ".nojekyll").write_text(
             "", encoding="utf-8", newline="\n"
         )
+        _validate_generated_references(staging_directory)
         _assert_publication_boundary(staging_directory)
         _normalize_timestamps(staging_directory)
 
