@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="解析高-radix 3D 光互連如何改變 MoE prefill 的跨 rack 擴展、TTFT 與 decode 瓶頸。">
+  <title>Scaling Inference Prefill with High-Radix Photonic Interconnects｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 50rem;
+      --wide: 68rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    .figure-scroll {
+      max-width: 100%;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+      .figure-scroll img { width: 56rem; max-width: none; }
+      .figure-scroll--table img { width: 76rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">AI Infrastructure / Cluster Networking</p>
+      <h1>Scaling Inference Prefill with High-Radix Photonic Interconnects</h1>
+      <div class="paper-dek" data-section-role="thesis">
+        <p><span class="evidence-kind evidence-kind--claim">作者主張</span> 當長上下文 Mixture-of-Experts（MoE）prefill 為降低首 token 延遲而跨出單 rack，較慢的 scale-out fabric 會抵銷新增 GPU 的計算收益；把高頻寬 scale-up domain 擴到 1,152 GPU，才是 3D 光互連的主要價值。</p>
+        <p><span class="evidence-kind evidence-kind--fact">實驗事實</span> 在建模的 B300、FP4、42B-active R1 變體上，128K context 從 72 擴到 288 GPU 時，電氣 baseline 的通訊時間升至 35.5 秒，光互連情境則為 2.3 秒；但 serving 模擬也顯示 p99 TTFT 改善 12–20% 的同時，單一 decode worker 的 p99 TPOT 惡化 77–110%。<a class="source-ref" href="#source-medium-p5">§V-B · PDF p.5</a><a class="source-ref" href="#source-des-p9">§V-E · PDF pp.9–10 · Fig. 7</a></p>
+        <p><span class="evidence-kind evidence-kind--analysis">分析</span> 這是一篇有價值的 interconnect sensitivity study，而不是實機產品 benchmark：其最強洞見是「擴大 scale-up 邊界」與「增加 bandwidth」必須一起看；其最重要邊界則是所有主要倍數來自成本模型與投影規格。</p>
+      </div>
+      <p class="paper-byline">Arulselvan Madhavan · Peter Carson · Taylor Groves · Thomas Graham</p>
+      <p class="paper-meta">
+        <span>IEEE Hot Interconnects 2026 · arXiv:2609.01821v1</span>
+        <span>2026</span>
+        <span>AI Infrastructure / Cluster Networking</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-08">2026 年 9 月 8 日</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://arxiv.org/abs/2609.01821" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="Scaling%20Inference%20Prefill%20with%20High-Radix%20Photonic%20Interconnects.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀路線：</strong>先掌握 prefill 與 scale-up／scale-out 的因果關係，再看作者如何用同一組 compute/HBM 條件只替換互連，最後用 serving 模擬檢查 TTFT 改善是否真的變成端到端收益。</p>
+        <ol>
+          <li><a href="#problem">先看 rack 邊界為何讓加 GPU 反而加重通訊。</a></li>
+          <li><a href="#method">再確認 4× bandwidth、1,152-GPU radix 與 best-of-sweep 指標的建模方式。</a></li>
+          <li><a href="#evidence">最後對照 128K／1M 結果與 decode 反作用。</a></li>
+        </ol>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">為什麼 prefill 會把「算得更快」變成「網路更慢」？</a></li>
+            <li><a href="#problem">銅線的 rack 邊界如何吞掉跨 GPU 擴展收益？</a></li>
+            <li><a href="#insight">真正的槓桿不是只把鏈路加速，而是把 scale-up 邊界推到 1,152 GPU</a></li>
+            <li><a href="#method">作者如何把模型、平行化網格與互連成本放進同一個比較？</a></li>
+            <li><a href="#evidence">哪些 workload 真正受益，哪些只是把瓶頸推向 decode？</a></li>
+            <li><a href="#critique">這些倍數能否直接當成採購或容量規劃結論？</a></li>
+            <li><a href="#extensions">下一步要如何把光互連變成完整 serving 系統收益？</a></li>
+            <li><a href="#reference">如何查回模型、硬體假設與關鍵證據？</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>為什麼 prefill 會把「算得更快」變成「網路更慢」？</h2>
+          <p>理解這篇論文的第一個障礙，是把「LLM inference」拆成資源性質完全不同的兩段。<strong>預填充（prefill）</strong>一次處理整段輸入、建立 Key–Value cache（KV cache），以密集矩陣乘法為主，使用者感受到的是首 token 時間（Time to First Token, TTFT）；<strong>解碼（decode）</strong>則逐 token 讀取模型權重與 KV cache，通常受 High Bandwidth Memory（HBM）頻寬限制，關鍵指標是每輸出 token 時間（Time per Output Token, TPOT）。本研究只把光互連直接套在 prefill 側，所以後面必須另外檢查 decode 是否接得住更快抵達的請求。<a class="source-ref" href="#source-phases-p2">§II-A · PDF p.2</a></p>
+
+          <div class="table-scroll">
+            <table>
+            <thead><tr><th>必要概念</th><th>在本文中的具體作用</th><th>後面要觀察的量</th></tr></thead>
+            <tbody>
+              <tr><td>Batching</td><td>較大 batch 能提高 GPU compute utilization，卻同步放大 activation tensor 與 collective traffic。</td><td>prefill latency、input-token throughput</td></tr>
+              <tr><td>MoE 三維平行化</td><td>
+                \(x\) 軸做 sequence/context parallel；\(y\) 軸同時承擔 expert 與 tensor parallel、最吃頻寬；\(z\) 軸切分 dense／expert FFW hidden dimension。
+              </td><td>mesh shape、All-to-All、All-Gather、Reduce-Scatter 成本</td></tr>
+              <tr><td>Scale-up pod</td><td>單一高頻寬一致性 domain；電氣 baseline 最多 72 GPU（R4 投影為 576），超過後落到較慢的 cross-rack scale-out。</td><td>SU/SO bandwidth、跨 pod 的 latency inflection</td></tr>
+              <tr><td>Compute–communication overlap</td><td>計算與通訊可以部分重疊，因此總時間不是簡單相加；只有落在 critical path 的部分會決定 prefill latency。</td><td>overlapped prefill latency</td></tr>
+            </tbody>
+            </table>
+          </div>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span> 這四個概念形成同一條因果鏈：batch 或 context 增加資料量，平行化把資料量轉成 collective，device count 決定 collective 是否跨出 scale-up pod，最後 overlap 決定通訊是否真的進入關鍵路徑。若只看「光鏈路是 4× bandwidth」，就會漏掉本文最重要的 radix／pod-boundary 效應。<a class="source-ref" href="#source-intro-p1">§I · PDF pp.1–2</a><a class="source-ref" href="#source-mesh-p12">Appendix B · PDF p.12</a></p>
+
+          <p>還要區分兩種 workload。1K–8K context 配上極大 batch，主要把<strong>單 GPU 計算變快後暴露的通訊</strong>推上 critical path；128K–1M context 則需要更多 GPU 壓低 TTFT，主要撞上<strong>跨 rack 後 bandwidth domain 改變</strong>。後面的結果不能把這兩種收益來源混成一個通用倍率。<a class="source-ref" href="#source-regimes-p5">§V · PDF p.5</a></p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>銅線的 rack 邊界如何吞掉跨 GPU 擴展收益？</h2>
+          <p>這一章要回答的不是「光纖是否比銅線快」，而是<strong>為什麼在 prefill 增加 GPU，可能先把計算時間降下來，卻又讓通訊時間變成新的牆</strong>。作者把根因落在電氣 I/O 的 shoreline、reach 與 energy 三角限制：HBM 已占用封裝周界，高速 SerDes 可用的邊緣有限；被動銅線在 224 Gb/s 約只能走 1 公尺，若再加 retimer，就會消耗原本可給計算的電力。結果是高頻寬 scale-up pod 被限制在單 rack，而多 rack 必須經過每 GPU bandwidth 更低的 scale-out fabric。<a class="source-ref" href="#source-hardware-limit-p2">§II-C · PDF pp.2–3</a></p>
+
+          <div class="table-scroll">
+            <table>
+            <thead><tr><th>本文引用的 link 特性</th><th>被動銅線</th><th>3D 整合光互連</th><th>系統含義</th></tr></thead>
+            <tbody>
+              <tr><td>Reach</td><td>約 1 m（224G）</td><td>1,000 m</td><td>光互連可把 scale-up domain 延伸到跨 rack。</td></tr>
+              <tr><td>Port pitch</td><td>1,020 µm</td><td>127 µm 雙向光纖</td><td>較密的 I/O 允許更高 radix。</td></tr>
+              <tr><td>每線資料率</td><td>0.224 Tb/s／差動對</td><td>1.79 Tb/s／fiber（16 wavelengths）</td><td>同一封裝邊界可承載更多 aggregate bandwidth。</td></tr>
+              <tr><td>Link energy</td><td>約 5 pJ/bit</td><td>約 4.3 pJ/bit</td><td>投影上沒有以數倍能耗交換 reach；但未納入完整系統冷卻與 TCO。</td></tr>
+            </tbody>
+            </table>
+          </div>
+          <p><span class="evidence-kind evidence-kind--claim">作者主張</span> 3D stacking 把 electronic integrated circuit／host ASIC 疊在 photonic integrated circuit 上，讓 I/O 不再只沿封裝 shoreline 排列；波分多工與較細的 fiber 使每 GPU 雙向頻寬可超過 64 Tb/s，並把 pod radix 推到 1,152。本文把這些數值當成建模依據，而非直接模擬 Lightmatter Passage 產品。<a class="source-ref" href="#source-photonics-p3">§III-A · PDF p.3 · Table I</a></p>
+
+          <p>最近的電氣系統並非完全沒有跨 rack 能力；問題在於<strong>跨界後每 GPU 的通訊服務率突然下降</strong>。本文的 B200、B300 與 Rubin baseline 都以 72 GPU 為最大 electrical scale-up pod，SU bandwidth 分別為 900、900、1,800 GB/s，而跨 rack SO bandwidth 只有 50、100、100 GB/s。R4 是例外：作者依 roadmap 報告推測 576-GPU hybrid pod，但仍在 1,152 GPU 情境跨界。<a class="source-ref" href="#source-platforms-p4">§IV-C · PDF p.4 · Table III</a></p>
+
+          <div class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>本文真正比較的是兩個綁在一起的 intervention：每 GPU scale-up bandwidth 提高 4×，同時最大 scale-up pod 從 72／576 擴到 1,152 GPU。這能回答「完整光 scale-up 情境是否有價值」，卻不能單獨歸因多少收益來自 bandwidth、多少來自避免 scale-out 邊界。</p></div>
+
+          <p>從問題可推導三個判準：第一，必須固定每 GPU compute 與 HBM，才能隔離互連；第二，既要掃 batch，也要掃 device count，因為兩者分別放大 traffic 與改變 pod crossing；第三，不能只看 prefill microbenchmark，還要讓 decode 出現在端到端 serving 路徑中。作者前兩項做得完整，第三項以單一配置的 discrete-event simulation（DES）補上，但仍留下容量共同設計問題。<a class="source-ref" href="#source-method-p4">§IV-C–E · PDF pp.4–5</a><a class="source-ref" href="#source-des-p9">§V-E · PDF pp.9–10</a></p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>真正的槓桿不是只把鏈路加速，而是把 scale-up 邊界推到 1,152 GPU</h2>
+          <p>最小可用的心智模型，是把一次 prefill 想成兩條可重疊的時間線：一條做矩陣計算，一條搬運 collective activation。增加 GPU 會縮短前者；若新 GPU 還在同一個 scale-up pod，後者也可能維持可控。但一旦跨出 pod，collective 被送上較慢的 scale-out，通訊時間可能反而跳升。這個比喻只描述 critical-path 直覺；真實 XLA graph 還有多個 collective、mesh 維度與不完全 overlap，不能把總 latency 一律寫成兩者的最大值。</p>
+
+          <h3>一個 8K、batch 2,048 的「算得越快，網路越顯眼」例子</h3>
+          <p><span class="evidence-kind evidence-kind--fact">實驗事實</span> 在 72 張 B300、FP4、R1 變體的 8K-token prefill 中，電氣 baseline 的 compute component 約 16.8 秒，communication component 約 40.6 秒。matched optical 情境不改 compute，communication 降到約 10.2 秒。也就是說，4× bandwidth 不是平均把所有時間除以四，而是把原本支配 critical path 的通訊拉回計算附近。<a class="source-ref" href="#source-short-p5">§V-A · PDF p.5 · Figs. 1–2</a></p>
+
+          <h3>一個 128K、batch 64 的「GPU 加到 288 卻撞牆」例子</h3>
+          <p>在 72 GPU 時，compute 約 56.1 秒、communication 約 20.3 秒，還是 compute-bound。把 device count 拉到 288 後，compute 降到 14.3 秒；可是 72-GPU electrical pod 已跨界，communication 升到 35.5 秒。光互連情境把 288 GPU 留在同一個高頻寬 scale-up domain，communication 僅 2.3 秒，於是加 GPU 的計算收益能真正留在端到端 prefill latency 上。<a class="source-ref" href="#source-medium-p5">§V-B · PDF p.5 · Figs. 1–2</a></p>
+
+          <div class="formula-block">
+            <p>本文以同一配置的 overlapped latency 比值表示光互連收益：</p>
+            \[
+              G = \frac{L_{\mathrm{electrical}}^{\mathrm{overlap}}}{L_{\mathrm{optical}}^{\mathrm{overlap}}}
+            \]
+            <p>
+              \(G&gt;1\) 代表 modeled optical configuration 較快；\(L^{\mathrm{overlap}}\) 是 XLA cost walk 納入 compute–communication overlap 後的 prefill latency。表格中的 \(G\) 不是固定 operating point 的平均，而是每個 device sweep 或 batch sweep 中的<strong>最大比值</strong>。
+            </p>
+          </div>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span> 因此讀 Table IV 時要同時問兩件事：該 cell 是否已跨越 baseline pod，以及它是否是 sweep 中最有利的點。這也解釋為什麼某些 compute-bound cell 只有約 1.01×，而 1M／1,152-GPU 的 R4 projection 可超過 8×；差別主要是 critical path 與 pod boundary，不是模型名稱本身。<a class="source-ref" href="#source-table-p9">§V-D · PDF pp.8–9 · Table IV</a></p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>作者如何把模型、平行化網格與互連成本放進同一個比較？</h2>
+          <p>方法章的理解障礙，是這篇 paper 沒有實作一套 photonic serving system；它建的是一條<strong>模型與硬體成本推演管線</strong>。因此每個結果都必須追問：輸入規格是什麼、哪些量固定、哪些量同時被改變，以及最後顯示的是原始 latency 還是 sweep 中的最佳倍率。</p>
+
+          <pre><code>MoE model + TP / EP / CP partition
+ GPU platform + physical mesh
+ context length / batch / device count
+ electrical or optical interconnect profile
+                 ↓
+modified XLA walks MLIR operations
+                 ↓
+compute cost + generated collective communication cost
+                 ↓
+compute–communication overlap model
+                 ↓
+prefill latency, input-token throughput, electrical/optical ratio
+                 ↓
+DES propagates prefill service time into TTFT / TPOT / E2E latency</code></pre>
+
+          <h3>步驟一：用 production-like partition 產生通訊，而不是手填 traffic volume</h3>
+          <p><span class="evidence-kind evidence-kind--claim">作者主張</span> 作者以 Multi-Level Intermediate Representation（MLIR）表示 Tensor Parallelism（TP）、Expert Parallelism（EP）與 Context／Sequence Parallelism（CP／SP），再由修改版 Accelerated Linear Algebra（XLA）compiler 產生 collective calls，走訪圖中的 compute 與 communication cost。這個設計的優點是 mesh 與模型 partition 會自然決定 All-to-All、All-Gather、Reduce-Scatter 等通信，而不是先假設一個平均 network utilization。<a class="source-ref" href="#source-modeling-p3">§IV-A · PDF pp.3–4</a></p>
+
+          <p>Appendix B 的 mesh 把頻寬最重的 expert routing 與 attention head partition 放在 \(y\) 軸；公開的 Table V 則讓 device count 從 8 到 1,152 時，prefill mesh 由 \(1\times8\times1\) 擴成 \(16\times72\times1\)。這等於先把 72-device 的 bandwidth-heavy group 固定，再用 \(x\) 軸跨 rack 增加 context parallelism。<a class="source-ref" href="#source-mesh-p12">Appendix B · PDF p.12 · Table V</a></p>
+
+          <h3>步驟二：同時覆蓋模型規模、precision 與 platform</h3>
+          <div class="table-scroll">
+            <table>
+            <thead><tr><th>模型 proxy</th><th>Layers／experts／heads</th><th>總參數／active 參數</th><th>可解讀邊界</th></tr></thead>
+            <tbody>
+              <tr><td>Mini</td><td>30／144／144</td><td>190B／21B</td><td>小型 MoE tier，不對應具名 production checkpoint。</td></tr>
+              <tr><td>R1</td><td>61／288／144</td><td>840B／42B</td><td>為 mesh divisibility 修改 DeepSeek-R1；總參數約大 14%。</td></tr>
+              <tr><td>Next</td><td>120／1,152／288</td><td>13T／201B</td><td>未來大型 MoE proxy，不是已部署模型。</td></tr>
+            </tbody>
+            </table>
+          </div>
+          <p>三者皆採 Multi-Head Latent Attention（MLA），並以 FP4 與 FP8 估算。主文 Figures 1–7 多以 R1、B300、FP4 為代表；Table IV／VI 才跨三模型、四平台與兩種 precision。<a class="source-ref" href="#source-models-p4">§IV-B · PDF p.4 · Table II</a><a class="source-ref" href="#source-precision-p13">Appendix C–D · PDF p.13 · Table VI</a></p>
+
+          <div class="table-scroll">
+            <table>
+            <thead><tr><th>Electrical baseline</th><th>FP8／FP4 dense PFLOPS</th><th>Max SU GPU</th><th>SU／SO bandwidth（GB/s/GPU）</th><th>HBM bandwidth／capacity</th></tr></thead>
+            <tbody>
+              <tr><td>B200</td><td>4.5／9</td><td>72</td><td>900／50</td><td>7.67 TB/s／192 GB</td></tr>
+              <tr><td>B300</td><td>7／14</td><td>72</td><td>900／100</td><td>7.94 TB/s／288 GB</td></tr>
+              <tr><td>Rubin（roadmap）</td><td>17.5／25</td><td>72</td><td>1,800／100</td><td>22 TB/s／288 GB</td></tr>
+              <tr><td>R4（推測規格）</td><td>35／50</td><td>576</td><td>1,800／100</td><td>53 TB/s／288 GB</td></tr>
+            </tbody>
+            </table>
+          </div>
+          <p>每個 optical counterpart 都保留同一列的 compute 與 HBM，只把 per-GPU SU bandwidth 設成 4×，並把 maximum SU pod 設成 1,152 GPU。這個 matched-pair 設計隔離了「計算／記憶體世代」差異，但 optical intervention 仍同時包含 bandwidth 與 radix。<a class="source-ref" href="#source-platforms-p4">§IV-C · PDF p.4 · Table III</a></p>
+
+          <h3>步驟三：用兩種 sweep 分開撞擊 traffic volume 與 pod boundary</h3>
+          <div class="table-scroll">
+            <table>
+            <thead><tr><th>Sweep</th><th>固定量</th><th>掃描量</th><th>主要回答的問題</th></tr></thead>
+            <tbody>
+              <tr><td>Device sweep</td><td>1K／8K／128K／1M context 的 batch 分別為 8,192／1,024／64／8，總輸入約 8M tokens</td><td>通常 8–72、最高 1,152 GPU</td><td>加 GPU 時何處跨出 electrical SU pod？</td></tr>
+              <tr><td>Batch sweep</td><td>四種 context 的 device count 分別為 16／72／288／1,152</td><td>batch size</td><td>更高 concurrency 何時讓 activation traffic 壓過 compute？</td></tr>
+            </tbody>
+            </table>
+          </div>
+          <p>每個 configuration 先求 overlapped prefill latency，再於 device 或 batch sweep 中取最大的 \(G\)。因此 heatmap 是<strong>best-case sensitivity envelope</strong>，而不是 production request distribution 的 expectation。<a class="source-ref" href="#source-sweeps-p4">§IV-D–E · PDF pp.4–5</a></p>
+
+          <h3>步驟四：把 prefill service time 放回 72-GPU serving pipeline</h3>
+          <p>為避免只用離線超大 batch，作者另做 DES：六個 8-GPU prefill workers、單一 24-GPU decode worker；B300 FP4、R1、ISL 8,192、OSL 1,024、Poisson arrival rate 250 req/s，maximum prefill batch 64，in-flight concurrency 為 2,048／4,096／6,144。這個配置刻意讓 decode 飽和，用來觀察 prefill 加速會不會只是把排隊壓力移到下一站。<a class="source-ref" href="#source-des-p9">§V-E · PDF pp.9–10 · Fig. 7</a></p>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span> 方法的可重現性仍缺兩塊：論文未公開完整 cost equations、overlap scheduler 與模型校準誤差；Appendix B 文字說 288-device R1 的 preferred mesh 是 \(2\times144\times1\)，Table V 卻列 \(4\times72\times1\)。這些差異不會抹去 pod-boundary 的定性洞見，但會影響精確倍率是否可重算。<a class="source-ref" href="#source-mesh-p12">Appendix B · PDF p.12 · Table V</a></p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>哪些 workload 真正受益，哪些只是把瓶頸推向 decode？</h2>
+          <p>證據章的核心問題是：<strong>光互連在哪些 operating regimes 改變 critical path，在哪些情況只把瓶頸往後推？</strong> 以下每一單元都把 claim、測試、觀察與 caveat 放在一起；所有倍數均為模擬或分析模型輸出，不是 photonic hardware measurement。</p>
+
+          <div class="claim-test">
+            <h3>主張一：短 context 也可能 network-bound，但只在高 batch 壓力下</h3>
+            <p><strong>測試。</strong> R1、B300、FP4；1K／8K context，分別做 device 與 batch sweeps。</p>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span> 8K、72 GPU、batch 2,048 時，electrical compute／communication 約為 16.8／40.6 秒；optical compute 不變、communication 約 10.2 秒。device sweep 的最佳 modeled latency ratio 在 1K 為 2.58×、8K 為 2.21×。<a class="source-ref" href="#source-short-p5">§V-A · PDF pp.5–7 · Figs. 1–4</a></p>
+            <p><strong>可支持結論。</strong> 高 concurrency 會讓 collective activation volume 把短 context prefill 推入 communication-bound。</p>
+            <p><strong>限制。</strong> bulk sweep 的 batch 可達 16,384，較接近 prompt-cache warming／document indexing，而非一般互動 chat；不能把 2.58× 當成常態線上收益。</p>
+          </div>
+
+          <figure data-figure-role="result">
+            <div class="figure-scroll"><img src="assets/images/fig-01-p06-electrical-component-latency.png" alt="電氣 baseline 在 8K、128K 與 1M prefill 下的 compute 與 communication component latency 柱狀圖"></div>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 1</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>由左至右看三種壓力：8K 的 batch 增大讓 communication 超過 compute；128K 與 1M 增加 device count 後，compute 下降，但跨出 72-GPU pod 時 communication 反而上升。</span></figcaption>
+          </figure>
+
+          <figure data-figure-role="method">
+            <div class="figure-scroll"><img src="assets/images/fig-02-p06-optical-component-latency.png" alt="matched optical scale-up 情境在相同三種 prefill workload 下的 compute 與 communication component latency 柱狀圖"></div>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 2</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>與 Figure 1 成對閱讀；compute 柱保持相同，communication 柱在高 batch 與跨 rack device count 下大幅縮短，呈現成本模型中互連設定的直接效果。</span></figcaption>
+          </figure>
+
+          <div class="claim-test">
+            <h3>主張二：128K 的最大收益來自避免 72→288 GPU 的 pod crossing</h3>
+            <p><strong>測試。</strong> 同一 R1/B300/FP4，context 128K、batch 64，比較 72 與 288 GPU 的 component time；再跨平台查 Table IV。</p>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span> 72 GPU 時 compute／communication 為 56.1／20.3 秒；擴到 288 GPU，compute 降至 14.3 秒，但 electrical communication 升到 35.5 秒。optical 288-GPU communication 僅 2.3 秒。B300 最佳 ratio 約 2.93×；B200 約 4.42×、Rubin 約 5.71×，R4 因原生 576-GPU pod 已涵蓋此範圍，只約 2.01×。<a class="source-ref" href="#source-medium-p5">§V-B · PDF pp.5–7 · Figs. 1–2, 5</a><a class="source-ref" href="#source-table-p9">§V-D · PDF p.9 · Table IV</a></p>
+            <p><strong>可支持結論。</strong> 只加 compute 不足以降低 TTFT；如果新 GPU 落到較慢的 scale-out domain，communication 會吃掉 parallel speedup。</p>
+            <p><strong>限制。</strong> 光互連同時增加 4× SU bandwidth 與 1,152-GPU radix，這個實驗沒有 bandwidth-only／radix-only ablation。</p>
+          </div>
+
+          <div class="claim-test">
+            <h3>主張三：1M context 需要 1,152-GPU scale-up domain，卻最依賴投影假設</h3>
+            <p><strong>測試。</strong> R1/B300/FP4、batch 8，device count 掃至 1,152；另在 Table IV 比較四種 platform。</p>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span> 1,152 GPU 時 compute 約 26.2 秒；electrical communication 約 39.2 秒、optical 約 1.6 秒，作者報 overlapped latency 27.5 秒與約 2.3× total speedup。最佳 device-sweep ratio 在 B300 約 2.27×，B200／Rubin 約 3.4–4.5×，R4 因 1,152 超出其 576-GPU pod而超過 8×。<a class="source-ref" href="#source-long-p6">§V-C · PDF pp.6–8 · Figs. 1–2, 6</a><a class="source-ref" href="#source-table-p9">§V-D · PDF p.9 · Table IV</a></p>
+            <p><strong>可支持結論。</strong> 在模型內，長 context 的最佳 GPU footprint 若超過 native pod，large-radix optical scale-up 能移除 abrupt scale-out penalty。</p>
+            <p><strong>限制。</strong> 1,152-GPU optical pod、R4 與部分 Rubin 規格都是 projection；沒有實體 topology、switch、congestion、failure 或 link-latency 模型。</p>
+          </div>
+
+          <figure data-figure-role="result">
+            <div class="figure-scroll figure-scroll--table"><img src="assets/images/table-04-p09-fp4-multiplier-heatmap.png" alt="三種 MoE 模型、四種硬體平台、不同 context、token volume、device count 與 batch 下的 FP4 optical 對 electrical 最佳倍率熱圖"></div>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Table IV</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>先找 128K／288-device 與 1M／1,152-device 欄，深色高值多出現在 workload 跨越原生 scale-up pod 的位置；靠近 1× 的格子則提醒 compute-bound 情境幾乎沒有互連收益。每格是 sweep 最大值，不是平均。</span></figcaption>
+          </figure>
+
+          <div class="claim-test">
+            <h3>主張四：線上 small-batch 的 TTFT 變好，但 decode 會吸收大部分端到端收益</h3>
+            <p><strong>測試。</strong> 72-GPU DES；六個 8-GPU prefill workers 與一個 24-GPU decode worker，Poisson \(\lambda=250\) req/s、ISL 8,192、OSL 1,024，觀察三種 in-flight concurrency 的 p99。</p>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span> p99 TTFT 改善 12–20%：concurrency 2,048 為 29.4→25.8 秒，6,144 為 81.8→65.5 秒。可是 6,144 時 decode batch 約 694→734，p99 TPOT 31.6→66.3 ms，增幅約 110%；該點的 p99 E2E 只由 103.4→102.0 秒。作者把三種 concurrency 概括為約 1–5% E2E 改善，input/output throughput 也各只提高約 1–4%；Figure 7 的低 concurrency 視覺讀值與這個概括仍有待原始數據釐清。<a class="source-ref" href="#source-des-p9">§V-E · PDF pp.9–10 · Fig. 7</a></p>
+            <p><strong>可支持結論。</strong> optical prefill 是 TTFT 與 input-throughput lever；若 decode capacity 不共同擴充，較快完成的 prefill 只會讓 decode queue 更密集。</p>
+            <p><strong>限制。</strong> 作者刻意只放一個飽和 decode worker，且只測一組模型、ISL／OSL、arrival process 與 platform；這是 bottleneck demonstration，不是一般 production sizing rule。</p>
+          </div>
+
+          <figure data-figure-role="result">
+            <div class="figure-scroll"><img src="assets/images/fig-07-p10-serving-des-p99.png" alt="72-GPU discrete-event simulation 中 electrical 與 optical configuration 的 p99 TTFT、TPOT、E2E latency 對每 GPU throughput 圖"></div>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 7</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>左圖 optical 點向較低 TTFT、較高 input throughput 移動；中圖卻向較高 TPOT 移動，表示 decode 更壅塞；右圖顯示 E2E 收益遠小於 prefill 的改善，必須連同每個點標示的 concurrency 閱讀。</span></figcaption>
+          </figure>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span> 四組證據共同支持一個較窄但更可靠的結論：當 collective communication 已落在 overlapped critical path，或 device footprint 正好跨越低頻寬 scale-out 邊界時，大 bandwidth／radix 的 optical scale-up 很有潛力；它不保證所有 context、batch 或完整 serving latency 都得到同一倍率。<a class="source-ref" href="#source-limit-p10">§VII–IX · PDF p.10</a></p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>這些倍數能否直接當成採購或容量規劃結論？</h2>
+          <p>批判性閱讀最容易犯的錯，是把這篇 paper 的 modeled multiplier 當成「換成光互連就會得到的實機 speedup」。比較準確的定位是：作者建立了一組跨度很大的 sensitivity study，清楚顯示什麼條件會讓 interconnect 進入 prefill critical path；但它還沒有把這個因果故事在實體 optical cluster 上閉環。</p>
+
+          <div class="table-scroll">
+            <table>
+            <thead><tr><th>評估面向</th><th>做得好的地方</th><th>尚不能支持的結論</th></tr></thead>
+            <tbody>
+              <tr><td>控制變因</td><td>optical pair 保留同一 GPU compute 與 HBM；跨三模型、四平台、FP4/FP8。</td><td>bandwidth 與 radix 同時改變，無法拆出各自 causal contribution。</td></tr>
+              <tr><td>操作區間</td><td>同時掃 device、batch、context，能看到 compute-bound 與 pod-crossing 的轉折。</td><td>每格取最大 ratio；不能代表平均 request 或固定 production operating point。</td></tr>
+              <tr><td>Serving 視角</td><td>DES 主動暴露 decode bottleneck，避免只報漂亮的 prefill speedup。</td><td>單一 B300/R1/ISL/OSL/Poisson workload，不能推廣到 bursty、多模型或多 decode 配置。</td></tr>
+              <tr><td>硬體可信度</td><td>清楚列出 electrical baseline 與 optical 假設。</td><td>沒有 photonic prototype、實體 topology、congestion、failure、thermal、signal-integrity 或 TCO 驗證。</td></tr>
+              <tr><td>可重現性</td><td>R1 config 與主要 mesh 表格公開在 appendix。</td><td>論文未提供 XLA fork/commit、cost equations、校準誤差、DES code、random seed、run length 或原始 summary.csv。</td></tr>
+            </tbody>
+            </table>
+          </div>
+
+          <h3>最重要的因果混淆：光只是實現方式，模型真正獎勵的是 bandwidth 與 radix</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span> 當結果超過 4×，不能解讀為「photonics 本身超過 4×」；這通常是因為 electrical baseline 已掉到 50／100 GB/s scale-out，而 optical case 仍留在 4× SU bandwidth 的 1,152-GPU domain。理論上，任何能提供相同 per-GPU bandwidth、radix 與 latency 的互連都會在這個模型裡得到相近結果。要證明 photonics 是最佳工程路徑，還需要能耗、成本、可靠性與 packaging 的同條件比較。<a class="source-ref" href="#source-platforms-p4">§IV-C · PDF p.4</a><a class="source-ref" href="#source-table-p9">§V-D · PDF pp.8–9 · Table IV</a></p>
+
+          <h3>DES 是必要的反例，但還不是獨立驗證</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span> DES 仍以同一套 cost model 與理想 optical profile 產生 service time，沒有用 B300 cluster 或 photonic link 的 measured distribution 校準。論文也未提供 simulation duration、warm-up、樣本數、seed、重複次數或 confidence interval；因此 p99 的小幅差異不宜被解讀得比 12–20% TTFT 與 77–110% TPOT 的方向性 trade-off 更精確。<a class="source-ref" href="#source-des-p9">§V-E &amp; Appendix E · PDF pp.9–10, 14</a></p>
+
+          <p>Figure 7 的低 concurrency p99 E2E datapoint 視覺上似乎沒有落在作者概括的「約 1–5% 改善」範圍內；原始數據未公開，所以無法確認是視覺讀值、文字概括範圍或圖表標示問題。較安全的結論是：在提供明確數字的 concurrency 6,144 下，103.4→102.0 秒近乎中性；其餘點不宣稱一致改善。<a class="source-ref" href="#source-des-p9">§V-E · PDF pp.9–10 · Fig. 7</a></p>
+
+          <h3>三個內部一致性問題會影響重現與傳播</h3>
+          <ul>
+            <li><strong>Mesh。</strong> Appendix B 文字稱 288-device preferred mesh 為 \(2\times144\times1\)，緊接的 Table V 卻列 \(4\times72\times1\)；\(y\) 又是最吃 bandwidth 的軸，差異並非純排版。</li>
+            <li><strong>Energy 表格。</strong> Table I 從 5 降到 4.3 pJ/bit，約是 14% reduction 或 0.86×，但 improvement 欄寫 0.13×，單位／算法有歧義。</li>
+            <li><strong>摘要式倍率。</strong> 主文細分 B300 128K 約 2.8–3.0×、B200/Rubin 約 4.3–5.8×；結論卻把 B200、B300、Rubin 一起概括為 4.3–5.8×。應以 Figures 1–6 與 Table IV 的配置值為準。</li>
+          </ul>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span> 這些不一致不推翻「crossing scale-up boundary 會放大 network penalty」的定性結果，卻提醒讀者不要只引用 abstract／conclusion 的最大倍數。<a class="source-ref" href="#source-photonics-p3">§III-A · PDF p.3 · Table I</a><a class="source-ref" href="#source-mesh-p12">Appendix B · PDF p.12 · Table V</a></p>
+
+          <h3>證據來源與外部效度</h3>
+          <p>四位作者皆隸屬 Lightmatter，3D optical bandwidth／radix／energy 的依據也包含該公司的 Passage 資料與作者先前工作。論文有揭露並說明未直接模擬特定 vendor product；這不等同結果錯誤，但應把它描述為<strong>vendor-authored modeled evidence</strong>，等待第三方實機驗證。R4 是 speculative roadmap configuration，亦不應與 B200/B300 的現存產品等量齊觀。<a class="source-ref" href="#source-photonics-p3">§III-A · PDF p.3</a><a class="source-ref" href="#source-limit-p10">§VII · PDF p.10</a></p>
+
+          <div class="statement statement--claim" data-kind="author-claim"><span class="statement__label">作者主張</span><p>論文本身把適用範圍收斂為 communication-limited、prefill-heavy regimes，並承認在 decode saturation 下，TTFT headroom 不會自動轉換成完整 serving throughput 或 E2E latency。<a class="source-ref" href="#source-limit-p10">§VII–IX · PDF p.10</a></p></div>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>下一步要如何把光互連變成完整 serving 系統收益？</h2>
+          <p>下一步真正有價值的工作，不是再把同一個 best-case heatmap 做得更大，而是把「optical link → collective → prefill queue → decode queue → 使用者 SLO」的證據鏈逐段量測並拆因果。</p>
+
+          <div class="table-scroll">
+            <table>
+            <thead><tr><th>後續實驗</th><th>最小對照設計</th><th>可回答的問題</th></tr></thead>
+            <tbody>
+              <tr><td>Bandwidth × radix 2×2 ablation</td><td>固定 topology 分別只增加 bandwidth、只擴 pod、兩者皆做、兩者皆不做</td><td>收益究竟來自快鏈路，還是避免 scale-out boundary？</td></tr>
+              <tr><td>實機 microbenchmark 與模型校準</td><td>同一 collective library 在 electrical／photonic prototype 上量 All-to-All、All-Gather、Reduce-Scatter distribution</td><td>XLA cost walk 的 bias、tail 與 overlap 假設多準？</td></tr>
+              <tr><td>Prefill/decode 容量 sweep</td><td>固定總 GPU，掃 prefill:decode 比例、不同 OSL 與 decode batch cap</td><td>TTFT gain 何時能轉成 TPOT、E2E 與 goodput？</td></tr>
+              <tr><td>Production-trace replay</td><td>heavy-tailed ISL/OSL、bursty arrival、prefix hit、multi-turn、MoE expert skew</td><td>Poisson／固定長度之外，pod crossing 是否仍是主因？</td></tr>
+              <tr><td>TCO／可靠度共同最佳化</td><td>納入 switch stages、laser/thermal、fiber routing、repair、failure-domain、power 與 cooling</td><td>同 SLO 下，每 token 成本與可用度是否勝過高階 electrical/multi-rail fabric？</td></tr>
+            </tbody>
+            </table>
+          </div>
+
+          <p><span class="evidence-kind evidence-kind--speculation">推測</span> 若 optical scale-up 能與 topology-aware collective placement 聯動，系統不一定要讓所有 1,152 GPU 永久形成一個扁平 domain；可以依 request 的 context、expert set 與 failure state 動態組出「足以不跨慢鏈路」的子 pod。這可能降低全域 switch radix 與故障 blast radius，但論文沒有建模 reconfiguration latency 或 control-plane complexity。<a class="source-ref" href="#source-limit-p10">§VIII · PDF p.10</a></p>
+
+          <p><span class="evidence-kind evidence-kind--speculation">推測</span> 對 disaggregated inference 而言，下一個網路瓶頸可能從 prefill collective 轉為 KV-cache transfer。光互連若同時承載 P/D transfer、prefix sharing 與 decode memory traffic，是否仍有 4× 可用 bandwidth，必須用混合 traffic 與 congestion isolation 重新驗證；不能把本文的 prefill-only ratio直接套用。<a class="source-ref" href="#source-limit-p10">§VIII · PDF p.10</a></p>
+
+          <h3>研究討論題</h3>
+          <ol>
+            <li>在相同 1,152-GPU logical domain 下，4× bandwidth 與消除 50／100 GB/s scale-out penalty 各貢獻多少？</li>
+            <li>若把總 72 GPU 從 48:24 改成更多 decode capacity，TTFT、TPOT、E2E 與 goodput 的 Pareto frontier 如何移動？</li>
+            <li>真實 MoE routing skew 是否會讓 \(y\) 軸 All-to-All 比 cost model 更易形成 congestion hot spot？</li>
+            <li>光互連的故障、reconfiguration 與維修粒度，會不會抵銷大 pod 的 latency 優勢？</li>
+            <li>對 AMD Instinct／Infinity Fabric 與 scale-out RDMA 架構，應如何建立同樣的 compute/SU/SO ratio 與 pod-boundary sensitivity map？</li>
+          </ol>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>如何查回模型、硬體假設與關鍵證據？</h2>
+          <div class="table-scroll">
+            <table>
+            <tbody>
+              <tr><th scope="row">正式題名</th><td>Scaling Inference Prefill with High-Radix Photonic Interconnects</td></tr>
+              <tr><th scope="row">作者</th><td>Arulselvan Madhavan、Peter Carson、Taylor Groves、Thomas Graham</td></tr>
+              <tr><th scope="row">發表狀態</th><td>Accepted at the 33rd IEEE Symposium on High-Performance Interconnects（HotI 2026）；arXiv v1 submitted 2026-09-01 UTC</td></tr>
+              <tr><th scope="row">識別碼</th><td><a href="https://arxiv.org/abs/2609.01821" target="_blank" rel="noopener noreferrer">arXiv:2609.01821</a>；related DOI <a href="https://doi.org/10.1109/HotI70696.2026.00020" target="_blank" rel="noopener noreferrer">10.1109/HotI70696.2026.00020</a></td></tr>
+              <tr><th scope="row">分類</th><td>AI Infrastructure / Cluster Networking</td></tr>
+              <tr><th scope="row">篇幅</th><td data-summary-field="pdf-page-count">共 14 頁</td></tr>
+            </tbody>
+            </table>
+          </div>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span> 分類依據是論文的主要 intervention 位於 GPU cluster 的 scale-up／scale-out fabric、bandwidth、radix 與跨 rack topology boundary，而非單一模型演算法或 serving scheduler；因此歸入 <strong>AI Infrastructure / Cluster Networking</strong>。<a class="source-ref" href="#source-intro-p1">Abstract &amp; §I · PDF pp.1–2</a></p>
+
+          <h3>詞彙表</h3>
+          <div class="table-scroll">
+            <table>
+            <thead><tr><th>詞彙</th><th>本文語境</th></tr></thead>
+            <tbody>
+              <tr><td>Prefill</td><td>並行處理輸入 tokens、建立 KV cache 的 inference 階段；主要以 TTFT 衡量。</td></tr>
+              <tr><td>Decode</td><td>逐 token 生成階段；主要受 HBM bandwidth 影響，以 TPOT 衡量。</td></tr>
+              <tr><td>Scale-up（SU）</td><td>高頻寬、緊密耦合的 GPU domain；本文比較其 per-GPU bandwidth 與最大 pod size。</td></tr>
+              <tr><td>Scale-out（SO）</td><td>跨 rack 擴展 fabric；baseline 在超出 SU pod 後使用較低 per-GPU bandwidth。</td></tr>
+              <tr><td>Radix</td><td>互連可直接連接的 endpoint／port 規模；本文以 1,152-GPU optical pod 代表高 radix。</td></tr>
+              <tr><td>MLA</td><td>Multi-Head Latent Attention；三個 MoE proxy 都採用，以低秩表示降低 KV-cache footprint。</td></tr>
+              <tr><td>DES</td><td>Discrete-Event Simulation；把 modeled prefill/decode service time帶入 queueing 流程。</td></tr>
+              <tr><td>Overlapped latency</td><td>XLA cost walk 納入 compute–communication overlap 後的 prefill latency；完整計算規則論文未提供。</td></tr>
+            </tbody>
+            </table>
+          </div>
+
+          <h3>關鍵證據索引</h3>
+          <ol>
+            <li id="source-intro-p1"><strong>研究問題與總體主張：</strong>Abstract／§I，PDF pp.1–2。</li>
+            <li id="source-phases-p2"><strong>Prefill、decode、TTFT、TPOT：</strong>§II-A，PDF p.2。</li>
+            <li id="source-hardware-limit-p2"><strong>Shoreline、reach 與 rack 限制：</strong>§II-C，PDF pp.2–3。</li>
+            <li id="source-photonics-p3"><strong>3D photonics 的 bandwidth、radix、energy 假設：</strong>§III-A，PDF p.3，Table I。</li>
+            <li id="source-modeling-p3"><strong>MLIR／XLA cost-walk 方法：</strong>§IV-A，PDF pp.3–4。</li>
+            <li id="source-models-p4"><strong>Mini／R1／Next 模型：</strong>§IV-B，PDF p.4，Table II。</li>
+            <li id="source-platforms-p4"><strong>Electrical 與 matched optical platform：</strong>§IV-C，PDF p.4，Table III。</li>
+            <li id="source-method-p4"><strong>控制變因與整體方法：</strong>§IV-A–E，PDF pp.3–5。</li>
+            <li id="source-sweeps-p4"><strong>Device／batch sweep 與最大倍率定義：</strong>§IV-D–E，PDF pp.4–5。</li>
+            <li id="source-regimes-p5"><strong>四種 context operating regimes：</strong>§V，PDF p.5。</li>
+            <li id="source-short-p5"><strong>1K／8K component 與 sweep：</strong>§V-A，PDF pp.5–7，Figures 1–4。</li>
+            <li id="source-medium-p5"><strong>128K pod crossing：</strong>§V-B，PDF pp.5–7，Figures 1–2、5。</li>
+            <li id="source-long-p6"><strong>1M／1,152-GPU scaling：</strong>§V-C，PDF pp.6–8，Figures 1–2、6。</li>
+            <li id="source-table-p9"><strong>跨模型／平台 FP4 heatmap：</strong>§V-D，PDF pp.8–9，Table IV。</li>
+            <li id="source-des-p9"><strong>Serving DES 與 TTFT／TPOT／E2E：</strong>§V-E，PDF pp.9–10，Figure 7；Appendix E，PDF p.14，Figure 8。</li>
+            <li id="source-limit-p10"><strong>限制、未來工作與結論：</strong>§VII–IX，PDF p.10。</li>
+            <li id="source-mesh-p12"><strong>R1 config 與 parallel mesh：</strong>Appendices A–B，PDF p.12，Listing 1、Table V。</li>
+            <li id="source-precision-p13"><strong>FP8／FP4 完整 sweep：</strong>Appendices C–D，PDF p.13，Table VI。</li>
+          </ol>
+
+          <p>本摘要以 PDF 頁碼定位；論文版面未標示另一套印刷頁碼。重要數字優先回查 Figures 1–8 與 Tables II–VI，不以 abstract 的最大倍率取代配置條件。</p>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>Scaling Inference Prefill with High-Radix Photonic Interconnects · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>
