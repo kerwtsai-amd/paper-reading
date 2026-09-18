@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="mKernel 論文精讀：理解跨節點 fused GPU kernel 如何以 SM specialization、階層式資料搬移與 RDMA command queue，在 tile 粒度重疊計算、NVLink 與網路通訊。">
+  <title>mKernel: Fast Multi-GPU, Multi-Node Fused Kernels｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 50rem;
+      --wide: 68rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only, .page-footer { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">AI Infrastructure / Distributed GPU Kernels</p>
+      <h1>mKernel: Fast Multi-GPU, Multi-Node Fused Kernels</h1>
+      <div class="paper-dek" data-section-role="thesis">
+        <p>多 GPU kernel 一旦跨出單一 NVLink domain，細粒度 fusion 會同時遭遇慢一個數量級的節點間頻寬、RDMA message 語意、不同 transport ordering 與 SM 資源競爭。mKernel 把 compute、節點內 NVSwitch 搬移與節點間 RDMA 都納入同一 persistent kernel 的 tile-level pipeline，並以專職 thread block、rail-peer 階層式傳輸、host-assisted GPU-initiated command queue 與執行期 SM 分配器維持流水。</p>
+        <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>在兩組 \(2\times 8\) H200 叢集上，GEMM+AllReduce 相對 cuBLAS+NCCL 最高加速 \(1.72\times\)，Ring Attention 最高 \(1.88\times\)；但論文只測到兩個節點，adaptive SM controller 也只在單節點驗證，尚不能直接外推到大規模端到端訓練或 serving。 <span class="source-ref">§5.1–§5.5 · PDF pp.9–12 · Figs. 3, 5, 6</span></p>
+      </div>
+      <p class="paper-byline">Ziming Mao、Yihan Zhang、Shawn Wei Chew、Shuang Ma、Costin Raiciu、Yang Zhou、Scott Shenker、Ion Stoica</p>
+      <p class="paper-meta">
+        <span>arXiv:2609.13585v1 [cs.DC]</span>
+        <span>2026</span>
+        <span>AI Infrastructure / Distributed GPU Kernels</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-18">更新於 2026-09-18</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://arxiv.org/abs/2609.13585" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="mKernel%20-%20Fast%20Multi-GPU%2C%20Multi-Node%20Fused%20Kernels.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議路線：</strong>先讀「跨出 NVLink domain 後」掌握五個障礙，再用「一塊 output tile」建立具體心智模型；接著沿著六步資料流理解 command queue、RDMA notification 與 SM controller，最後用兩種網路測試床的結果與限制判斷這個設計真正證明了什麼。</p>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">為什麼一個 GPU kernel 需要懂得 NVLink、RDMA 與 SM 分工？</a></li>
+            <li><a href="#problem">跨出 NVLink domain 後，細粒度 fusion 為何會失效？</a></li>
+            <li><a href="#insight">把一塊 output tile 送到另一個節點，最早能在何時出發？</a></li>
+            <li><a href="#method">mKernel 如何把計算、NVSwitch 與 RDMA 串成一條持續流水線？</a></li>
+            <li><a href="#evidence">兩個 16-GPU 叢集的資料支持哪些加速結論？</a></li>
+            <li><a href="#critique">這些結果能否外推到更大叢集與真實端到端模型？</a></li>
+            <li><a href="#extensions">下一步該把控制器、拓樸與傳輸語意推到哪裡？</a></li>
+            <li><a href="#reference">如何追查 mKernel 的證據、術語與原始位置？</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>為什麼一個 GPU kernel 需要懂得 NVLink、RDMA 與 SM 分工？</h2>
+          <p class="lead">第一個理解障礙，是「kernel」常被想成只在一張 GPU 上算數學；mKernel 的執行單位卻橫跨 GPU 計算核心、節點內 fabric、CPU proxy 與遠端 NIC。要看懂它，只需要三個稍後會反覆用到的概念：tile、persistent kernel，以及兩層通訊階層。</p>
+
+          <h3>Tile 是流水線中的最小可交付成果</h3>
+          <p>大型 GEMM 或 attention 不會等整個 tensor 完成才產生結果；thread block 逐塊產出固定形狀的 <em>tile</em>。傳統 unfused 流程會先結束完整 compute kernel，再啟動 NCCL collective；two-stream overlap 雖能提早搬資料，但通常仍要等一個 producer kernel 或較大 chunk 的邊界。tile-level fusion 的價值，在於某個 tile 一 ready，就能讓下一個通訊階段接手。 <span class="source-ref">§1–§2.2 · PDF pp.1–3 · Fig. 1</span></p>
+
+          <h3>Persistent kernel 讓 thread block 長駐並改做不同角色</h3>
+          <p>一般 kernel launch 把同一工作發給許多 streaming multiprocessor（SM）；persistent kernel 則讓 thread block 留在 GPU 上，從佇列持續取任務。mKernel 利用這一點，把 block 分成 compute、intra-node communication、inter-node send 與 receive；adaptive 模式還能在 task boundary 改變角色。這個分工使計算與通訊真正同時進行，但每多給通訊一個 SM，也等於少給計算一個 SM。 <span class="source-ref">§2.2, §3.2 · PDF pp.3, 6 · Eq. 1</span></p>
+
+          <div class="table-scroll wide">
+            <table>
+              <caption>mKernel 所面對的三層資料路徑；頻寬為論文兩組 H200 測試床的每 GPU、單向數值。</caption>
+              <thead><tr><th>層級</th><th>路徑</th><th>頻寬</th><th>程式介面</th><th>稍後扮演的角色</th></tr></thead>
+              <tbody>
+                <tr><td>GPU 內</td><td>HBM3e</td><td>4.8 TB/s</td><td>load/store、TMA</td><td>compute block 讀寫 tile</td></tr>
+                <tr><td>節點內</td><td>NVLink + NVSwitch</td><td>450 GB/s</td><td>peer-memory / TMA</td><td>先做 local reduction 或 broadcast</td></tr>
+                <tr><td>節點間</td><td>ConnectX-7 InfiniBand 或 AWS EFA</td><td>50 GB/s</td><td>message-oriented RDMA</td><td>只傳階層化後的 network chunk</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>這個 \(4.8\text{ TB/s} \rightarrow 450\text{ GB/s} \rightarrow 50\text{ GB/s}\) 階層說明了為何不能把所有連線視為等價：跨節點頻寬只有 NVLink 的約九分之一，演算法必須先在快層聚合，再把最少資料送入慢層。 <span class="source-ref">§2.1 · PDF p.3 · Table 1</span></p>
+
+          <h3>GPU-initiated 不必等於 GPU 直接敲 NIC doorbell</h3>
+          <p>mKernel 的 GPU thread block 決定何時傳送，並把 48-byte command 寫入 pinned host-memory ring buffer；CPU proxy 負責轉成 verbs submission，NIC 仍直接在 GPU memory 間搬 payload。這是 <em>host-assisted GPU-initiated communication</em>。另一條 IBGDA 路徑才是 GPU 直接操作 NIC work queue；兩者會在證據章節比較。 <span class="source-ref">§3.3 · PDF p.7</span></p>
+
+          <p class="bridge">現在已有三個積木：tile 是進度單位、persistent block 是執行者、NVLink/RDMA 是速度與語意不同的兩段路。下一個問題是，為何把既有單節點 fusion 原封不動延伸到遠端會卡住？</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>跨出 NVLink domain 後，細粒度 fusion 為何會失效？</h2>
+          <p class="lead">這一章要排除的誤解是：只要把 NCCL collective 切得更小，就能得到跨節點 tile-level overlap。實際上，跨節點同時改變頻寬、傳輸粒度、完成語意、記憶體可見性與 SM 資源配置；五個障礙必須一起處理。</p>
+
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-01-p02-schedules.png"><img src="assets/images/fig-01-p02-schedules.png" alt="三種計算與通訊排程：先計算後跨節點 collective、雙 stream chunk overlap，以及 mKernel 的 tile-level NVLink 與網路重疊"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 1</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：由上到下比較「網路最後才開始」、「每兩個 tile 才釋放一次」與「每個 tile 完成就推進 NVLink 和 network」。橘、綠、藍三列的水平交疊才是 mKernel 要保住的 pipeline；方塊寬度只是示意，不能當量測時間。</span></figcaption>
+          </figure>
+
+          <h3>五個障礙不是五個獨立小問題</h3>
+          <ol>
+            <li><strong>頻寬不對稱：</strong>network 容易成為式 (1) 的最大項，應先在 NVSwitch 聚合／複製，並沿 rail peer 只送必要資料。</li>
+            <li><strong>粒度不對稱：</strong>節點內是細粒度 memory semantics，RDMA 卻要明確的 buffer range 與 completion；一 tile 一 request 會被 per-message overhead 吃掉。</li>
+            <li><strong>ordering 不一致：</strong>InfiniBand reliable connection 可用 data-write 後接 flag-write；AWS EFA 的 SRD 不保證兩筆獨立 write 按序抵達，不能看到 flag 就假定 payload 完成。</li>
+            <li><strong>跨裝置同步：</strong>NIC completion、GPU memory visibility 與遠端 block 的 readiness polling 必須協調，又不能每個 chunk 都做全域同步。</li>
+            <li><strong>SM 分配會隨 shape 與 kernel 改變：</strong>最佳 communication-SM 數在論文 sweep 中跨越 2 到 64；固定比例可能讓 compute 或 communication 任一側餓死。</li>
+          </ol>
+          <p><span class="source-ref">§2.3 · PDF pp.3–4 · C1–C5</span></p>
+
+          <div class="formula-block">
+            \[
+              T_{\mathrm{fused}} \approx
+              \max\!\left(
+                T_{\mathrm{compute}}\frac{S}{S-S_c},
+                T_{\mathrm{NVLink}},
+                T_{\mathrm{network}}
+              \right)
+              + T_{\mathrm{fill/drain}} + T_{\mathrm{sync}}.
+            \]
+            <p class="formula-block__meaning">其中 \(S\) 是總 SM 數、\(S_c\) 是分給通訊的 SM；\(T_{\mathrm{compute}}\) 是全部 SM 都用於計算時的時間。增加 \(S_c\) 可能降低通訊時間，卻把計算項放大為 \(S/(S-S_c)\)。此式是 steady-state 的近似模型，不是包含所有資源干擾的精確預測器。 <span class="source-ref">§2.2 · PDF p.3 · Eq. 1</span></p>
+          </div>
+
+          <p>最近的單節點 fused kernel 已能在 GEMM prologue／epilogue 插入搬移，two-stream pipeline 也能在 chunk boundary overlap；它們的缺口是無法同時回答「哪個 local tile 已齊」、「何時湊成值得送的 RDMA chunk」、「遠端何時真的可讀」以及「該留多少 SM 給每一段」。 <span class="source-ref">§1, §2.2, §6 · PDF pp.1–3, 12–13</span></p>
+
+          <div class="statement statement--claim" data-kind="author-claim">
+            <span class="statement__label">作者主張</span>
+            <p>跨節點 fusion 的設計要求因此是：維持 tile-level readiness、用階層式傳輸壓低慢網路流量、把 transport-specific completion 藏在共同介面後，並能在執行中平衡 compute 與 communication SM。 <span class="source-ref">§2.3–§3 · PDF pp.3–4</span></p>
+          </div>
+
+          <p class="bridge">需求已推導完成。下一章不先談所有元件，而是跟著一個 GEMM+AllReduce output chunk 從「最後一塊 local tile 完成」一路走到遠端可消費。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>把一塊 output tile 送到另一個節點，最早能在何時出發？</h2>
+          <p class="lead">最容易混淆的是三種「ready」：單一 tile 算完、足夠多 tile 已組成 network chunk、以及遠端 payload 已安全可讀。mKernel 的核心洞見不是把它們合併，而是用明確 handoff 把三種進度拆開。</p>
+
+          <h3>一個 256 KiB GEMM+AllReduce chunk 的旅程</h3>
+          <p>假設 GPU 正在產生 AllReduce output。每張 GPU 先各自算 tile；NVSwitch 將同一 tile 的八份 local contribution 聚合到負責該 tile 的 GPU。論文的 GEMM+AllReduce 會把四個已 locally reduced 的 tile 組成一個 256 KiB network chunk：每完成一個 tile 就遞增 per-chunk counter，最後一個 tile 才發布 message readiness。 <span class="source-ref">§3.1 · PDF pp.4–5</span></p>
+          <p>此時不必等整個 GEMM 結束。inter-node send block 把 chunk command 放進 host ring；proxy 將命令批次送給 NIC；NIC 對同 local-index 的 rail peer 做 GPUDirect RDMA。遠端收到後，才由 receive block 合併兩個 node partial sum，再透過 NVSwitch broadcast 給本節點其餘 GPU。簡化的比喻像四件貨湊成一個箱子就發車，而不是等整座倉庫出清；比喻的界線是，真實系統還有 transport ordering、GPU memory visibility 與 SM 競爭，並非只有裝箱延遲。</p>
+
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-02-p05-architecture.png"><img src="assets/images/fig-02-p05-architecture.png" alt="mKernel 兩節點架構，顯示 persistent kernel 的 compute、節點內通訊、跨節點收送與控制器角色，以及 command queue、CPU proxy 和 RDMA NIC"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 2</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：沿黑色編號 1→6 讀一次完整 handoff。資料 payload 一直留在 GPU memory，由 NIC 直接讀寫；CPU proxy 搬的是 command 與 transport-specific completion，不是 tensor 本身。虛線 controller 只發布目標角色數，真正換角色發生在 block 的 task boundary。</span></figcaption>
+          </figure>
+
+          <h3>三個粒度可以獨立選擇</h3>
+          <p>compute tile 決定計算規律性，network chunk 在「早點出發」與「攤平 per-message overhead」間取捨，proxy submission batch 則攤平 NIC doorbell 成本。mKernel 的 proxy 一次最多合併同一 connection 的八個 command，但不強迫湊滿；最後幾個或稀疏抵達的 command 可在 bounded polling window 後部分提交。這不等於把八個 command 合成一個大 chunk：每個 command 仍保留自己的 data transfer 與 arrival notification。 <span class="source-ref">§3.1, §3.3 · PDF pp.5, 7</span></p>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>這個分離是論文最可重用的抽象：<em>producer granularity</em>、<em>transport granularity</em> 與 <em>submission granularity</em> 不必相同。只要每層有可驗證的 readiness handoff，系統就能讓快層保持細粒度，同時讓慢層批次化。</p>
+
+          <p class="bridge">具體旅程說明了資料怎麼走；完整方法還要回答不同 collective 如何安排這條路、不同 transport 如何通知完成，以及 SM controller 如何避免角色比例失衡。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>mKernel 如何把計算、NVSwitch 與 RDMA 串成一條持續流水線？</h2>
+          <p class="lead">這一章解決的障礙是從單一 chunk 放大到完整執行。先看所有 kernel 共用的六步 control/data flow，再看階層式 schedule、transport completion 與 adaptive SM policy 如何各自回答前章的 C1–C5。</p>
+
+          <h3>共用的六步執行流</h3>
+          <ol>
+            <li><strong>Compute：</strong>compute block 產生 output tile，寫入 GPU memory 並更新 readiness flag 或 counter。</li>
+            <li><strong>Local communication：</strong>intra-node block 透過 TMA、NVLink 與 NVSwitch 做 reduction、broadcast 或 peer pull；rail-optimized topology 讓同 local-index GPU 負責跨節點。</li>
+            <li><strong>Command publication：</strong>inter-node send block 依 network-chunk readiness 發布 48-byte command；先寫 body、最後 commit header，避免 proxy 讀到半份命令。</li>
+            <li><strong>Submission：</strong>CPU proxy 讀 ring buffer，在 queue credit 與 outstanding-request 上限內，將最多八個同 connection command 批次提交到 NIC。</li>
+            <li><strong>RDMA：</strong>NIC 直接從註冊的 GPU source buffer 寫入遠端 GPU destination buffer；payload 不繞經 CPU。</li>
+            <li><strong>Completion：</strong>遠端 arrival flag 確認 payload 已可讀後，receive block 才消費資料並推進後續 compute／local broadcast。</li>
+          </ol>
+          <p><span class="source-ref">§3, §3.3 · PDF pp.4–7 · Fig. 2</span></p>
+
+          <h3>階層式 schedule：每個 collective 都先問「哪些 byte 真要跨 node？」</h3>
+          <div class="table-scroll wide">
+            <table>
+              <caption>五個實作 kernel 的 dependency、節點內／節點間策略與 network chunk。</caption>
+              <thead><tr><th>Kernel</th><th>依賴方向</th><th>節點內</th><th>節點間</th><th>Chunk</th></tr></thead>
+              <tbody>
+                <tr><td>AllGather + GEMM</td><td>comm → compute</td><td>multicast broadcast shard</td><td>每個 shard 對每個目的 node 只送一次；更多節點採 ring forwarding</td><td>128 rows</td></tr>
+                <tr><td>GEMM + ReduceScatter</td><td>compute → comm</td><td>TMA atomic add 到 owner buffer</td><td>交換 per-node partial sums</td><td>2–32 tiles</td></tr>
+                <tr><td>GEMM + AllReduce</td><td>compute → comm</td><td>NVSwitch reduction，再 multicast result</td><td>每 GPU 只交換 output 的 \(1/8\)</td><td>4 tiles / 256 KiB</td></tr>
+                <tr><td>MoE Dispatch + GEMM</td><td>comm → compute</td><td>TMA pull peer tokens</td><td>token buffer 複製給 rail peer</td><td>16 tokens / 512 KiB</td></tr>
+                <tr><td>Ring Attention</td><td>step 內獨立</td><td>TMA store KV 到下一張 GPU</td><td>每 node 只送一次 KV slice</td><td>128-row KV tiles</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><span class="source-ref">§4 · PDF p.8 · Table 3</span></p>
+
+          <h3>Transport completion：同一介面背後需要兩套通知協定</h3>
+          <p>ConnectX-7 InfiniBand 使用 reliable connection：proxy 先 RDMA-write data，再在同 connection RDMA-write flag；ordered delivery 使遠端 block 看到 flag 時可相信 payload 先到。EFA 的 SRD 不保證兩筆 write 的順序，因此改用 <em>write with immediate</em>：遠端 proxy 收到完成事件後才發布 GPU arrival flag。兩者都把「posted」與「remote-readable」分開。 <span class="source-ref">§3.3 · PDF p.7 · Table 2</span></p>
+
+          <h3>Adaptive controller：以剩餘工作與單 task 成本重算角色比例</h3>
+          <div class="formula-block">
+            \[
+              n_s^* = B\cdot\frac{R_s C_s}{R_p C_p + R_s C_s}.
+            \]
+            <p class="formula-block__meaning">\(B\) 是可分配 block 總數；\(R_p,R_s\) 是剩餘 compute／communication task 數；\(C_p,C_s\) 是 thread block cycle counter 估出的每 task 成本。controller 令兩側預測完成時間接近，發布 communication-block target；block 在 tile 或 message 邊界檢查 target 並換角色。若 compute 正等輸入，即使已達 target，也可暫時協助 communication。 <span class="source-ref">§3.2 · PDF p.6 · Eq. 2</span></p>
+          </div>
+
+          <figure class="wide" data-figure-role="result">
+            <a href="assets/images/fig-03-p06-sm-partition.png"><img src="assets/images/fig-03-p06-sm-partition.png" alt="四種 kernel 在不同問題尺寸下，communication SM 數與相對最佳固定切分延遲的關係，右側星號為 adaptive controller"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 3</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：虛線 \(1\times\) 是各 shape 自己的最佳固定 split，不是同一設定。四個 panel 的最低點分布很廣，說明一個固定 communication-SM 數無法通吃；最右星號則顯示 adaptive controller 通常接近但沒有等同 oracle sweep。</span></figcaption>
+          </figure>
+
+          <p><span class="evidence-kind evidence-kind--claim">作者主張</span>同一套 explicit readiness、SM specialization 與 verbs-based proxy 使五個 kernel 能在 InfiniBand 與 EFA 共用資料路徑，而不依賴 NCCL 或 NVSHMEM。是否真的兼具效能與可攜性，必須交給下一章兩組 testbed 的數據判斷。 <span class="source-ref">§3–§4 · PDF pp.4–8</span></p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>兩個 16-GPU 叢集的資料支持哪些加速結論？</h2>
+          <p class="lead">最重要的閱讀障礙，是把每張圖上的最高倍數當成整個系統的普遍加速。以下以 claim-test 單元逐一保留硬體、baseline、shape、metric 與 caveat，區分「在哪些點更快」和「為何更快」。</p>
+
+          <h3>共同實驗邊界</h3>
+          <p>兩個 testbed 都是 \(2\) nodes × \(8\) NVIDIA H200，每 GPU 有 400 Gb/s 節點間頻寬；一組每 node 配 8×400 Gb/s ConnectX-7 InfiniBand NIC，另一組配 16×200 Gb/s AWS EFA。mKernel 以 CUDA 12.9、Hopper <code>sm_90a</code> 編譯，每 GPU 一個 process。報告的 throughput 採最慢 rank 的時間，warm-up 後連續 launch，多次 kernel 之間只在末端同步。 <span class="source-ref">§5.1 · PDF p.9 · Table 4</span></p>
+
+          <div class="claim-test">
+            <h3>主張一：hierarchical fusion 能穩定改善 tensor-parallel kernels，但幅度依算子與 shape 而異</h3>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>AllGather+GEMM 在所有測試 shape 都快於 cuBLAS+NCCL，最高為 EFA \(1.41\times\)、ConnectX-7 \(1.34\times\)。GEMM+AllReduce 的最高加速更大：EFA \(1.53\times\)、ConnectX-7 \(1.72\times\)。GEMM+ReduceScatter 只在較大 \(M\ge16\text{K}\) 時呈現 \(1.02–1.27\times\) 優勢，顯示 tile fusion 不是所有小 shape 都自動得利。 <span class="source-ref">§5.2 · PDF p.9 · Figs. 5–6</span></p>
+            <p><span class="evidence-kind evidence-kind--analysis">分析</span>AllReduce 的證據最貼近作者的因果故事：NVSwitch 先做 local reduction、每 GPU 只跨網路送 \(1/8\) output，並與 GEMM 同時推進。然而論文沒有單獨關閉「hierarchical traffic reduction」或「tile-level overlap」的 ablation，因此不能從 end-to-end bar 精確拆出兩者各自貢獻。</p>
+          </div>
+
+          <figure class="wide" data-figure-role="result">
+            <a href="assets/images/fig-05-p10-efa-throughput.png"><img src="assets/images/fig-05-p10-efa-throughput.png" alt="AWS EFA 測試床上五種 mKernel 工作負載與 unfused 或 fused baselines 的每 GPU BF16 TFLOPS"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 5</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：每個 panel 只在自身 shape 與 baseline 集合內比較。橘色 mKernel 在 EFA 上多數領先；MoE 的黃色 DeepEP+DeepGEMM 數字其實來自 ConnectX-7，只能當跨 testbed 參考，不能視為同環境對照。</span></figcaption>
+          </figure>
+
+          <div class="claim-test">
+            <h3>主張二：Ring Attention 是最一致的跨實作優勢</h3>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>相對 FlashAttention+NCCL，Ring Attention 最高加速在 EFA 為 \(1.78\times\)、ConnectX-7 為 \(1.88\times\)。相對受測 distributed-attention implementation，mKernel 的範圍為 MagiAttention \(1.4–3.3\times\)、ring-flash-attention \(2.3–5.6\times\)、Mercury \(2.2–8.6\times\)、Triton-distributed \(1.1–1.7\times\)。優勢通常在較短 sequence 更大，因為這時較難以 attention compute 攤平通訊。 <span class="source-ref">§5.4 · PDF p.11 · Figs. 5–6</span></p>
+            <p>最長 sequence 的 Triton-distributed run 失敗，圖中的紅 × 不應解讀為零 throughput；它代表該 baseline 沒有產生可比較結果。</p>
+          </div>
+
+          <figure class="wide" data-figure-role="result">
+            <a href="assets/images/fig-06-p11-infiniband-throughput.png"><img src="assets/images/fig-06-p11-infiniband-throughput.png" alt="ConnectX-7 InfiniBand 測試床上四種 mKernel 工作負載與 unfused 或 fused baselines 的每 GPU BF16 TFLOPS"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 6</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：上排看 AllGather/ReduceScatter 的 shape-dependent 交叉，下排看 AllReduce 與 Ring Attention 隨問題變大後橘色柱持續拉開。紅 × 是 baseline failure，不是量測值；比較倍數應回到相同 shape 的有效 bar。</span></figcaption>
+          </figure>
+
+          <div class="claim-test">
+            <h3>主張三：MoE 的大倍數同時包含 fusion 與 GEMM 組織收益</h3>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>在 EFA 上，MoE Dispatch+GEMM 相對 all-to-all 後接 GEMM 的 unfused baseline 快 \(3.1–4.5\times\)。但 baseline 假設 uniform routing 且沒有 grouped expert GEMM，所以差距同時反映 token communication overlap 與 expert computation organization。受測 DeepEP+DeepGEMM 不支援 EFA，圖中該 baseline 是 ConnectX-7 數據。 <span class="source-ref">§5.3 · PDF p.9 · Fig. 5</span></p>
+            <p><span class="evidence-kind evidence-kind--analysis">分析</span>因此 \(4.5\times\) 不能被引用成「只靠跨節點 fusion」的加速，也不能把 EFA panel 中的 DeepEP bar 當成公平同機比較。</p>
+          </div>
+
+          <div class="claim-test">
+            <h3>主張四：portable host proxy 並未在受測 case 中明顯輸給 IBGDA</h3>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>在 ConnectX-7 上，以相同 kernel 比較 GPUDirect Async 與 host-assisted GPU-initiated backend：AllGather+GEMM 的 throughput ratio 為 0.91–0.97，MoE Dispatch+GEMM 為 0.98–1.03，沒有一致的 GPUDirect Async 優勢。作者歸因於 host proxy 可重疊並批次 command，而 IBGDA 每 chunk 需要昂貴的 system-scope fence 與 doorbell。 <span class="source-ref">§3.3 · PDF pp.7–8 · Fig. 4</span></p>
+            <p>這只支持「論文測試的兩個 kernel 與 message regime」；作者也明言 IBGDA 可用於 small-message、latency-sensitive workload，未證明所有情境都不需要 direct NIC control。</p>
+          </div>
+
+          <div class="claim-test">
+            <h3>主張五：adaptive controller 避免災難性 split，但仍落後每-shape oracle</h3>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>最佳固定 communication-SM 數跨 2–64；最差的 AllReduce split 約比最佳慢 \(25\times\)。不做 per-shape tuning 的 adaptive controller，在 21 個單節點配置上相對各自最佳固定 split 的幾何平均 latency ratio 為 \(1.18\times\)，也就是平均仍約慢 18%，但遠離錯誤固定 split 的災難區。 <span class="source-ref">§5.5 · PDF pp.11–12 · Figs. 3, 7</span></p>
+          </div>
+
+          <p class="bridge">整體證據支持「同一 kernel 內的階層式 tile pipeline 能跨 InfiniBand 與 EFA 提升多種算子」，但還不等於已證明大型模型端到端加速、任意網路規模的可擴展性或所有 baseline 的公平優勢。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>這些結果能否外推到更大叢集與真實端到端模型？</h2>
+          <p class="lead">需要解開的最後一個證據障礙，是區分 paper 已展示的 kernel-level portability，和它尚未展示的 system-level generality。mKernel 的機制完整、兩種 transport 對照有說服力，但外推邊界也很清楚。</p>
+
+          <h3>最強之處：把跨裝置完成語意納入 kernel 設計</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>許多 overlap 工作只優化 schedule；mKernel 額外把 data-before-flag ordering、GPU memory readiness、host queue publication 與 backpressure 寫成可執行協定。它沒有把 EFA 當成「另一個 InfiniBand」，而是在共同 device interface 後明確切換通知路徑。這使「可攜性」不只是一句支援清單，而有對應的 completion invariant。 <span class="source-ref">§3.3 · PDF p.7 · Table 2</span></p>
+
+          <h3>證據尚未涵蓋的六個邊界</h3>
+          <ol>
+            <li><strong>規模：</strong>所有跨節點量測都是兩個 node；AllGather+GEMM 雖描述更多 node 的 ring forwarding，論文未量測 hop 增加後的 fill/drain、head-of-line blocking 或 rail imbalance。</li>
+            <li><strong>硬體：</strong>跨節點實驗限於 NVIDIA H200、CUDA 12.9、NVLink/NVSwitch；對其他 GPU ISA、PCIe-only node 或非 400 Gb/s-per-GPU fabric 的行為，論文未提供。</li>
+            <li><strong>端到端：</strong>五個 kernel 是重要 building blocks，但沒有把它們接進完整模型，報告 training step time、serving TTFT/TPOT、goodput、energy 或 cost。</li>
+            <li><strong>adaptive 範圍：</strong>controller 只在單節點 8×H100 上測，尚未同時調整 compute、NVLink、inter-node send 與 receive 四種角色，也未展示在動態負載或 transport congestion 下的穩定性。</li>
+            <li><strong>baseline 公平性：</strong>各開源實作支援的 testbed／shape 不同；部分 baseline failure、DeepEP 跨 testbed 參考與 MoE baseline 未 grouped GEMM 都限制了橫向排名。</li>
+            <li><strong>統計與可靠性：</strong>論文交代 warm-up、slowest-rank 與 timing boundary，但未提供重複次數、error bar、failure recovery、proxy CPU overhead／占用或長時間壓力下的 tail behavior。</li>
+          </ol>
+          <p><span class="source-ref">§5.1–§5.5 · PDF pp.9–12</span></p>
+
+          <div class="statement statement--analysis" data-kind="analysis">
+            <span class="statement__label">分析</span>
+            <p>最保守而準確的結論是：mKernel 已證明「兩節點、Hopper、兩種 400 Gb/s-per-GPU transport」下，五種 fused kernel 可利用 tile-level hierarchical overlap 提高吞吐；它尚未證明「大規模模型訓練或推論服務會得到相同倍數」。</p>
+          </div>
+
+          <p><span class="evidence-kind evidence-kind--speculation">推測</span>當節點數增加時，network chunk 的 ring forwarding 與 per-connection proxy batching 可能從隱藏延遲變成新的 critical path；但沒有多節點 scaling curve，這只是待驗證風險，不能當成已觀察到的 bottleneck。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>下一步該把控制器、拓樸與傳輸語意推到哪裡？</h2>
+          <p class="lead">mKernel 最值得延伸的不是再加一個手調 kernel，而是把「多層 readiness + 可變角色預算」升級為可跨規模、跨硬體驗證的控制問題。以下每個方向都附上一個能否證偽的實驗，而不是只列願望。</p>
+
+          <h3>把二角色 controller 擴成跨節點多角色閉環</h3>
+          <p><span class="evidence-kind evidence-kind--speculation">推測</span>現有公式以 compute／communication 兩類剩餘工作決定 \(n_s^*\)。可將 state 擴為 compute、NVLink、send、receive 四個 queue 的 backlog、service time 與 transport completion delay，再用 constrained controller 分配 SM。驗證時應在 2、4、8 nodes 注入不同程度的 rail congestion 與 shape transition，與 per-shape oracle、靜態 split、現行二角色 policy 比較 throughput、tail latency 與 oscillation。</p>
+
+          <h3>用 scaling curve 檢查 hierarchical schedule 的臨界點</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>論文的核心收益來自「先 local reduce/broadcast，再把必要 byte 送給 rail peer」。下一步應固定 global problem size 與 per-GPU problem size，分別量 strong/weak scaling；同時記錄 network bytes、每 hop fill/drain、proxy batch occupancy 與 NVLink/network overlap。若節點增加後 network bytes 仍低、卻吞吐下降，就能把原因定位到 pipeline depth 或 submission path，而不是籠統歸因於頻寬。</p>
+
+          <h3>在完整模型中量測使用者真正關心的指標</h3>
+          <p><span class="evidence-kind evidence-kind--speculation">推測</span>把 GEMM+AllReduce、MoE Dispatch+GEMM 與 Ring Attention 分別接進 tensor-parallel dense model、expert-parallel MoE 與長上下文 inference。除 kernel TFLOPS 外，應報 training step time、serving TTFT／TPOT、request goodput、GPU/NIC/CPU utilization、energy 與 P99；並以 timeline 驗證 kernel 級 overlap 沒有把瓶頸推到 scheduler、CPU proxy 或下一層 collective。</p>
+
+          <h3>研究問題</h3>
+          <ol>
+            <li>transport ordering 能否抽象成一個可由 compiler 驗證的 completion contract，讓 kernel 不必手寫 InfiniBand／SRD 分支？</li>
+            <li>network chunk 大小、proxy batch window 與 SM split 能否聯合最佳化，還是三者時間尺度不同，分層 controller 更穩定？</li>
+            <li>在 non-rail-optimized、oversubscribed 或多 NIC 不對稱拓樸，hierarchical schedule 應如何選 owner 與 forwarding path？</li>
+            <li>當多個 persistent kernel 或多租戶 workload 共用 NIC/SM 時，單 kernel 的 progress-based policy 是否會造成跨 job 不公平？</li>
+            <li>相同 readiness handoff 能否移植到其他 GPU 架構與通訊 stack，而不犧牲 compute tile 的效率與可維護性？</li>
+          </ol>
+
+          <p class="bridge">這些問題都回到同一條主線：不要把「通訊」當成單一時間項，而要把每一層的 ready、submit、complete 與 consume 分開量測、控制與驗證。</p>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>如何追查 mKernel 的證據、術語與原始位置？</h2>
+          <p class="lead">這一節提供最低限度的書目、分類理由、術語與證據索引，讓讀者能回到原文核對，而不重複前文結論。</p>
+
+          <h3>書目資料</h3>
+          <dl class="term-list">
+            <dt>正式標題</dt><dd>mKernel: Fast Multi-GPU, Multi-Node Fused Kernels</dd>
+            <dt>作者</dt><dd>Ziming Mao、Yihan Zhang、Shawn Wei Chew、Shuang Ma、Costin Raiciu、Yang Zhou、Scott Shenker、Ion Stoica</dd>
+            <dt>機構</dt><dd>UC Berkeley、UC Davis、UCLA、University Politehnica of Bucharest</dd>
+            <dt>版本</dt><dd>arXiv:2609.13585v1 [cs.DC]，2026-09-11</dd>
+            <dt>DOI</dt><dd><a href="https://doi.org/10.48550/arXiv.2609.13585" target="_blank" rel="noopener noreferrer">10.48550/arXiv.2609.13585</a>（arXiv-issued DOI）</dd>
+            <dt>全文</dt><dd><a href="https://arxiv.org/pdf/2609.13585v1" target="_blank" rel="noopener noreferrer">arXiv PDF v1</a> · <a href="mKernel%20-%20Fast%20Multi-GPU%2C%20Multi-Node%20Fused%20Kernels.pdf">開啟本地 PDF</a></dd>
+            <dt>程式碼</dt><dd><a href="https://github.com/uccl-project/mKernel" target="_blank" rel="noopener noreferrer">uccl-project/mKernel</a></dd>
+            <dt>頁數</dt><dd><span data-summary-field="pdf-page-count">共 16 頁</span></dd>
+            <dt>分類</dt><dd><span class="evidence-kind evidence-kind--analysis">分析</span>AI Infrastructure / Distributed GPU Kernels。主要貢獻位於 persistent GPU kernel 與跨節點通訊的協同設計，而非提出新的 transport protocol 或單一 collective 演算法。</dd>
+          </dl>
+
+          <h3>術語表</h3>
+          <dl class="term-list">
+            <dt>SM specialization</dt><dd>把 persistent thread blocks 分配為 compute、local communication、inter-node send／receive 等角色。</dd>
+            <dt>Rail peer</dt><dd>不同 node 中 local GPU index 相同的遠端 GPU；跨節點沿 rail 交換，再由 NVSwitch 在 node 內擴散。</dd>
+            <dt>Tile readiness</dt><dd>單一 compute tile 已產生，可被 local communication 消費的狀態。</dd>
+            <dt>Message readiness</dt><dd>組成 network chunk 的所有 tile 已齊，可發布 RDMA command 的狀態。</dd>
+            <dt>Arrival notification</dt><dd>證明遠端 payload 已完成且可由 GPU 安全讀取的 flag／completion 路徑。</dd>
+            <dt>IBGDA</dt><dd>InfiniBand GPUDirect Async；GPU 直接操作 NIC work queue 的 device-side networking 路徑。</dd>
+            <dt>SRD</dt><dd>Scalable Reliable Datagram，AWS EFA 使用的 transport；本文關鍵差異是獨立 write 不具 RC 的 ordered-delivery 保證。</dd>
+          </dl>
+
+          <h3>關鍵證據索引</h3>
+          <ol class="source-index">
+            <li><span><strong>三種 overlap 排程。</strong>從 kernel-boundary／chunk-boundary 到 tile-level fusion。§1，PDF p.2，Figure 1。</span></li>
+            <li><span><strong>通訊階層與頻寬。</strong>HBM3e、NVLink/NVSwitch、InfiniBand/EFA。§2.1，PDF p.3，Table 1。</span></li>
+            <li><span><strong>跨節點五項障礙。</strong>頻寬、粒度、ordering、同步、SM 配置。§2.3，PDF pp.3–4。</span></li>
+            <li><span><strong>完整資料與控制流。</strong>persistent roles、command queue、host proxy、RDMA 與 arrival flag。§3，PDF p.5，Figure 2。</span></li>
+            <li><span><strong>SM controller。</strong>剩餘工作與 per-task cycle cost 的配置式。§3.2，PDF p.6，Equation 2、Figure 3。</span></li>
+            <li><span><strong>Transport-specific completion。</strong>InfiniBand ordered writes 與 EFA write-with-immediate。§3.3，PDF p.7，Table 2。</span></li>
+            <li><span><strong>五個 kernel schedule。</strong>dependency、local/inter-node 路徑與 chunk。§4，PDF p.8，Table 3。</span></li>
+            <li><span><strong>兩個 testbed 的吞吐。</strong>EFA 與 ConnectX-7 各 kernel／shape 對照。§5.1–§5.4，PDF pp.9–11，Figures 5–6。</span></li>
+            <li><span><strong>Adaptive controller 邊界。</strong>單節點 21 configs、幾何平均 \(1.18\times\) oracle latency。§5.5，PDF pp.11–12，Figures 3、7。</span></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>mKernel: Fast Multi-GPU, Multi-Node Fused Kernels · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>
