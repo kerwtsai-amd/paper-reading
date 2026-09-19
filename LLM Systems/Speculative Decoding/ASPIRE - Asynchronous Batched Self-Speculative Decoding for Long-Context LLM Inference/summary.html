@@ -1,0 +1,856 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="ASPIRE 論文精讀：理解非同步批次自我推測解碼、逐請求排程、intra-draft context refresh，以及長上下文吞吐證據與部署邊界。">
+  <title>ASPIRE: Asynchronous Batched Self-Speculative Decoding for Long-Context LLM Inference｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 50rem;
+      --wide: 68rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">LLM Systems / Speculative Decoding</p>
+      <h1>ASPIRE: Asynchronous Batched Self-Speculative Decoding for Long-Context LLM Inference</h1>
+      <div class="paper-dek" data-section-role="thesis">        <p>長上下文解碼的注意力（attention）每產生一個 token 都要重新讀取每個請求自己的 key-value cache（KV cache）；傳統同步式 self-speculation 又要求整個 batch 同進同退，於是有人太早驗證、有人白做過長 draft。ASPIRE 把 batch 內每個請求的 draft/verify 決策拆開，卻仍在一次 target-model forward 中共用 MLP 計算，並以單一 refresh layer 在 draft 途中更新 sparse context。</p>
+        <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>在三個模型、五組 reasoning／長上下文 workload 上，ASPIRE 相對 autoregressive decoding 的 decode-forward throughput 為 \(1.70\text{–}4.58\times\)，相對最強既有 self-speculative baseline 的平均 speedup 約再提高 27%；但主要數據來自單張 H100 NVL，且明確排除 prefill，因此不能直接解讀成端到端 TTFT、TPOT 或服務成本改善。 <span class="source-ref">Abstract, §5.1–§5.3 · PDF pp.1, 8–10 · Fig. 1, Table 1</span></p>
+    </div>
+      <p class="paper-byline">Amir Ziashahabi、Hossein Entezari Zarch、Lei Gao、Murali Annavaram、Salman Avestimehr</p>
+      <p class="paper-meta">
+        <span>COLM 2026 · arXiv:2609.17943v1</span>
+        <span>2026</span>
+        <span>LLM Systems / Speculative Decoding</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-19">更新於 2026-09-19</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://arxiv.org/abs/2609.17943" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="ASPIRE.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+                <p><strong>閱讀路線：</strong>先看「為何同步 batch 會浪費 draft」與 Figure 2，再用 Figure 3 追一次 mixed forward；若只關心結果，直接讀證據章的四個 claim-test unit，最後以邊界章確認哪些 serving 結論仍未被實驗覆蓋。</p>
+    
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">讀懂 ASPIRE 前，只需要掌握哪三個解碼成本？</a></li>
+            <li><a href="#problem">為何固定 draft 長度與整批同步會一起浪費長上下文算力？</a></li>
+            <li><a href="#insight">若同一 batch 的兩個請求想在不同時刻驗證，怎麼仍共用一次 forward？</a></li>
+            <li><a href="#method">ASPIRE 如何把逐請求決策、mixed forward 與 context refresh 串成閉環？</a></li>
+            <li><a href="#evidence">吞吐、品質與 ablation 是否共同支持這套機制？</a></li>
+            <li><a href="#critique">從單張 H100 的 decode throughput，哪些 serving 結論仍不能成立？</a></li>
+            <li><a href="#extensions">要把 ASPIRE 推進真實 serving，下一輪實驗應先補什麼？</a></li>
+            <li><a href="#reference">如何追查 ASPIRE 的術語、公式與關鍵證據？</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>讀懂 ASPIRE 前，只需要掌握哪三個解碼成本？</h2>
+                    <p class="lead">理解障礙在於：ASPIRE 同時談 batching、sparse attention 與 speculative decoding，但三者節省的不是同一種成本。先把它們分開，後面的排程公式才不會只像一串符號。</p>
+
+          <h3>Batching 主要攤平 model weight，卻攤不平每個人的 KV cache</h3>
+          <p>解碼器每一層大致包含多層感知器（multi-layer perceptron, MLP）與 self-attention。batch 變大後，多個請求可共用一次模型權重讀取，MLP 從 GEMV-like 工作轉向較有效率的 GEMM-like 工作；但每個請求的歷史 token 不同，attention 仍得各自讀完整 KV cache。context 越長，這段低算術強度的記憶體流量就越突出。 <span class="source-ref">§1–§2 · PDF pp.2–3</span></p>
+
+          <h3>Self-speculation 是「便宜提案、昂貴但精確的批次驗證」</h3>
+          <p>自我推測解碼（self-speculative decoding）不另養小模型，而由同一 target model 先用 sparse-context attention 逐 token 起草，再用 full-context attention 一次驗證整段 draft。若 draft 中前 \(a_i\) 個 token 被接受，就連同 full-attention 產生的下一個 token 一起提交；因此一次完整 KV 讀取可能換回多個 output token。所有候選仍經 target distribution 驗證，sparse attention 只影響提案，不應改變最終分布。 <span class="source-ref">§2, Appendix B.2 · PDF pp.3, 17</span></p>
+
+          <h3>Draft 越長，省下的 verification 越多，錯提案與 context staleness 也越多</h3>
+          <p>draft length 太短，full-attention verification 過於頻繁；太長則可能計算大量最後被拒絕的 token。Vegas 類方法只在 verification boundary 更新 sparse KV selection，draft 走得越遠，選出的 context 與目前 query 越不相符。ASPIRE 要同時解兩個控制問題：每個 request 何時驗證，以及 draft 途中如何避免 sparse context 過期。 <span class="source-ref">§1, §3 · PDF pp.2, 4–5 · Fig. 2</span></p>
+
+          <p class="bridge">因此下一個問題不是「sparse attention 能否更快」，而是「不同請求的最佳 draft 節奏根本不同時，整批同步還合理嗎？」</p>
+    
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>為何固定 draft 長度與整批同步會一起浪費長上下文算力？</h2>
+                    <p class="lead">論文先用量測指出同步式 batching 的根本錯配：最佳 draft length 既因 request 而異，也會在同一 request 的生成途中變動。</p>
+
+          <h3>跨 request：同一個固定長度無法服務整個 batch</h3>
+          <p>作者讓 256 個 LongBench request 都最多 draft 20 token；它們的每-request 平均 accepted draft length 從 2.56 到 20.00，平均為 11.51。若全 batch 共用一個長度，偏短會讓高接受率 request 過早 verification，偏長則讓低接受率 request 白算即將被拒絕的 token。 <span class="source-ref">§3 · PDF p.4 · Fig. 2(a)</span></p>
+
+          <h3>同一 request：最佳驗證點也不是固定常數</h3>
+          <p>Figure 2(b) 的每一列代表一個 request；列內顏色隨 verification round 明顯變動，表示 accepted draft length 會沿生成過程起伏。因此即使為每個 request 離線選一個固定長度，仍無法追上 token-level 的局部變化。 <span class="source-ref">§3 · PDF p.4 · Fig. 2(b)</span></p>
+
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-02-p04-draft-heterogeneity.png"><img src="assets/images/fig-02-p04-draft-heterogeneity.png" alt="三個子圖依序顯示跨請求 accepted draft length 分布、各請求隨驗證輪次變動的熱圖，以及不同 attention signal 的 sparse-context recall"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 2</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：先看左、中兩圖確認「跨 request」與「沿時間」兩種異質性，再看右圖比較 temporal reuse、cross-layer signal 與 single refresh；虛線 oracle 是相同 page budget 下的上界。</span></figcaption>
+          </figure>
+
+          <h3>最接近的方法仍卡在兩個同步邊界</h3>
+          <p>MagicDec 與 Vegas 都以 batch-wide draft/verify phase 推進；Vegas 雖用 verification token 的 attention score 挑 sparse context，卻只在驗證後更新。這造成兩個浪費：request 不能自行選 verification 時點，較長 draft 的 sparse context 又會逐步變 stale。 <span class="source-ref">§1, §6 · PDF pp.2, 10–11</span></p>
+
+          <div class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>由症狀可推導三項需求：同一 forward 必須容納不同角色、排程器必須同時估計接受率與當下成本、sparse context 必須在 verification 之間也能更新。這三項剛好對應 ASPIRE 的三個元件，而不是彼此獨立的 feature list。</p></div>
+    
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>若同一 batch 的兩個請求想在不同時刻驗證，怎麼仍共用一次 forward？</h2>
+                    <p class="lead">把一個 batch 想成兩名共乘者：request A 的草稿很穩，想再 draft；request B 已累積足夠候選，應立即 verify。傳統作法要求兩人同站下車，ASPIRE 則讓兩人在同一班車裡執行不同 attention 路徑。</p>
+
+          <h3>一個兩-request 的 miniature step</h3>
+          <p>假設 A 目前 draft length \(d_A=2\)，scheduler 估出的 target \(\gamma_A=5\)；B 則是 \(d_B=6\)、\(\gamma_B=6\)。本輪 A 只產生 1 個 sparse-attention token，B 以 full attention 同時計算 \(d_B+1=7\) 個位置來驗證其 draft 並取得下一 token。兩者的 attention context 與 decode length 不同，但使用同一 target model，MLP 權重與 batched matrix computation 仍可共用。 <span class="source-ref">§4.1–§4.2 · PDF pp.5–7 · Fig. 3</span></p>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>這個設計的關鍵不是把 verification 非同步放到另一條 hardware pipeline，而是把「角色差異」降成一次 forward 內每個 request 的 metadata：一組讀 sparse KV、另一組讀 full KV。它保留 batch 的 MLP 效率，又解除 attention path 的 lockstep。</p>
+
+          <h3>驗證時點要看「接受率」也要看「這一批現在多貴」</h3>
+          <p>只根據最近一次是否全數接受而加減 draft length，忽略了 full-context 長度、sparse budget 與 batch composition。ASPIRE 估計每個 request 的 acceptance rate \(\alpha_i\) 與 draft-to-verify cost ratio \(c_i\)，找出預期每單位時間提交 token 最多的 \(\gamma_i\)。同樣的 \(\alpha_i\) 下，context 越長、verification 越貴，允許較長 draft 才可能划算。 <span class="source-ref">§4.2 · PDF pp.6–7</span></p>
+
+          <p class="bridge">直覺建立後，下一章把一次 step 的狀態更新、公式與 refresh 資料流接在一起。</p>
+    
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>ASPIRE 如何把逐請求決策、mixed forward 與 context refresh 串成閉環？</h2>
+                    <p class="lead">每個 active request 都維護 draft length \(d_i\)、sparse context \(S_i\) 與 smoothed acceptance rate \(\alpha_i\)。每一輪先決定角色，再執行 mixed forward，最後以 refresh layer 為下一個 draft step 更新 context。</p>
+
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-03-p06-aspire-overview.png"><img src="assets/images/fig-03-p06-aspire-overview.png" alt="ASPIRE 架構圖，左側是逐請求 scheduler，中間是 draft 與 verify request 共存的 mixed forward，右側是 full-attention refresh layer"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 3</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：由左至右讀成一個閉環：scheduler 產生每個 request 的角色；中圖把不同角色塞進同一 forward；右圖只讓指定 layer 讀 full KV，並把 top-scoring pages 回饋為下一步 sparse context。</span></figcaption>
+          </figure>
+
+          <h3>步驟一：用 expected token yield 選 target draft length</h3>
+          <p>若 request \(i\) 在 verification 前 draft \(\gamma\) 個 token，論文假設 token acceptance 近似幾何過程，預期可提交 token 數為 \((1-\alpha_i^{\gamma+1})/(1-\alpha_i)\)。令一次 draft 與一次 verification 的預測時間分別為 \(T_i^{\mathrm{draft}}\) 與 \(T_i^{\mathrm{verify}}\)，並定義 \(c_i=T_i^{\mathrm{draft}}/T_i^{\mathrm{verify}}\)，則 scheduler 枚舉 \(0\ldots d_{\max}\)： <span class="source-ref">§4.2 · PDF p.6</span></p>
+          <div class="formula-block">
+            \[
+              \gamma_i = \arg\max_{\gamma\in\{0,\ldots,d_{\max}\}}
+              \frac{(1-\alpha_i^{\gamma+1})/(1-\alpha_i)}{1+c_i\gamma}.
+            \]
+            <p class="formula-block__meaning">分子是每個 speculation cycle 預期提交的 token 數；分母把 cycle time 除以 \(T_i^{\mathrm{verify}}\) 正規化。當 \(d_i\ge\gamma_i\) 或碰到 \(d_{\max}=16\) 時 verify；尚無觀測時至少先 draft \(\gamma_{\mathrm{init}}=3\)。</p>
+          </div>
+
+          <h3>步驟二：用 batch-aware timing model 更新成本比</h3>
+          <p>ASPIRE 以 sample generation trace 擬合三個係數，將一輪時間近似為固定 forward 成本、總 forward token 的 MLP 成本，以及總 KV 讀取量的 attention 成本： <span class="source-ref">§4.2 · PDF p.7</span></p>
+          <div class="formula-block">
+            \[
+              \tau_t=\beta_{\mathrm{model}}+\beta_{\mathrm{mlp}}n_t+
+              \beta_{\mathrm{attn}}\left(\sum_{j\in D_t}|S_j|+\sum_{j\in V_t}\ell_j\right).
+            \]
+            <p class="formula-block__meaning">\(n_t\) 是本輪所有 draft token 與 verification positions 的總數；\(D_t,V_t\) 分別是 draft／verify request 集合；\(|S_j|\) 是 sparse context 長度，\(\ell_j\) 是 full context 長度。模型不是精確 kernel simulator，而是把 batch composition 壓成可線上更新的成本比。</p>
+          </div>
+
+          <h3>步驟三：一次 mixed forward 後各自更新狀態</h3>
+          <p>draft request 以 \(S_i\) 產生 1 個 token 並令 \(d_i\leftarrow d_i+1\)；verify request 以 full context 計算 \(d_i+1\) 個 positions，比對 draft prefix，提交 accepted prefix 與下一個 verified token，再把 \(d_i\) 歸零。verification outcome \(a_i\) 轉成觀測接受率，並以 \(\omega=0.8\) 做 exponential smoothing。 <span class="source-ref">§4.1–§4.2 · PDF pp.5–7 · Algorithm 1, PDF p.16</span></p>
+
+          <h3>步驟四：用一個 full-attention layer 刷新 sparse pages</h3>
+          <p>draft 時除了 refresh layer \(\ell_r\) 外，其餘 layer 都使用 sparse attention；\(\ell_r\) 讀 full KV，對每個 prior position 取 max-over-head attention weight，再按 KV page 加總。下一步保留最近 \(L=8\) pages，其他名額選最高分 pages；總 budget 為 \(k_i=\max(k_{\min},\lceil\rho P_i\rceil)\)，實驗採 page size 16、\(\rho=7\%\)、\(k_{\min}=32\)，refresh layer 選倒數第二層。 <span class="source-ref">§4.3–§5.1 · PDF pp.7–8</span></p>
+
+          <p><span class="evidence-kind evidence-kind--claim">作者主張</span>這四步能在保留 target distribution 精確性的前提下，讓每個 request 使用自己的 speculation trajectory；真正是否划算，取決於 mixed execution、scheduler 與 refresh 的成本能否由後續實驗逐一支持。</p>
+    
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>吞吐、品質與 ablation 是否共同支持這套機制？</h2>
+                    <p class="lead">實驗以 Qwen3-1.7B、Qwen3-8B 與 DeepSeek-R1-Distill-LLaMA-8B，涵蓋 AIME 2025、CodeElo、LongBench 16k–18k，以及 LongBench-v2 30k–40k／80k–100k。主要硬體是一張 NVIDIA H100 NVL 96GB，BF16、<code>torch.compile</code> 與 CUDA graphs；metric 是排除 prefill 的 decoding forward output tok/s。 <span class="source-ref">§5.1 · PDF p.8</span></p>
+
+          <div class="claim-test">
+            <h3>主張一：context 越長，mixed self-speculation 的收益越大</h3>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>相對 autoregressive decoding，ASPIRE 在三個模型上的最高 long-context speedup 分別為 \(4.58\times\)、\(2.75\times\)、\(2.66\times\)；Across five workloads 的平均 speedup 分別為 \(3.34\times\)、\(2.08\times\)、\(2.14\times\)。同一模型從 16k–18k 移到 80k–100k 時，加速普遍上升，符合「full KV read 越昂貴，verification 攤提越有價值」的機制。 <span class="source-ref">§5.2 · PDF p.9 · Table 1, Fig. 1</span></p>
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-01-p01-throughput.png"><img src="assets/images/fig-01-p01-throughput.png" alt="三組長條圖比較 MagicDec、Vegas 與 ASPIRE 在三個模型及五個 workload 上相對 autoregressive decoding 的吞吐加速"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 1</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：每個 panel 由短 reasoning workload 走向 80k–100k context；紫色優勢隨 context 拉長最明顯，但數字只涵蓋 decode forward，不能直接當成端到端 latency speedup。</span></figcaption>
+            </figure>
+            <p class="muted">限制：request 會 cyclic replay 直到量測穩定，沒有真實 arrival process、queueing 或 SLO tail latency；prefill 也不在 metric 內。 <span class="source-ref">§5.1 · PDF p.8</span></p>
+          </div>
+
+          <div class="claim-test">
+            <h3>主張二：解除同步與 batch-aware scheduler 都有獨立價值，但不是每格都贏</h3>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>Qwen3-8B 在 80k–100k 上，ASPIRE 為 \(2.75\times\)，同步固定長度的 ASPIRE-Fixed 為 \(2.22\times\)，只用簡單接受率 feedback 的 ASPIRE-FSM 為 \(2.60\times\)。但 Qwen3-1.7B 的 AIME25 由 Vegas \(2.10\times\) 略高於 ASPIRE \(2.06\times\)，CodeElo 則 ASPIRE-Fixed \(2.19\times\) 高於 ASPIRE \(2.12\times\)。 <span class="source-ref">§5.2–§5.3 · PDF pp.9–10 · Table 1</span></p>
+            <p><span class="evidence-kind evidence-kind--analysis">分析</span>完整 scheduler 的價值是跨 model／workload 的一致性，而不是保證每一格最佳。hindsight oracle 仍比 ASPIRE 高 4.7–20.2%，平均 gap 10.4%，代表 acceptance estimator 與局部成本近似尚有可利用空間。 <span class="source-ref">Appendix B.3 · PDF p.17 · Table 3</span></p>
+          </div>
+
+          <div class="claim-test">
+            <h3>主張三：intra-draft refresh 確實對抗 context staleness</h3>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>在 Qwen3-8B、16k–18k context、固定 draft length \(\gamma=10\) 時，沒有 refresh 的 acceptance 降到 60.3%，有 refresh 則維持 76.6%，差 16.4 percentage points。Qwen3-8B 的單層 refresh overhead 在 16k／32k context 分別只占 cycle time 1.03%／1.06%。 <span class="source-ref">Appendix B.5, D · PDF pp.19, 22 · Fig. 5</span></p>
+            <figure data-figure-role="result">
+              <a href="assets/images/fig-05-p22-refresh-acceptance.png"><img src="assets/images/fig-05-p22-refresh-acceptance.png" alt="折線圖顯示 draft length 從 1 增至 10 時，有 refresh 的 acceptance rate 下降較慢，最終高出 16.4 個百分點"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 5</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：兩條線在短 draft 幾乎重合，隨 draft 拉長才分離，這比單一 throughput 數字更直接對應「context 逐步 stale」的因果假說。</span></figcaption>
+            </figure>
+            <p class="muted">限制：這個 causal sweep 固定在 Qwen3-8B、LB[16k–18k] 與特定 sparse budget；其他模型只提供 refresh-layer position sweep，未給相同完整曲線。</p>
+          </div>
+
+          <div class="claim-test">
+            <h3>主張四：exactness 與 tensor parallelism 有初步支持，但部署校準不可省</h3>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>greedy LongBench-v1 的 1,460 筆樣本中，ASPIRE 與 autoregressive macro score 為 51.72 對 51.92，單 task 最大差 0.5 point；作者將小差異歸因於 batched floating-point nondeterminism。Qwen3-8B 在 TP=2 上取得 AIME \(2.16\times\)、LB[16k–18k] \(2.07\times\)，但把 TP=1 timing coefficients 直接搬到 TP=2，LB speedup 會掉到 \(1.51\times\)。 <span class="source-ref">Appendix B.2, B.4 · PDF pp.17–18 · Tables 2, 4</span></p>
+            <p class="muted">限制：TP 實驗只到 2-way，沒有 multi-node collective；timing model 每種 deployment configuration 都需要短 profiling pass。</p>
+          </div>
+    
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>從單張 H100 的 decode throughput，哪些 serving 結論仍不能成立？</h2>
+                    <p class="lead">最可信的結論是「在受測單 GPU／TP=2 設定中，逐 request mixed speculation 能提升 decode-forward throughput」。把它擴寫成「production serving latency 或 cost 已改善」則超出證據。</p>
+
+          <h3>設計強項：三個元件對應三種可觀測浪費</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>Figure 2 先證明跨 request 與時間內的 draft 異質性，再以 mixed forward 解同步、cost-aware scheduler 解 verification 時點、refresh layer 解 sparse context staleness。Figure 5 與 ablation 又分別回扣後兩個機制。這條 problem-to-component-to-test 鏈比只展示 end-to-end speedup 更有說服力。</p>
+
+          <h3>六個不可越過的證據邊界</h3>
+          <ul>
+            <li><strong>不是端到端 latency：</strong>metric 排除 prefill，也沒有 TTFT、TPOT/TBT、P95/P99 或 request completion time。</li>
+            <li><strong>不是 production arrival process：</strong>request cyclic replay；沒有 burst、queueing、priority、cancellation 或 dynamic admission。</li>
+            <li><strong>continuous batching 尚未整合：</strong>論文明言與 general continuous batching、尤其 chunked prefill 的整合是 future work。 <span class="source-ref">§6 · PDF p.11</span></li>
+            <li><strong>硬體外部效度有限：</strong>主要是單張 NVIDIA H100 NVL，平行實驗只到 TP=2；沒有 AMD GPU、multi-node network 或 heterogeneous cluster。</li>
+            <li><strong>比較混合了容量效果：</strong>部分 MagicDec/Vegas row 的最大可容納 batch 較小；這符合 system-throughput 比較，但不是所有方法固定相同 batch size 的純 kernel 比較。 <span class="source-ref">Appendix C · PDF pp.20–22 · Tables 6–10</span></li>
+            <li><strong>校準會老化：</strong>cost-model functional form 可跨 TP，但 coefficients 不可；stale coefficients 在某些 workload 會大幅損失吞吐。 <span class="source-ref">Appendix B.4 · PDF p.18</span></li>
+          </ul>
+
+          <h3>品質證據支持 implementation sanity，不等於全面語意等價驗證</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>exact speculative decoding 在理論上保留 target distribution；LongBench greedy check 也沒有顯著品質崩壞。但八個 task、單一 8B model 與 greedy decoding，主要是抓 page selection／acceptance implementation bug，不足以量化 stochastic sampling 下的 distributional equivalence、長 reasoning answer 的 rare divergence 或不同 kernel 數值路徑。</p>
+
+          <div class="statement statement--speculation" data-kind="speculation"><span class="statement__label">推測</span><p>在有頻繁 preemption、LoRA adapter 切換或跨 GPU KV migration 的服務中，mixed forward 的 request heterogeneity 可能讓 kernel shape 與 cache locality 更不規則；論文沒有量測這些控制面成本，因此實際 speedup 可能低於封閉 replay。</p></div>
+    
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>要把 ASPIRE 推進真實 serving，下一輪實驗應先補什麼？</h2>
+                    <p class="lead">下一步應保留 ASPIRE「每 request 有自己的 speculation trajectory」的核心，但把觀測、決策與量測邊界推到完整 serving stack。</p>
+
+          <h3>把 mixed forward 接到 continuous batching 與 chunked prefill</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>實作應允許新 request admission、prefill chunk、draft request 與 verify request 同時競爭 batch slots，並回報 TTFT、inter-token latency 與 goodput。這能測出 mixed decode 是否傷害 prefill progress，而不只看 decode-forward tok/s。</p>
+
+          <h3>把 scheduler 從 per-request 近似推進 constrained batch optimization</h3>
+          <p><span class="evidence-kind evidence-kind--speculation">推測</span>現行 scheduler 以 homogeneous-batch approximation 求每個 \(c_i\)，但真實 mixed batch 中 request 互相改變 kernel shape。可用短 horizon optimizer 或 contextual bandit 直接以 batch composition、context length、SLO slack 與 cache pressure 選 \(D_t,V_t\)，並以 hindsight oracle gap 作為可量化上界。</p>
+
+          <h3>跨架構、跨節點重做 cost-model calibration study</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>至少比較 H100／B200 與 AMD Instinct，加入 TP=4/8、multi-node collective，再測 model size、GQA ratio、KV precision 與 paged-attention kernel 對 \(\beta_{\mathrm{mlp}},\beta_{\mathrm{attn}}\) 的影響。目標不是只報新 speedup，而是找出 coefficients 何時可遷移、何時必須重 profile。</p>
+
+          <h3>研究問題</h3>
+          <ol>
+            <li>當 queueing 與 SLO slack 納入目標後，最大 throughput 的 \(\gamma_i\) 是否仍是正確 verification 點？</li>
+            <li>refresh layer 能否依 request／layer 動態開關，使短 context 不支付不必要的 full-attention overhead？</li>
+            <li>batch size 差異中，有多少收益來自 mixed execution 本身，有多少來自更佳 memory footprint 與更大 admission capacity？</li>
+            <li>若 sparse page selection、KV quantization 與 prefix sharing 同時存在，exactness、cache ownership 與 page score 應如何協調？</li>
+            <li>能否以部署後 drift detector 自動觸發三係數重校準，而不讓 stale model 悄悄侵蝕 goodput？</li>
+          </ol>
+    
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>如何追查 ASPIRE 的術語、公式與關鍵證據？</h2>
+                    <p class="lead">本節集中書目、術語與最短證據路徑；摘要中的所有主要數字都可回到下列 PDF 位置。</p>
+
+          <h3>書目資料</h3>
+          <dl class="term-list">
+            <dt>正式標題</dt><dd>ASPIRE: Asynchronous Batched Self-Speculative Decoding for Long-Context LLM Inference</dd>
+            <dt>作者</dt><dd>Amir Ziashahabi、Hossein Entezari Zarch、Lei Gao、Murali Annavaram、Salman Avestimehr</dd>
+            <dt>發表資訊</dt><dd>Conference on Language Modeling（COLM）2026；arXiv:2609.17943v1，2026-09-16 提交</dd>
+            <dt>分類</dt><dd>LLM Systems / Speculative Decoding。<span class="evidence-kind evidence-kind--analysis">分析</span>主要貢獻是 self-speculative decoding 的 runtime、per-request scheduler 與 sparse-context refresh，而不是新模型架構或 cluster network。</dd>
+            <dt>頁數</dt><dd><span data-summary-field="pdf-page-count">共 22 頁</span></dd>
+            <dt>原始資源</dt><dd><a href="https://arxiv.org/abs/2609.17943" target="_blank" rel="noopener noreferrer">arXiv 論文頁面</a> · <a href="https://github.com/Amir-zsh/ASPIRE" target="_blank" rel="noopener noreferrer">作者程式碼</a> · <a href="ASPIRE.pdf">開啟本地 PDF</a></dd>
+          </dl>
+
+          <h3>術語表</h3>
+          <dl class="term-list">
+            <dt>Draft / Verify</dt><dd>以較便宜的 sparse attention 逐 token 提案；再以 target model full attention 一次檢查一段候選。</dd>
+            <dt>Accepted draft length</dt><dd>一次 verification 中，從 draft 開頭連續被 target distribution 接受的 token 數。</dd>
+            <dt>Unified mixed forward</dt><dd>同一 target-model invocation 內，同時放入 sparse-attention draft request 與 full-attention verify request。</dd>
+            <dt>\(\alpha_i\)</dt><dd>request \(i\) 的 smoothed token acceptance-rate estimate。</dd>
+            <dt>\(c_i\)</dt><dd>預測 draft step time 除以 verification step time 的成本比。</dd>
+            <dt>\(\gamma_i\)</dt><dd>scheduler 為 request \(i\) 選出的 target draft length。</dd>
+            <dt>Refresh layer</dt><dd>draft 途中唯一執行 full attention 的 layer，用其 attention scores 重選下一步 sparse KV pages。</dd>
+          </dl>
+
+          <h3>關鍵證據索引</h3>
+          <ol class="source-index">
+            <li><span>問題與 batch/attention 成本不對稱：§1–§2，PDF pp.2–3。</span></li>
+            <li><span>draft 異質性與 signal 選擇：§3，PDF pp.4–5，Figure 2。</span></li>
+            <li><span>mixed forward、scheduler 與 refresh：§4，PDF pp.5–8，Figure 3。</span></li>
+            <li><span>主要 throughput 與 ablation：§5.1–§5.3，PDF pp.8–10，Table 1。</span></li>
+            <li><span>品質、oracle gap、TP calibration：Appendix B.2–B.4，PDF pp.17–18，Tables 2–4。</span></li>
+            <li><span>refresh robustness 與長 draft 效果：Appendix B.5, D，PDF pp.19, 22，Table 5, Figure 5。</span></li>
+          </ol>
+    
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>ASPIRE: Asynchronous Batched Self-Speculative Decoding for Long-Context LLM Inference · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>
