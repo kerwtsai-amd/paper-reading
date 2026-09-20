@@ -1,0 +1,950 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="深入解析 Calibrate, Then Route：如何以硬體校準的邊際成本模型，為 P/D 分離式 LLM 服務選擇 prefill 與 decode instance，並辨識其有效區間與失效邊界。">
+  <title>Calibrate, Then Route: A Measured Study of Learned Request Routing for Disaggregated LLM Serving｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 50rem;
+      --wide: 68rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      .page-footer { margin-top: 1.5rem; padding: .75rem 0 0; break-inside: avoid; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">LLM Systems / Request Scheduling</p>
+      <h1>Calibrate, Then Route: A Measured Study of Learned Request Routing for Disaggregated LLM Serving</h1>
+      <div class="paper-dek" data-section-role="thesis">
+        <p>P/D 分離把計算密集的 prefill 與記憶體頻寬受限的 decode 拆到不同 GPU pool，卻沒有回答每個新請求該排去哪一組 instance。這篇論文把 placement 改寫成「新請求在候選 instance 上增加多少完成時間」：用 prompt 長度、預測輸出長度、加入後的 KV-cache 壓力與 SLO 類別評分，並先以目標硬體量測校準服務時間。</p>
+        <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>在 8×NVIDIA A40、vLLM 0.12、NIXL 的單機 P/D 叢集上，校準後 router 在三條 mixed-bursty trace 的平均 goodput 為 0.864，高於 0.835–0.847 的三個 baseline；但它在只有三個 instance 或極度資源不足時沒有優勢，甚至會因 greedy argmin 集中負載而崩潰。<a class="source-ref" href="#src-results">§V · PDF pp.4–6 · Table II / Figs. 3–9</a></p>
+      </div>
+      <p class="paper-byline">Srikanta Datta Tumkur、Jay Iyer、Mehar Simhadri、Sai Pavan Kumar、Sai Kapil Kumar、Ramesh Nampelly</p>
+      <p class="paper-meta">
+        <span>arXiv:2609.16206v1 [cs.AI]</span>
+        <span>2026</span>
+        <span>LLM Systems / Request Scheduling</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-20">更新於 2026-09-20</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://arxiv.org/abs/2609.16206v1" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="Calibrate-Then-Route.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀順序：</strong>先用第 2–3 章理解「queue count 看不見請求大小」與 marginal cost 直覺，再讀第 5 章的 mixed-traffic、GPU frontier 與 ablation；最後以第 6 章判斷這個 policy 能否搬到自己的叢集。</p>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">先分清 prefill、decode 與 goodput，才看得懂 routing 為何難</a></li>
+            <li><a href="#problem">P/D 已拆開，為何逐請求 placement 仍會拖垮 SLO？</a></li>
+            <li><a href="#insight">把「排到哪裡」改寫成邊際完成時間，router 才能看見請求大小</a></li>
+            <li><a href="#method">四個 admission-time 訊號如何走完整條 routing 流程？</a></li>
+            <li><a href="#evidence">校準後何時勝出，又在哪些 workload 失效？</a></li>
+            <li><a href="#critique">這些結論能推到 production cluster 多遠？</a></li>
+            <li><a href="#extensions">如何把一個有用但會集中負載的 scorer 變成可部署 policy？</a></li>
+            <li><a href="#reference">查證路徑：metadata、術語與關鍵證據在哪裡？</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>先分清 prefill、decode 與 goodput，才看得懂 routing 為何難</h2>
+          <p class="lead">這一章先補三個會在後文反覆用到的概念：P/D 分離改變了資源瓶頸、SLO 不是平均延遲、而 queue length 不等於剩餘工作量。理解這三點，才知道為什麼「選最短隊列」在請求長短差很多時會失真。</p>
+
+          <h3>同一個 inference request 其實包含兩種不同工作</h3>
+          <p><strong>Prefill</strong> 一次讀完 prompt，通常以大矩陣運算吃滿計算單元；<strong>decode</strong> 則逐 token 生成，每一步都要讀取持續長大的 key-value cache（KV cache），更容易受記憶體頻寬限制。Prefill/decode disaggregation（P/D 分離）把兩階段放到不同 GPU pool，prefill 完成後再把 KV cache 交給 decode instance，以避免兩種工作在同一 GPU 上互相干擾。<a class="source-ref" href="#src-intro">§I · PDF p.1</a></p>
+
+          <div class="table-scroll">
+            <table>
+              <caption>後文真正需要的兩階段差異</caption>
+              <thead><tr><th>階段</th><th>主要輸入與輸出</th><th>典型瓶頸</th><th>routing 需要估什麼</th></tr></thead>
+              <tbody>
+                <tr><td>Prefill</td><td>完整 prompt → 第一批 KV state</td><td>計算吞吐、長 prompt、chunked prefill 競爭</td><td>prompt 長度 \(p_r\) 與硬體 prefill 時間 \(\tau_{\mathrm{pre}}\)</td></tr>
+                <tr><td>Decode</td><td>KV state → 逐 token 輸出</td><td>記憶體頻寬、持續佔用、KV 容量</td><td>預測輸出長度 \(\hat{o}_r\)、每 token 時間 \(\tau_{\mathrm{dec}}\) 與 cache pressure</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Goodput 問的是「有多少請求達標」，不是只問跑了多少</h3>
+          <p>Time to First Token（TTFT）量第一個 token 出現前的等待，Time per Output Token（TPOT）量後續 token 的節奏；論文把同時符合指定 TTFT 與 TPOT SLO 的請求比例當作 goodput。主要實驗的 tight SLO 是 TTFT 175 ms、TPOT 39.7 ms，loose class 是前者的 3 倍。<a class="source-ref" href="#src-methodology">§IV-B · PDF p.4</a></p>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>這使 routing 目標與「平均完成速度最快」不同：一個 placement 即使只讓少數長請求排到錯的 instance，也可能同時讓它與後方多個短請求越過 SLO 線，因此尾端延遲與最差 trace 不能被平均值遮住。</p>
+
+          <h3>Queue count 只數件數，backlog 才嘗試估時間</h3>
+          <p>Round-robin 完全不看負載；Join-Shortest-Queue（JSQ）或 least-loaded 至少看目前有幾個 request，卻把短聊天與上千 token 的 reasoning request 都算成「一件」。本文的 backlog 改以秒表示已承諾工作，再把新請求自己的 prompt／預測輸出長度納入；這個時間尺度是否正確，正是後文 calibration 成敗的核心。<a class="source-ref" href="#src-router">§III-A–B · PDF pp.2–3</a></p>
+
+          <div class="takeaway-list">
+            <div class="takeaway-item"><p class="takeaway-label">後文對應</p><p>P/D 差異對應兩套 cost；TTFT/TPOT 對應 SLO class；queue 與 backlog 的差異對應 calibration ablation。</p></div>
+            <div class="takeaway-item"><p class="takeaway-label">不必先懂</p><p>不需要深入 NIXL 內部協定。本文把 KV transfer 當作既有機制，研究的是 admission-time placement。</p></div>
+          </div>
+          <p class="bridge">兩個 pool 已經分開，真正未解的問題因此浮現：每個 request 到底該配哪一個 prefill 與 decode instance？</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>P/D 已拆開，為何逐請求 placement 仍會拖垮 SLO？</h2>
+          <p class="lead">理解障礙在於：DistServe、Splitwise、Mooncake 已經證明 P/D 分離可行，直覺上 placement 似乎只是「挑一台空的」。但在 heterogeneous、bursty traffic 下，instance 看起來空閒，不代表接下這個 request 後仍能守住 SLO。</p>
+
+          <h3>症狀：件數相同，未來佔用時間可能差兩個數量級</h3>
+          <p>一個短聊天與一個長 reasoning request 對 round-robin 或 JSQ 都是一個 request；後者卻可能長時間佔用 decode slot、擴張 KV cache，並把後續 request 一起推過 SLO。論文把研究問題限定在<strong>跨 prefill/decode instance 的 admission-time assignment</strong>：engine 內部 continuous batching、chunked prefill，以及 admission 後的 request migration 都不是本文要替換的層次。<a class="source-ref" href="#src-intro">§I–II · PDF pp.1–2</a></p>
+
+          <h3>最接近的 baseline 各少看一塊</h3>
+          <div class="table-scroll">
+            <table>
+              <caption>四種 placement 規則的資訊邊界</caption>
+              <thead><tr><th>Policy</th><th>看見什麼</th><th>主要盲點</th></tr></thead>
+              <tbody>
+                <tr><td>Round-robin</td><td>輪流分派</td><td>請求大小、當下負載、cache 與 SLO 全部不可見</td></tr>
+                <tr><td>Least-loaded / JSQ</td><td>request count</td><td>一長一短仍各算一件，count 不等於秒數</td></tr>
+                <tr><td>Length threshold heuristic</td><td>預測長度的分段規則</td><td>對 live backlog、post-admission cache 與 SLO 的組合反應有限</td></tr>
+                <tr><td>本文 router</td><td>prompt、預測輸出、backlog、cache pressure、SLO</td><td>依賴校準；greedy argmin 可能集中負載</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><span class="evidence-kind evidence-kind--author-claim evidence-kind--claim">作者主張</span>真正需要的是以「這個 request 放到這個 instance 後會增加多少完成時間」評分，而不是再發明一個 count heuristic。可用訊號幾乎都在 admission 時取得：prompt 長度是精確值、輸出長度可估計、cache occupancy 可輪詢，SLO class 隨 request 進來。<a class="source-ref" href="#src-intro">§I · PDF p.1</a></p>
+
+          <h3>從失效機制反推六項設計要求</h3>
+          <ol>
+            <li><strong>大小感知：</strong>至少區分 prompt work 與預期 decode work。</li>
+            <li><strong>時間尺度：</strong>把既有 backlog 與新工作放到可比較的秒數單位。</li>
+            <li><strong>加入後狀態：</strong>評估 post-admission cache pressure，而不是只讀現在。</li>
+            <li><strong>SLO 感知：</strong>tight request 的負載代價要比 loose request 更高。</li>
+            <li><strong>硬體校準：</strong>服務時間常數必須來自目標叢集，不能直接搬 simulator 值。</li>
+            <li><strong>可辨識邊界：</strong>要知道何時 informed placement 有價值、何時回到簡單 spreading 更好。</li>
+          </ol>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>因此將本文歸在 <strong>LLM Systems / Request Scheduling</strong>：主要貢獻是 admission routing 的成本模型與量測邊界；NIXL 與 KV transfer 是承載實驗的資料路徑，不是新 transport protocol。</p>
+          <p class="bridge">下一步不先看完整公式，而是把 scorer 想成兩只必須校準到同一單位的「工作時鐘」。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>把「排到哪裡」改寫成邊際完成時間，router 才能看見請求大小</h2>
+          <p class="lead">最小心智模型是：每個 decode instance 前面都有一條以「秒」標示的待辦清單；router 不只問哪條清單最短，還估算新 request 加入後，自己的 decode work、cache 壓力與 SLO 緊迫度會把哪條清單推高多少。</p>
+
+          <h3>從「一件 request」換成「多少秒的承諾工作」</h3>
+          <p>想像 A、B 兩個 decode instance 都只有一件 in-flight request。JSQ 會判定兩者平手；若 A 的既有工作即將結束、B 的工作還會生成上千 token，它們的剩餘成本顯然不同。本文先用 <code>backlog(d)</code> 表示 instance \(d\) 已承諾的秒數，再把新 request 的預測輸出 token 數乘上硬體每 token 時間，得到 request-specific work。</p>
+
+          <div class="formula-block">
+            \[
+              \operatorname{cost}(d)=
+              w_b\,\operatorname{backlog}(d)\,\sigma(s_r)
+              +w_s\,\hat{o}_r\tau_{\mathrm{dec}}
+              \bigl(1+\rho\,\operatorname{press}^{+}(d)\bigr)\sigma(s_r)
+              +w_q\,\operatorname{queue}(d)
+            \]
+            <p class="formula-block__meaning"><strong>符號對應：</strong>\(\hat{o}_r\) 是 request \(r\) 的預測輸出長度；\(\tau_{\mathrm{dec}}\) 是目標硬體量到的每 token decode 時間；\(\operatorname{press}^{+}(d)\) 是把 request 放入後的 cache pressure；\(\sigma(s_r)\) 放大 tight-SLO request 的代價；\(w_b,w_s,w_q,\rho\) 是手設權重。Prefill 使用同一結構，但把 work 換成 \(p_r\tau_{\mathrm{pre}}\)。<a class="source-ref" href="#src-router">§III-A · PDF p.2</a></p>
+          </div>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>這個式子不是精確的 completion-time simulator；它是一個排序器。關鍵不是把每毫秒算到完全正確，而是讓 backlog 與 request work 的相對量級不要失真，並在每個候選 instance 上使用相同單位比較。</p>
+
+          <h3>Calibration 為何不是部署後微調，而是方法的一部分</h3>
+          <p>若 backlog 來自真實秒數，但 \(\hat{o}_r\tau_{\mathrm{dec}}\) 使用過小的 simulator 常數，size-aware term 會被壓到幾乎沒有影響，router 表面上仍跑同一個公式，實際上卻退化為 queue counting。論文在目標叢集先跑約五分鐘 benchmark，量 prefill latency curve 與 concurrency 下的 decode rate，以設定 \(\tau_{\mathrm{pre}}\)、\(\tau_{\mathrm{dec}}\) 與 SLO；其 simulator-derived \(\tau_{\mathrm{dec}}\) 比實測小 7.4×。<a class="source-ref" href="#src-router">§III-B · PDF p.3</a></p>
+
+          <div class="statement statement--analysis" data-kind="analysis">
+            <span class="statement__label">分析</span>
+            <p>本文最重要的洞見不是「多放幾個 feature」，而是<strong>觀測到的 backlog 與模型估出的新增工作必須共享可信的物理尺度</strong>；否則 learned scorer 只是在用複雜形式重現簡單 heuristic。</p>
+          </div>
+
+          <p>這個直覺也說明簡化的極限：continuous batching 會讓多個 sequence 共享 GPU，長短序列的 intra-batch interference、chunked-prefill contention 與 KV fragmentation 都不是上述加法式成本能完整描述。作者後來把 batching 加進 simulator，雖能改善絕對延遲，仍無法重現硬體上的 policy 排名。<a class="source-ref" href="#src-limitations">§VI · PDF pp.5–6</a></p>
+          <p class="bridge">有了這兩只「工作時鐘」，現在可以沿著一次 request，從 admission 走到 KV transfer 與 SLO 回饋。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>四個 admission-time 訊號如何走完整條 routing 流程？</h2>
+          <p class="lead">這一章解決的是「公式如何落在真正資料路徑上」。一次 request 在 admission 時只做一次 feature extraction 與兩次 argmin，之後仍由未修改的 vLLM engine 執行 prefill/decode，KV cache 由 NIXL 在 pool 間傳送。</p>
+
+          <h3>端到端：先決定兩個 instance，再執行 P/D handoff</h3>
+          <ol>
+            <li>Router 讀取精確 prompt 長度 \(p_r\)、SLO class \(s_r\)，並預測輸出長度 \(\hat{o}_r\)。</li>
+            <li>對每個 prefill candidate 計算 \(p_r\tau_{\mathrm{pre}}\) 版本的 marginal cost，選最小者 \(i_{\mathrm{pre}}\)。</li>
+            <li>對每個 decode candidate 計算含 backlog、\(\hat{o}_r\tau_{\mathrm{dec}}\)、post-admission cache pressure 與 SLO 的 cost，選 \(i_{\mathrm{dec}}\)。</li>
+            <li>在 \(i_{\mathrm{pre}}\) 執行 prefill，透過 NIXL 把 KV cache 傳到 \(i_{\mathrm{dec}}\)，完成 decode，並記錄 TTFT、TPOT 與是否達成 SLO。</li>
+          </ol>
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-02-p03-architecture.png"><img src="assets/images/fig-02-p03-architecture.png" alt="Learned router 由 prompt 長度、預測輸出長度、cache pressure 與 SLO class 選擇 prefill 和 decode instance，並以負載與 SLO 結果回饋監控。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 2</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：由左到右追一次 request；中間 scorer 只替換 selection rule，prefill、KV transfer、decode 與 SLO monitor 保持在同一實驗資料路徑。</span></figcaption>
+          </figure>
+
+          <h3>四個訊號各回答一個不同風險</h3>
+          <div class="takeaway-list">
+            <div class="takeaway-item"><p class="takeaway-label">Prompt length</p><p>估 prefill work；是精確 admission-time 值。</p></div>
+            <div class="takeaway-item"><p class="takeaway-label">Predicted output length</p><p>估 decode 佔用；後續 ablation 顯示它是主要承載 feature。</p></div>
+            <div class="takeaway-item"><p class="takeaway-label">Post-admission cache pressure</p><p>避免把新 request 放入後逼近 KV budget；但本實驗沒有真的觸及 60k-token 上限。</p></div>
+            <div class="takeaway-item"><p class="takeaway-label">SLO class</p><p>放大 tight request 的 load term；效果依負載區間改變。</p></div>
+          </div>
+
+          <h3>Calibration 與 predictor 是可替換但不可省略的前置件</h3>
+          <p>Calibration benchmark 約五分鐘，負責把 prefill/decode work 換成目標硬體的時間尺度；輸出長度 predictor 則刻意保持簡單，因為 router 只需要量級訊號。論文以最高 150% relative error 注入 predictor 來測容忍度，而不是把 predictor 準確率與 scheduler 優勢混成同一件事。<a class="source-ref" href="#src-router">§III-B–C · PDF p.3</a></p>
+
+          <h3>硬體 harness 如何避免把系統雜訊誤認為 policy 效果</h3>
+          <div class="table-scroll wide">
+            <table>
+              <caption>主要實驗環境與控制條件</caption>
+              <thead><tr><th>項目</th><th>設定</th><th>為何重要</th></tr></thead>
+              <tbody>
+                <tr><td>硬體與模型</td><td>單機 8×NVIDIA A40；Qwen2.5-3B；BF16；TP=1</td><td>所有 headline number 的適用範圍</td></tr>
+                <tr><td>Serving stack</td><td>每 GPU 一個未修改 vLLM 0.12 engine；NixlConnector</td><td>只替換 routing policy，不改 engine</td></tr>
+                <tr><td>主要 pool</td><td>2 prefill + 4 decode；另測 3–8 GPU pool shape</td><td>分辨 width 與 provisioning frontier</td></tr>
+                <tr><td>KV 與 telemetry</td><td>每 engine 60,000-token KV budget；50 ms 輪詢 occupancy</td><td>限定 cache-pressure 結論</td></tr>
+                <tr><td>Correctness gates</td><td>token-count contract、跨 GPU greedy output bitwise 等價、每個 prefill×decode pair warmup</td><td>排除冷 NIXL pair 與輸出差異</td></tr>
+                <tr><td>Run isolation</td><td>每次重設 prefix cache；各 workload 先尋找 round-robin mid-collapse 的 saturation point</td><td>避免 session ordering 與過輕負載掩蓋差異</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>作者表示所有 §V 數字都來自硬體，simulator 只用於提出假設；這個區分很重要，因為後續顯示 simulator 即使加入 continuous batching，也無法重現任何 workload 的 measured winner。<a class="source-ref" href="#src-methodology">§III-D–IV · PDF pp.3–4</a></p>
+          <p class="bridge">方法是否有效，不能用一個總平均回答；要分成 mixed traffic、同質 workload、pool width、資源飢餓與 feature ablation 逐項對照。</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>校準後何時勝出，又在哪些 workload 失效？</h2>
+          <p class="lead">這一章把每個結論綁回它真正測到的 workload、控制條件與 caveat。先看主要 mixed-bursty 結果，再用 heterogeneity、pool width、calibration 與 ablation 找出因果邊界。</p>
+
+          <section class="claim-test">
+            <h3>主張一：在 mixed-bursty traffic，校準 router 的平均與最差 trace 都較穩</h3>
+            <p><strong>測試：</strong>2 prefill + 4 decode、三條 arrival trace；每條都在該 workload 的 measured saturation point 執行。<strong>控制：</strong>相同 vLLM/NIXL harness，只替換 round-robin、JSQ、length threshold 或 learned selection rule。</p>
+            <div class="table-scroll">
+              <table>
+                <caption>Mixed-bursty traffic 的三-trace 平均</caption>
+                <thead><tr><th>Policy</th><th>Goodput</th><th>P99 TTFT</th><th>P99 TPOT</th></tr></thead>
+                <tbody>
+                  <tr><td>Round-robin</td><td>0.836</td><td>0.337 s</td><td>0.018 s</td></tr>
+                  <tr><td>Least-loaded (JSQ)</td><td>0.835</td><td>0.346 s</td><td>0.018 s</td></tr>
+                  <tr><td>Length threshold</td><td>0.847</td><td><strong>0.318 s</strong></td><td>0.018 s</td></tr>
+                  <tr><td><strong>Learned router</strong></td><td><strong>0.864</strong></td><td>0.321 s</td><td>0.018 s</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>Learned router 三條 trace 為 0.860/0.877/0.855，平均最高且 spread 最小；它贏 round-robin 與 heuristic 三次，對 JSQ 贏兩次，唯一落後的一次差 0.003。<a class="source-ref" href="#src-results">§V-A · PDF p.4 · Table II</a></p>
+            <p><strong>界線：</strong>它不是每個 latency metric 都第一；length heuristic 的平均 P99 TTFT 更低 3 ms。論文稱 0.003 在 run-to-run noise 內，但未提供 error bar 或顯著性檢定。</p>
+          </section>
+
+          <section class="claim-test">
+            <h3>主張二：價值來自 heterogeneity，不是 learned policy 本身永遠更好</h3>
+            <p><strong>測試：</strong>chat、document、reasoning、mixed 四種 workload 各自在自己的 saturation point 比較。Chat 是 short-in/short-out；document 最長 4k prompt、短輸出；reasoning 是短輸入、長輸出；mixed 同時異質且 bursty。</p>
+            <figure data-figure-role="result">
+              <a href="assets/images/fig-03-p04-goodput.png"><img src="assets/images/fig-03-p04-goodput.png" alt="四種 routing policy 在 chat、document、reasoning 與 mixed workload 的 goodput heatmap；learned router 在 reasoning 與 mixed 最佳，但在 chat 最差。"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 3</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：橫向比較同一 workload。Learned router 在 reasoning 與 mixed 領先，卻在同質 chat 只有 0.760；額外訊號在 queue count 已足夠時反而成為雜訊。</span></figcaption>
+            </figure>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>Learned router 在 mixed 為 0.864、reasoning 為 0.955；chat 則由 heuristic 的 0.855 勝過 learned 的 0.760。Document 中 round-robin 降到 0.585 且 tail 約 1.1 s，三個 load-aware policy 都至少 0.695。<a class="source-ref" href="#src-results">§V-C · PDF p.4 · Fig. 3</a></p>
+            <p><strong>支持的結論：</strong>當 request 長度差異大時，size-aware placement 有價值；<strong>不支持：</strong>不能說 feature 越多就普遍越好。</p>
+          </section>
+
+          <section class="claim-test">
+            <h3>主張三：硬體 calibration 本身貢獻 4.5 個 goodput points</h3>
+            <p><strong>測試：</strong>同一 learned policy、同三條 mixed trace，只把 cost constants 從目標 A40 實測值換成 simulator-derived 值。<strong>觀察：</strong>未校準 goodput 0.819、P99 TTFT 0.42–0.52 s；校準後為 0.864、0.25–0.30 s。<a class="source-ref" href="#src-results">§V-B · PDF p.4</a></p>
+            <p><span class="evidence-kind evidence-kind--analysis">分析</span>4.5 points 與約 40% tail advantage 說明 calibration 不是「部署調參」的附帶工作，而是讓 size-aware term 不被真實 backlog 淹沒的 identifiability 條件。Caveat 是作者沒有把這個 effect 分解成每一個常數的獨立敏感度。</p>
+          </section>
+
+          <section class="claim-test">
+            <h3>主張四：中間 provisioning 區間省 GPU，飢餓區間反而危險</h3>
+            <figure data-figure-role="result">
+              <a href="assets/images/fig-04-p05-frontier.png"><img src="assets/images/fig-04-p05-frontier.png" alt="Goodput 隨 provisioned GPU 數量變化的折線圖；learned routing 在五與六 GPU 的中間區間領先，三 GPU 時大幅落後。"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：藍線的優勢只出現在可部署的中間區間。最左側三 GPU 是 measured failure region；右側有足夠 headroom 時，所有 policy 再度收斂。</span></figcaption>
+            </figure>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>Width=3 時 learned 與 JSQ 為 0.816 vs. 0.822；width=4 時為 0.864 vs. 0.835；width=6 的 operating point 有 headroom，learned 0.858 與 round-robin 0.860 再度接近。按 pool shape 掃描時，learned 在 6 GPU 達 0.870，約等於 round-robin 使用 7 GPU 的 service，即約少 14% GPU。<a class="source-ref" href="#src-frontier">§V-D–E · PDF pp.4–5 · Fig. 4</a></p>
+            <p><strong>反例：</strong>在 1 prefill + 2 decode 的 extreme scarcity，learned 只有 0.292，round-robin 為 0.680；作者重做四次仍見 inversion。Greedy argmin 把 request 集中到瞬間最便宜的 instance，資源全面過載時，盲目 spreading 反而較安全。</p>
+          </section>
+
+          <section class="claim-test">
+            <h3>主張五：需要輸出長度訊號，但不需要非常準的 predictor</h3>
+            <figure data-figure-role="result">
+              <a href="assets/images/fig-08-p06-ablation.png"><img src="assets/images/fig-08-p06-ablation.png" alt="移除 prompt 長度、預測輸出長度、cache pressure 與 SLO class 後的 goodput 變化；預測輸出長度造成最大損失。"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 8</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：正柱代表移除後掉分；predicted output length 是主要承載 feature。負柱表示該 operating point 移除 feature 反而改善，揭示 SLO term 的 regime dependence。</span></figcaption>
+            </figure>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>移除 predicted output length 在 steady load 損失 3.2 points、saturation 損失 4.7；cache pressure 在 60k-token budget 下沒有可測貢獻；SLO term 在 moderate load 有幫助，deep saturation 時移除它反而增加 3.7 points。將 predictor relative error 從 0 注入到 150% 時，goodput 落在 0.838–0.880 的 trace-noise 範圍，最差噪音下仍勝過 heuristic。<a class="source-ref" href="#src-ablation">§V-G–H · PDF pp.5–6 · Figs. 8–9</a></p>
+            <p><strong>支持的結論：</strong>能區分大致長短比精確 token 數更重要。<strong>不支持：</strong>這個實驗不能證明 cache pressure 不重要，因為它的壓力區間根本沒有被觸及。</p>
+          </section>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>這些結論能推到 production cluster 多遠？</h2>
+          <p class="lead">最容易誤讀的地方，是把「在一組真實硬體上量到」擴大成「已證明 production 普遍成立」。這篇工作的價值正好相反：它把哪些結論能成立、哪些條件尚未覆蓋，量得相當清楚。</p>
+
+          <h3>強項：作者主動驗證 simulator 為何會給出錯的信心</h3>
+          <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>原 simulator 的 service constants 與 A40 實測差 7–13×，serial-service model 也高估 head-of-line blocking。加入 continuous batching 後，三種 workload 的 P99 TTFT 誤差從 1–63× 降到 0.5–1.4×，但四種 policy 在 bursty case 的預測差距仍小於 0.01，而硬體量到約 0.03；它仍沒有預測對任何 workload 的 winner。<a class="source-ref" href="#src-limitations">§VI · PDF pp.5–6</a></p>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>這比單純報 simulator/hardware correlation 更有研究價值：作者指出 simulator 可把「真實剩餘工作」直接交給 policy，而 deployment proxy 只能用自己的錯誤常數估 backlog。若模型偷偷給 scheduler 一個 production 不可能取得的 oracle signal，模擬中的成功無法證明可部署。</p>
+
+          <h3>外部效度：目前只覆蓋單機、單一 silicon、3B 模型</h3>
+          <ul>
+            <li><strong>硬體：</strong>每組實驗只用 NVIDIA A40；不同 GPU 的 batching 曲線、記憶體容量與服務時間都需重校準。</li>
+            <li><strong>拓樸：</strong>NIXL transfer 在單機內完成。作者說 cross-node RDMA 可加入 transfer term，但沒有實驗；網路排隊、NIC contention、拓樸非對稱都尚未驗證。</li>
+            <li><strong>模型：</strong>Qwen2.5-3B、BF16、TP=1。更大模型、tensor/expert parallel 或 multi-node decode 可能改變 cost 結構。</li>
+            <li><strong>Cache regime：</strong>60k-token budget 未飽和，因此 cache pressure feature 的成效仍未知。</li>
+            <li><strong>權重與重現：</strong>論文說 weights 為手設、constants 由校準得到，但 exact weights、公開程式碼位置與完整 workload trace 生成方式<strong>論文未提供</strong>。</li>
+          </ul>
+
+          <h3>統計與比較：方向可信，但精度不宜過度解讀</h3>
+          <p>Headline result 使用三條 trace，並對 scarcity inversion 重做四次；這比單次 benchmark 更扎實。然而主要圖表沒有 confidence interval，0.003 被描述為 run-to-run noise，卻未呈現估計方法。每種 workload 又使用自己的 saturation point，因此 Figure 3 適合回答「各 workload 內誰較好」，不適合把不同欄的絕對 goodput 當成同一 request rate 下比較。<a class="source-ref" href="#src-results">§IV-B / §V-A–C · PDF p.4</a></p>
+
+          <div class="statement statement--speculation" data-kind="speculation">
+            <span class="statement__label">推測</span>
+            <p>在跨機 P/D pool，transfer queue 與 topology locality 可能和 predicted output length 一樣成為主導 feature；但在取得 multi-node trace 前，不能把單機的 14% GPU 節省直接換算成 production capacity。</p>
+          </div>
+
+          <h3>本文真正能支持的部署判斷</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>若 pool 至少有四個可選 instance、traffic 明顯異質、系統處於有 contention 但未全面過載的區間，硬體校準的 size-aware scorer 值得測；若 pool 很窄、已進入 extreme scarcity，或 workload 高度同質，simple spreading/JSQ 可能更穩。這是一張 operating-region map，不是單一 universal policy。</p>
+          <p class="bridge">因此合理的下一步不是把 argmin scorer 原封不動擴大，而是替它加上「何時切換、何時拒絕、何時只抽樣少數候選」的安全護欄。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>如何把一個有用但會集中負載的 scorer 變成可部署 policy？</h2>
+          <p class="lead">可重用的設計思想是「用量測校準 request-specific marginal cost」；要把它變成 production policy，還需要顯式處理負載集中、拓樸、模型漂移與 operating-region 切換。</p>
+
+          <h3>四個最值得做的 follow-up experiment</h3>
+          <ol>
+            <li><strong>Greedy guardrail：</strong><span class="evidence-kind evidence-kind--speculation">推測</span>比較 full argmin、power-of-two sampling、softmax sampling 與 admission guard，在 1P+2D 到 2P+6D 的相同 scarcity sweep 上量 concentration、goodput 與 tail。這直接測試作者留下的 mitigation。</li>
+            <li><strong>把 network cost 放進同一物理尺度：</strong><span class="evidence-kind evidence-kind--analysis">分析</span>在跨 node NIXL/RDMA 上加入 KV bytes、link utilization、NIC queue、hop/rail locality 與 transfer overlap；以實測 transfer completion time 校準，而不是只加一個固定延遲。</li>
+            <li><strong>逼近真正 cache-pressure regime：</strong><span class="evidence-kind evidence-kind--analysis">分析</span>用較長 context、較小 KV budget 與 prefix reuse，使 eviction、fragmentation、cache hit/miss 真正出現，再重做 feature ablation，判斷 pressure 是否從 inert 變成 load-bearing。</li>
+            <li><strong>Online recalibration 與 drift detector：</strong><span class="evidence-kind evidence-kind--speculation">推測</span>把五分鐘離線 benchmark 延伸為低頻 background probe，當實測 token service time 或 tail residual 超過門檻時，暫時退回 JSQ/round-robin 並更新 constants。</li>
+          </ol>
+
+          <h3>從單一 scorer 升級成 region-aware policy</h3>
+          <p>本文的結果其實暗示一個兩層 controller：外層先判斷 pool width、headroom、heterogeneity 與 overload；內層才在 informed routing、JSQ 與 blind spreading 間選 policy。這比讓同一組 weights 同時處理 chat、mixed traffic 與 extreme scarcity 更符合證據。</p>
+          <div class="formula-block">
+            \[
+              \pi(x)=
+              \begin{cases}
+                \text{sampled marginal-cost routing}, &amp; \text{heterogeneous, contended, not starved}\\
+                \text{JSQ}, &amp; \text{homogeneous or narrow pool}\\
+                \text{spread / admission control}, &amp; \text{extreme scarcity}
+              \end{cases}
+            \]
+            <p class="formula-block__meaning"><span class="evidence-kind evidence-kind--speculation">推測</span>這是依本文 operating-region evidence 提出的延伸，不是作者已驗證的演算法。</p>
+          </div>
+
+          <h3>研究討論可用的五個問題</h3>
+          <ol>
+            <li>若 output-length predictor 只需量級，最小可用訊號是分桶、排名，還是 token 數回歸？</li>
+            <li>Cross-node KV transfer 的 cost 應與 request completion time 相加，還是需要顯式建模 compute/communication overlap？</li>
+            <li>如何在不使用未來資訊的前提下，為 simulator 建立和 deployment proxy 完全相同的 backlog estimator？</li>
+            <li>Goodput、GPU cost 與 fairness 之間應採單一加權目標，還是以 constraint + frontier 呈現？</li>
+            <li>Policy 切換造成的 hysteresis、冷 cache 與 NIXL pair warmup，會不會抵銷 region-aware controller 的收益？</li>
+          </ol>
+          <p class="bridge">最後把所有關鍵結論壓回可核對的頁碼、圖表與術語，方便重讀或簡報引用。</p>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>查證路徑：metadata、術語與關鍵證據在哪裡？</h2>
+          <h3>論文資訊</h3>
+          <dl class="term-list">
+            <dt>正式標題</dt><dd>Calibrate, Then Route: A Measured Study of Learned Request Routing for Disaggregated LLM Serving</dd>
+            <dt>作者</dt><dd>Srikanta Datta Tumkur；Jay Iyer；Mehar Simhadri；Sai Pavan Kumar；Sai Kapil Kumar；Ramesh Nampelly</dd>
+            <dt>機構</dt><dd>Vizuara</dd>
+            <dt>版本</dt><dd>arXiv:2609.16206v1，2026-09-14，分類 cs.AI</dd>
+            <dt>頁數</dt><dd><span data-summary-field="pdf-page-count">共 7 頁</span></dd>
+            <dt>Canonical page</dt><dd><a href="https://arxiv.org/abs/2609.16206v1" target="_blank" rel="noopener noreferrer">arXiv abstract page ↗</a></dd>
+            <dt>全文</dt><dd><a href="Calibrate-Then-Route.pdf">開啟本地 PDF</a></dd>
+            <dt>Venue / DOI</dt><dd>論文未提供正式會議／期刊資訊與 DOI。</dd>
+          </dl>
+
+          <h3>術語表</h3>
+          <dl class="term-list">
+            <dt>P/D disaggregation</dt><dd>把 prefill 與 decode 放在不同 GPU pool，兩階段間傳送 KV cache。</dd>
+            <dt>Goodput</dt><dd>同時符合 TTFT 與 TPOT SLO 的 request 比例；本文不是用 raw throughput 當 headline metric。</dd>
+            <dt>Backlog</dt><dd>Router 估計某 instance 已承諾的剩餘工作秒數。</dd>
+            <dt>Marginal cost</dt><dd>把新 request 放到某 instance 後，估計它在該處承受的 completion-time 代價。</dd>
+            <dt>JSQ</dt><dd>Join-Shortest-Queue，本文對應 least-loaded baseline，以 request count 選最短隊列。</dd>
+            <dt>NIXL</dt><dd>NVIDIA Inference Xfer Library；本實驗透過 NixlConnector 在 prefill/decode engine 間移動 KV cache。</dd>
+            <dt>Cache pressure</dt><dd>Request 加入後 KV budget 的壓力；本實驗 60k-token budget 未飽和，因此 feature 未顯示可測收益。</dd>
+          </dl>
+
+          <h3>關鍵證據索引</h3>
+          <ol class="source-index">
+            <li id="src-intro"><span><strong>問題與定位：</strong>分離 prefill/decode 後仍留下 per-request placement；四個 admission-time 訊號的研究問題。§I–II，PDF pp.1–2。</span></li>
+            <li id="src-router"><span><strong>Scorer 與校準：</strong>decode cost equation、prefill analog、五分鐘 calibration、7.4× τdec 誤差、predictor noise 設計。§III，PDF pp.2–3，Algorithm 1 / Fig. 2。</span></li>
+            <li id="src-methodology"><span><strong>實驗環境：</strong>8×A40、vLLM 0.12、Qwen2.5-3B BF16 TP=1、NIXL、2P+4D、60k KV、correctness gates、saturation search。§IV，PDF pp.3–4，Table I。</span></li>
+            <li id="src-results"><span><strong>主要結果與異質性：</strong>mixed-bursty 三 trace、0.864 goodput、P99、各 workload policy 差異。§V-A–C，PDF p.4，Table II / Fig. 3。</span></li>
+            <li id="src-frontier"><span><strong>Pool width 與 provisioning frontier：</strong>width 3/4/6、約 14% fewer GPUs、starved collapse 0.292 vs. 0.680。§V-D–F，PDF pp.4–5，Figs. 4–7。</span></li>
+            <li id="src-ablation"><span><strong>Feature 與 predictor：</strong>output length removal 3.2/4.7 points、cache inert、SLO regime dependence、150% noise。§V-G–H，PDF pp.5–6，Figs. 8–9。</span></li>
+            <li id="src-limitations"><span><strong>模擬落差與適用邊界：</strong>7–13× constants gap、batching 改善絕對值但不修正排名、單機／單 silicon／3B scope。§VI–VII，PDF pp.5–7。</span></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>Calibrate, Then Route: A Measured Study of Learned Request Routing for Disaggregated LLM Serving · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>
