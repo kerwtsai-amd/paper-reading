@@ -580,7 +580,7 @@
         <span>21st USENIX Symposium on Networked Systems Design and Implementation（NSDI ’24），pp. 745–760</span>
         <span>2024</span>
         <span>AI Infrastructure / Distributed Training Systems</span>
-        <span><time data-summary-field="last-updated" datetime="2026-09-08">2026 年 9 月 8 日</time></span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-20">2026 年 9 月 20 日</time></span>
       </p>
       <p class="paper-links">
         <a href="https://www.usenix.org/conference/nsdi24/presentation/jiang-ziheng" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
@@ -670,7 +670,7 @@
             </tbody>
           </table>
         </div>
-        <p><a class="source-ref" href="#source-related-p14">§7 · PDF pp.14–15（論文 pp.757–758）</a></p>
+        <p><a class="source-ref" href="#source-related-p14">§7 · PDF pp.13–14（論文 pp.756–757）</a></p>
         <p class="evidence-paragraph" data-kind="analysis"><span class="evidence-kind evidence-kind--analysis">分析</span> MegaScale 的新穎性不在每個零件皆首創：3D parallelism、ZeRO、FlashAttention-2、LAMB、Clos 與 checkpoint 都有前身。影響力來自把模型演算法、runtime、network control plane 與運維 telemetry 對齊到同一個萬卡 critical path，並以真實長跑證明整合能運作。這是 system integration/co-design 型貢獻。</p>
 <p class="bridge">問題的限制已經清楚；接著要抓住作者最關鍵的轉念。</p>
         </section>
@@ -780,10 +780,10 @@
             <tbody>
               <tr><td><strong>C1：MegaScale 能改善 175B strong scaling</strong></td><td>固定 global batch 6,144 與 300B-token 目標，GPU 由 3,072 擴至 12,288；sequence 2,048、TP=8、PP=8。以同 batch 的 Megatron-LM 作基線。</td><td>iteration time、tokens/s、300B tokens 預估天數、MFU 與 PFLOPS。</td><td>沒有 repetitions、error bars 或顯著性；baseline 是 2023-01-11 commit。 <a class="source-ref" href="#source-table2-p11">§6.1 · PDF pp.10–11（論文 pp.753–754）· Tables 1–2</a></td></tr>
               <tr><td><strong>C2：530B 可弱縮放至 11,200 GPUs</strong></td><td>2,240、4,480、11,200 GPUs；batch 隨 GPU 數增加，並相應調 learning rate；TP=8、PP=35。</td><td>若每卡工作量大致維持，MFU 應跨規模保持；比較 MegaScale 與 Megatron-LM。</td><td>不是 fixed-batch strong scaling；batch 與 learning rate 一起改變。 <a class="source-ref" href="#source-fig9-p11">§6.1 · PDF p.11（論文 p.754）· Figure 9</a></td></tr>
-              <tr><td><strong>C3：co-design 元件共同貢獻效率</strong></td><td>175B、256 GPUs，從 Megatron-LM 開始依序加入 parallel transformer block、sliding-window attention、TP/PP/DP overlap、operators、miscellaneous、LAMB。</td><td>觀察累積 MFU 是否由 47.7% 上升。</td><td>不是單因子消融；順序 interaction 未拆解，最後一列把 batch 放大 3×。 <a class="source-ref" href="#source-table3-p12">§6.3 · PDF p.12（論文 p.755）· Table 3</a></td></tr>
+              <tr><td><strong>C3：co-design 元件共同貢獻效率</strong></td><td>175B、256 GPUs，從 Megatron-LM 開始依序加入 parallel transformer block、sliding-window attention、TP/PP/DP overlap、operators、miscellaneous、LAMB。</td><td>觀察累積 MFU 是否由 47.7% 上升。</td><td>不是單因子消融；順序 interaction 未拆解，最後一列把 batch 放大 3×。 <a class="source-ref" href="#source-table3-p12">§6.1 · PDF p.12（論文 p.755）· Table 3</a></td></tr>
               <tr><td><strong>C4：演算法改動不破壞 convergence</strong></td><td>資源受限下改用 13B 模型：PTB+SWA 對 baseline 訓練超過 100B tokens；LAMB 4× batch 對 Adam 1× batch 至約 250B tokens。</td><td>training-loss curves 應相近、最後達到相同 loss。</td><td>是 13B proxy，不是 175B/530B；只呈 training loss，沒有 downstream quality 或統計區間。 <a class="source-ref" href="#source-fig10-p12">§6.1 · PDF p.12（論文 p.755）· Figure 10</a></td></tr>
               <tr><td><strong>C5：系統能長期承受萬卡故障</strong></td><td>一個未具名、數千億參數 production model，在超過 10,000 GPUs 上跑數週、跨 multi-trillion tokens；以 normalized loss/token-rate 與 restart 色段呈現。</td><td>restart 後 loss 是否續降；自動處理率、診斷時間與 effective training time rate。</td><td>模型、精確卡數、資料、故障總數/分布與原始時間軸未公開。 <a class="source-ref" href="#source-fig11-p12">§6.2 · PDF p.12（論文 p.755）· Figure 11</a></td></tr>
-              <tr><td><strong>C6：observability 能定位慢機與 jitter</strong></td><td>以 rank-level CUDA events、heatmap/timeline、3D dependencies 檢查不同 production incidents，再移除慢 hosts 或問題程式碼。</td><td>修正前後 MFU 與跨 iteration timing 是否回復。</td><td>案例式 before/after，未報 control group、樣本數或監測開銷。 <a class="source-ref" href="#source-ops-p13">§6.4 · PDF p.13（論文 p.756）· Figure 12</a></td></tr>
+              <tr><td><strong>C6：observability 能定位慢機與 jitter</strong></td><td>以 rank-level CUDA events、heatmap/timeline、3D dependencies 檢查不同 production incidents，再移除慢 hosts 或問題程式碼。</td><td>修正前後 MFU 與跨 iteration timing 是否回復。</td><td>案例式 before/after，未報 control group、樣本數或監測開銷。 <a class="source-ref" href="#source-ops-p13">§6.3 · PDF p.13（論文 p.756）· Figure 12</a></td></tr>
             </tbody>
           </table>
         </div>
@@ -830,7 +830,7 @@
         <p>每卡負載大致保持時，MegaScale 的 MFU 幾乎持平於 54.1–54.3%，而基線略降；這支持 530B capacity 可延伸至 11,200 GPUs。它不能替代固定 global batch 的強縮放證據。 <a class="source-ref" href="#source-fig9-p11">§6.1 · PDF p.11（論文 p.754）· Figure 9</a></p>
         <h3>Control plane 與 production stability</h3>
         <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> 2,048 GPUs 的 Megatron-LM communication-group initialization 約 1,047 s；換成非阻塞 Redis 後約 361 s；進一步去除 group 間 global barriers 後低於 5 s。作者另報在超過 10,000 GPUs 時低於 30 s。 <a class="source-ref" href="#source-init-p7">§3.5 · PDF pp.6–7（論文 pp.749–750）</a></p>
-        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> production run 經歷超過 100 次 restart；作者報告超過 90% faults 可自動偵測與修復，平均 detection+diagnosis 低於 10 分鐘，通常可在 15 分鐘內追平 crash 前進度，effective training time rate 超過 90%。 <a class="source-ref" href="#source-fig11-p12">§6.2 · PDF p.12（論文 p.755）· Figure 11</a></p>
+        <p class="evidence-paragraph" data-kind="experimental-fact"><span class="evidence-kind evidence-kind--fact">實驗事實</span> production run 經歷超過 100 次 restart；作者報告超過 90% faults 可自動偵測與修復，平均 detection+diagnosis 低於 10 分鐘，並可在 15 分鐘內追平 crash 前進度。作者將 effective training time rate 定義為 “iterations × iteration training time ÷ total training time”，並報告該值超過 90%。 <a class="source-ref" href="#source-fig11-p12">§6.2 · PDF p.12（論文 p.755）· Figure 11</a> <a class="source-ref" href="#source-ops-p13">§6.3 · PDF p.13（論文 p.756）</a></p>
         <figure data-figure-role="result">
           <a href="assets/images/fig-11-p12-production-restarts.png"><img src="assets/images/fig-11-p12-production-restarts.png" alt="超過一萬張 GPU 的 production LLM 訓練 normalized loss curve 與多次 restart 色段"></a>
           <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 11</strong><span class="reading-guide" data-caption-field="reading-guide"><strong>導讀：</strong>橫軸是 normalized consumed-token rate、縱軸是未揭露尺度的 loss；不同色段表示 restart。曲線跨越許多色段仍連續下降，支持「能恢復並續訓」，但圖本身不能告訴每次故障類型、停機時間或最終模型品質。</span></figcaption>
@@ -854,7 +854,7 @@
             </tbody>
           </table>
         </div>
-        <p><a class="source-ref" href="#source-table3-p12">§6.3 · PDF p.12（論文 p.755）· Table 3</a></p>
+        <p><a class="source-ref" href="#source-table3-p12">§6.1 · PDF p.12（論文 p.755）· Table 3</a></p>
         <h3>該表能說什麼、不能說什麼</h3>
         <ul>
           <li><strong>能說：</strong>按照作者選定的組合與加入順序，MFU 由 47.7% 累積到 65.3%；三種 parallelism 的 overlap 加入後，各自的相鄰列都有正向差值。</li>
@@ -964,7 +964,7 @@
           <dt>DCQCN / PFC / HoL</dt><dd>RDMA congestion control、priority flow control 與 head-of-line blocking；過度暫停可使無關 traffic 也被阻塞。</dd>
           <dt>Straggler</dt><dd>仍在工作但比 peers 慢的 rank/host；同步相依使其 latency 傳播成整個 job 的等待。</dd>
           <dt>Two-stage checkpoint</dt><dd>先把 GPU state 快速搬到 pinned host memory 讓訓練續跑，再在背景寫入 HDFS；restore 也以分區單讀+broadcast 降 storage 壓力。</dd>
-          <dt>Effective training time rate</dt><dd>作者用來描述 production run 中有效訓練時間占比的操作指標；本文報 &gt;90%，但沒有給完整公式與分布。</dd>
+          <dt>Effective training time rate</dt><dd>作者定義為「完成的 iterations × 單次 iteration training time ÷ 總訓練時間」，production run 報 &gt;90%；此平均占比仍未提供跨故障類型或時間區段的分布。</dd>
         </dl>
         <h3>重點索引與證據定位</h3>
         <ol class="source-index">
@@ -975,16 +975,16 @@
           <li id="source-init-p7"><span><strong>資料流程與 group initialization 數字：</strong>§3.4–3.5，PDF pp.6–7（論文 pp.749–750）。</span></li>
           <li id="source-network-p7"><span><strong>Clos-like multi-rail、RTT+ECN 與 link-flap tuning：</strong>§3.6，PDF p.7（論文 p.750）。</span></li>
           <li id="source-fault-p7"><span><strong>自動偵測—診斷—隔離—補資源工作流：</strong>§4.1，PDF pp.7–8（論文 pp.750–751），Figure 5。</span></li>
-          <li id="source-fault-p8"><span><strong>self-check、two-stage checkpoint 與 restore：</strong>§4.2–4.3，PDF pp.8–9（論文 pp.751–752）。</span></li>
+          <li id="source-fault-p8"><span><strong>self-check、two-stage checkpoint 與 restore：</strong>§4.2–4.4，PDF pp.8–9（論文 pp.751–752）。</span></li>
           <li id="source-observe-p9"><span><strong>CUDA-event heatmap、timeline 與 3D dependencies：</strong>§5，PDF pp.9–10（論文 pp.752–753），Figures 6–8。</span></li>
           <li id="source-exp-p10"><span><strong>cluster、baseline commit 與 175B/530B 模型設定：</strong>§6，PDF p.10（論文 p.753），Table 1。</span></li>
           <li id="source-table2-p11"><span><strong>175B strong-scaling 主結果：</strong>§6.1，PDF p.11（論文 p.754），Table 2。</span></li>
           <li id="source-fig9-p11"><span><strong>530B weak scaling：</strong>§6.1，PDF p.11（論文 p.754），Figure 9。</span></li>
-          <li id="source-table3-p12"><span><strong>175B、256-GPU 累積式 ablation：</strong>§6.3，PDF p.12（論文 p.755），Table 3。</span></li>
+          <li id="source-table3-p12"><span><strong>175B、256-GPU 累積式 ablation：</strong>§6.1，PDF p.12（論文 p.755），Table 3。</span></li>
           <li id="source-fig10-p12"><span><strong>13B convergence microbenchmarks：</strong>§6.1，PDF p.12（論文 p.755），Figure 10。</span></li>
           <li id="source-fig11-p12"><span><strong>production loss、restarts 與 recovery 摘要：</strong>§6.2，PDF p.12（論文 p.755），Figure 11。</span></li>
-          <li id="source-ops-p13"><span><strong>slow hosts、code jitter 與 link-flap production cases：</strong>§6.4，PDF pp.12–13（論文 pp.755–756），Figure 12。</span></li>
-          <li id="source-related-p14"><span><strong>distributed training、network diagnosis 與 fault-tolerance 脈絡：</strong>§7，PDF pp.14–15（論文 pp.757–758）。</span></li>
+          <li id="source-ops-p13"><span><strong>slow hosts、code jitter 與 link-flap production cases：</strong>§6.3，PDF pp.12–13（論文 pp.755–756），Figure 12。</span></li>
+          <li id="source-related-p14"><span><strong>distributed training、network diagnosis 與 fault-tolerance 脈絡：</strong>§7，PDF pp.13–14（論文 pp.756–757）。</span></li>
         </ol>
         <p class="muted">閱讀主結果時，請把 175B fixed-batch strong scaling、530B weak scaling、256-GPU 累積 ablation、13B convergence proxy 與未揭露 production run 分開；它們回答不同問題，證據強度也不同。</p>
         </section>
