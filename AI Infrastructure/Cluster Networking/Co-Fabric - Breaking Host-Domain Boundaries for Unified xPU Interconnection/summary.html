@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="Co-Fabric 論文精讀：跨 host-domain 的 xPU scale-up fabric、Port-ID 路由、shadow device 全域位址，以及 64-xPU 實驗的證據與限制。">
+  <title>Co-Fabric: Breaking Host-Domain Boundaries for Unified xPU Interconnection｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 50rem;
+      --wide: 68rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">AI Infrastructure / Cluster Networking</p>
+      <h1>Co-Fabric: Breaking Host-Domain Boundaries for Unified xPU Interconnection</h1>
+      <div class="paper-dek" data-section-role="thesis"><p>Co-Fabric 問的不是「Ethernet 還能快多少」，而是：能否把跨主機 xPU 重新做成一條具有 load/store 語意的 scale-up bus？<span class="evidence-kind evidence-kind--claim">作者主張</span>它以四層精簡協定、Port-ID 硬體轉送與 shadow-device 自動枚舉，讓每個 host 看見同一組 xPU 與全域 HBM 位址。<span class="evidence-kind evidence-kind--fact">實驗事實</span>在作者的 64-xPU 系統中，AllReduce 相對 RoCE 的延遲與頻寬、以及 DeepSeek R1 吞吐量都有明顯優勢；但 baseline 同時更換連結速率、NIC／retimer、switch 與拓撲，所以這些收益是整套系統的結果，尚不能單獨歸因於協定或全域位址空間。</p></div>
+      <p class="paper-byline">Zhen Peng、Jiaming Huang、Chaofan Chen、Zhao Zhang、An Wu、Baoyang Liu、Xinglong Wang、Tanlong Ci、Jinfeng Li、Xueke Duan、Hao Wang、Xi Chen、Shunshun Zhang、Zhiyuan Su、Zhu Cao、Zhichong Dou、Shaohua Wu、Lu Jing、Yue Yuan</p>
+      <p class="paper-meta">
+        <span>arXiv:2609.25560v1 · cs.DC</span>
+        <span>2026</span>
+        <span>AI Infrastructure / Cluster Networking</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-26">2026 年 9 月 26 日</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://arxiv.org/abs/2609.25560v1" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="Co-Fabric.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀路線：</strong>先看「RoCE 為何仍不像 scale-up bus」掌握問題，再用一次 remote HBM read 讀懂 Port-ID 與 shadow device，最後到 64-xPU 證據與 attribution 限制判斷這套設計是否已足以外推。</p>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">為何跨主機 xPU 互連不是「再快一點的 Ethernet」？</a></li>
+            <li><a href="#problem">RoCE 能跨主機，為什麼作者仍認為它不夠像 scale-up bus？</a></li>
+            <li><a href="#insight">把遠端 xPU 假裝成本機裝置，封包該如何走？</a></li>
+            <li><a href="#method">Co-Fabric 如何把位址、路由與可靠性壓進四層硬體資料路徑？</a></li>
+            <li><a href="#evidence">64 張 xPU 的結果證明了什麼，又只證明到哪裡？</a></li>
+            <li><a href="#critique">2–15× 的通信優勢能全歸因於協定嗎？</a></li>
+            <li><a href="#extensions">若要把 Co-Fabric 變成可採用的開放 scale-up fabric，還缺哪些實驗？</a></li>
+            <li><a href="#reference">查證這篇論文時應記住哪些來源與名詞？</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>為何跨主機 xPU 互連不是「再快一點的 Ethernet」？</h2>
+          <p class="lead">第一個理解障礙，是把 <em>scale-up</em> 與一般網路混成同一件事。兩者都搬資料，但前者希望多張 xPU 像一台機器內的裝置，後者則預設彼此是透過訊息交換的獨立節點。</p>
+          <div class="table-scroll">
+            <table>
+              <caption>後文真正會用到的三組差異</caption>
+              <thead><tr><th>概念</th><th>網路／RDMA 視角</th><th>bus／memory-semantic 視角</th><th>後文用途</th></tr></thead>
+              <tbody>
+                <tr><td>host domain</td><td>每個 OS 維護自己的 address space</td><td>希望多個 OS 看見同一組裝置位址</td><td>解釋為何需要 shadow device</td></tr>
+                <tr><td>遠端存取</td><td>先註冊 Memory Region（MR），建立 Queue Pair（QP）、Completion Queue（CQ），交換 remote key（rkey）</td><td>以 load/store 或 atomic operation 直接操作位址</td><td>解釋 Co-Fabric 想消除的 control-path 工作</td></tr>
+                <tr><td>拓撲</td><td>一般網路允許多跳與通用路由</td><td>full mesh 追求最短路徑；rail-only 只連相同 device index，降低成本</td><td>解釋 64-xPU 3D-mesh 評估</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><span class="evidence-kind evidence-kind--claim">作者主張</span>RoCE 已有 kernel bypass、zero-copy 與 transport offload，但仍使用 message semantics：跨主機記憶體先要註冊、交換 key，host 之間也沒有原生的共同位址空間。相對地，bus-based fabric 能把裝置存取做得更接近本機 memory transaction，卻通常被限制在單一 host domain。<a class="source-ref" href="#src-02">§II-B · PDF p.3</a></p>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>因此，這篇論文最重要的比較不是「哪個線速更高」，而是三項語意是否能同時成立：跨 OS domain、load/store、硬體直接轉送。若只記住吞吐圖而忽略這層差異，就看不出 Co-Fabric 真正想改寫的是 system boundary。</p>
+          <p class="bridge">下一個問題是：既然 RoCE 已能跨主機直接存取記憶體，作者認為仍缺少的到底是哪一段？</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>RoCE 能跨主機，為什麼作者仍認為它不夠像 scale-up bus？</h2>
+          <p class="lead">真正的障礙不是「封包過不了 host boundary」，而是跨界後仍要切換成網路的位址、物件與訊息模型。對高頻、細粒度的 MoE All-to-All、tensor-parallel collective 或 remote HBM access，作者把每次 setup、封裝與 host-side 邊界都視為 data-movement tax。</p>
+          <p>論文把缺口寫成六項要求：精簡分層、memory consistency support、原生 memory semantics、極低延遲、足夠頻寬，以及 link-level reliability。<span class="evidence-kind evidence-kind--claim">作者主張</span>現有方案要不是「低延遲但留在單一 domain」，要不就是「能跨 domain、卻付出網路堆疊與碎片化位址空間的代價」。<a class="source-ref" href="#src-01">§I · PDF pp.1–2</a></p>
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-01-p04-overview.png"><img src="assets/images/fig-01-p04-overview.png" alt="Co-Fabric 將 CPU、GPU、專用與可程式化加速器、記憶體、儲存與網路裝置接到同一互連骨幹的架構圖"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 1</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：上半部是各類 compute device，下半部是記憶體、儲存與網路資源；圖的核心不是單一 GPU fabric，而是把四類資源都降成 Co-Fabric 上的 peer。</span></figcaption>
+          </figure>
+          <p>因此 Co-Fabric 的設計要求可濃縮成一條因果鏈：若模型狀態與 activation 已跨 xPU 分散，則 communication 變成有效記憶體頻寬的一部分；若每個 host 保持獨立位址與 message setup，則細粒度存取會被 control-path 與 protocol-path 放大；所以互連必須同時統一裝置視圖、縮短 packet path，並把可靠性留在硬體鄰接鏈路。<a class="source-ref" href="#src-03">§III-A · PDF pp.3–4 · Fig. 1</a></p>
+          <div class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>這個問題定義也埋下評估風險：只要新系統把 protocol、PHY、switch、topology 與 software path 一次全換掉，端到端結果能證明「整體設計有效」，卻很難指出六項要求各自貢獻多少。</p></div>
+          <p class="bridge">要讓這個構想變具體，可以先追蹤一次從 Host 0 讀取遠端 xPU 1 HBM 的動作。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>把遠端 xPU 假裝成本機裝置，封包該如何走？</h2>
+          <p class="lead">想像 Host 0 上的程式拿到一個看似本機的 HBM address，實際資料卻在 Host 1 的 xPU 1。Co-Fabric 的關鍵不是每次詢問 control plane「它在哪」，而是在開機時先把答案固化成裝置視圖與 forwarding entry。</p>
+          <ol>
+            <li><strong>枚舉：</strong>switch 發現下游 xPU，為每張 xPU 配置不重疊的 HBM range，並在每個 host 的 device hierarchy 注入相同的 shadow device。</li>
+            <li><strong>發送：</strong>Semantic Layer（SL）把 load/store 轉成 transaction；endpoint 將目標 address 解析成 destination Domain ID 與 Port ID。</li>
+            <li><strong>轉送：</strong>中途 switch 只讀 Fabric Layer（FL）header 的 destination Port ID，不需理解 HBM address，也不進入 host CPU 或 network stack。</li>
+            <li><strong>完成：</strong>目標 xPU 以 SL 完成讀寫；response 沿記錄的來源路徑返回。</li>
+          </ol>
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-06-p07-shadow-device.png"><img src="assets/images/fig-06-p07-shadow-device.png" alt="Host 0 透過 Co-Fabric switch 的 shadow device 對映到遠端 xPU 1 HBM address space 的示意圖"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 6</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：虛線 shadow device 是 Host 0 看見的代理端點；其 address range 由 switch 對映到 Host 1 上真正的 xPU 1，讓程式以位址而不是 RDMA control object 指定目的地。</span></figcaption>
+          </figure>
+          <p><span class="evidence-kind evidence-kind--claim">作者主張</span>因為每個 host 都枚舉相同的 shadow devices 與 HBM ranges，existing driver/runtime 不必知道 xPU 是 local 還是 remote，也不必在 runtime 建立 MR、QP、CQ 或 rkey。<a class="source-ref" href="#src-05">§III-D · PDF pp.6–8 · Figs. 4–6</a></p>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>最小心智模型是「DNS 在開機時就被烤進 switch，應用程式只留下 address lookup」；但這個比喻不完全精確，因為 Co-Fabric 不只是命名服務，還宣稱提供 ordering、atomics 與 memory semantics。論文沒有完整定義 consistency model、cache coherence 邊界或 access-control 規則，所以不能從這張圖推導出一般共享記憶體的全部保證。</p>
+          <p class="bridge">有了這次 remote HBM read 的直覺後，接下來就能把四層協定、Port-ID 與可靠性機制串成完整資料路徑。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>Co-Fabric 如何把位址、路由與可靠性壓進四層硬體資料路徑？</h2>
+          <p class="lead">方法章的理解障礙，是容易把四層名稱當成功能清單。比較有效的讀法是沿著一個 transaction 從上到下走一次，觀察每層只保留 scale-up 必需的責任。</p>
+          <h3>一條由語意到底層媒介的單向 pipeline</h3>
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-03-p06-protocol-stack.png"><img src="assets/images/fig-03-p06-protocol-stack.png" alt="Co-Fabric packet 由 Media、Link、Fabric、Semantic 四層 header 與 payload 組成，Fabric header 展開為 type 與來源目的 domain、port identifier"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 3</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：FL header 只留下 Fabric Type 與來源／目的 Domain ID、Port ID；switch 以目的 Port ID 轉送，不需解開上層 memory transaction。</span></figcaption>
+          </figure>
+          <div class="takeaway-list">
+            <div class="takeaway-item"><p class="takeaway-label">Semantic Layer · SL</p><p>定義 load/store 與 atomic operation，把應用程式的遠端 memory access 轉成 Co-Fabric transaction。</p></div>
+            <div class="takeaway-item"><p class="takeaway-label">Fabric Layer · FL</p><p>負責 address-to-port mapping、device discovery 與 Port-ID forwarding；Fabric Type 也可選 unicast、multicast、broadcast，以及 INC-ADD／MIN／MAX in-network reduction。</p></div>
+            <div class="takeaway-item"><p class="takeaway-label">Link Layer · LL</p><p>以 credit-based flow control 避免 receiver-buffer overflow，並以 sequence number、CRC、ACK/NAK 與 selective retransmission 將 error recovery 限制在單一 hop。</p></div>
+            <div class="takeaway-item"><p class="takeaway-label">Media Layer · ML</p><p>抽象 copper／optical physical medium 與 signal encoding，讓上層協定不綁特定媒介。</p></div>
+          </div>
+          <p><span class="evidence-kind evidence-kind--claim">作者主張</span>相對 TCP/IP 或 OSI 的通用分層，Co-Fabric 不設獨立 transport/network layer：LL 已提供可靠傳輸，FL 直接負責位址與路由，因而不需要 software buffering 或跨層介入。<a class="source-ref" href="#src-04">§III-B–C · PDF pp.4–6 · Figs. 2–3</a></p>
+          <h3>Port-ID 為什麼能跨 domain，也能換拓撲？</h3>
+          <p>Power-on 時，firmware 遍歷 xPU port 與 cascade port，配置 globally unique Port ID，並在每個 switch 安裝 forwarding table。Header 寬度不隨規模增加；增加 switch level 只擴充 table，因此同一 packet format 可落在 full mesh、CLOS 或 rail-only。<span class="evidence-kind evidence-kind--claim">作者主張</span>這讓系統可從 16、32、64、128、256 張 xPU 繼續擴張，而 host software 不需改 header 或 routing logic。<a class="source-ref" href="#src-04">§III-C · PDF pp.5–6</a></p>
+          <h3>從協定到 64-xPU 3D mesh</h3>
+          <p>工程實作分成 southbound-only 與 hybrid southbound/northbound。評估採 hybrid 版本：每個 8-xPU node 內用 full mesh 取得直接連接；跨 node 則依大型模型流量多集中於相同 xPU index 的假設，使用 rail-only。這不是完全對稱的 fabric，而是以 workload locality 換取 port 與 switch 成本。<a class="source-ref" href="#src-06">§IV–V-A · PDF pp.8–10 · Figs. 7–9</a></p>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>因此 end-to-end 成效來自三個同時作用的層次：memory-semantic interface 降低 control path、Port-ID forwarding 縮短 switch path、traffic-aware topology 增加關鍵 rail 的可用頻寬。評估若沒有 ablation，就無法把三者分開。</p>
+          <p class="bridge">方法是否真的改善 data movement，必須回到 matched hardware、collective microbenchmark 與完整 inference workload 分別檢查。</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>64 張 xPU 的結果證明了什麼，又只證明到哪裡？</h2>
+          <p class="lead">這一章不把所有長條圖混成一句「更快」，而是把每個主張、測試、觀察與 caveat 放在同一個 claim-test unit 裡。</p>
+          <div class="claim-test">
+            <h3>主張一：Co-Fabric 改善 collective 的小訊息延遲與大訊息頻寬</h3>
+            <p><strong>設定與控制。</strong>兩邊都是 64 張 xPU、每 node 8 張卡、每張 64 GB HBM，CPU core count、DRAM、drive 與 management/storage network 表面匹配；差異在於 Co-Fabric 端使用 8 組 x16、32 Gbps/lane port 與 retimer，RoCE 端使用 8×400 Gbps NIC，switch 數與 topology 也不同。<a class="source-ref" href="#src-07">§V-A · PDF pp.10–11 · Table III</a></p>
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-12-p12-collective-performance.png"><img src="assets/images/fig-12-p12-collective-performance.png" alt="64-xPU Co-Fabric 與 RoCE 系統在不同資料大小下的 AllReduce latency 曲線與 normalized bandwidth 長條圖"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 12</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：左圖顯示 Co-Fabric latency 曲線全程低於 RoCE，右圖顯示頻寬倍數在小訊息最高、訊息變大後收斂但仍高於 1。</span></figcaption>
+            </figure>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>小於 4 MB 時，Co-Fabric latency 是 RoCE 的 10–20%，normalized bandwidth 是 5–15×；4–64 MB 時，latency 是 15–50%，bandwidth 是 2–5×。<a class="source-ref" href="#src-08">§V-C · PDF pp.10–12 · Fig. 12</a></p>
+            <p><strong>可支持的結論與 caveat。</strong>整個 64-xPU Co-Fabric 系統確實在這組 AllReduce 測試勝過其 RoCE baseline；但 paper 未提供 collective library、message scheduling、warm-up、重複次數或 error bar，也未把 raw link-rate 與 topology 差異正規化。</p>
+          </div>
+          <div class="claim-test">
+            <h3>主張二：擴到 64 張卡時，每卡效能仍接近 8-card baseline</h3>
+            <div class="table-scroll">
+              <table>
+                <caption>64-card scaling efficiency，相對各 workload 的 8-card base</caption>
+                <thead><tr><th>Workload</th><th>32 cards</th><th>64 cards</th></tr></thead>
+                <tbody>
+                  <tr><td>DeepSeek V3/R1 · LoRA</td><td>96%</td><td>93%</td></tr>
+                  <tr><td>QwQ-32B · full-parameter mode</td><td>99%</td><td>98%</td></tr>
+                  <tr><td>Customer bio-genetic model · iteration</td><td>99%</td><td>98%</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>三個 workload 的 64-card normalized per-GPU performance 為 93–98%。<a class="source-ref" href="#src-09">§V-D · PDF pp.11–12 · Table IV</a> <span class="evidence-kind evidence-kind--analysis">分析</span>這支持「在 8→64 cards 內沒有嚴重 scaling collapse」，卻不能驗證論文宣稱的 thousand-xPU scalability；表中也沒有 absolute TGS、parallelism、sequence length 或 run variance。</p>
+          </div>
+          <div class="claim-test">
+            <h3>主張三：通信優勢能傳到 DeepSeek R1 end-to-end throughput</h3>
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-13-p12-inference-throughput.png"><img src="assets/images/fig-13-p12-inference-throughput.png" alt="DeepSeek R1 671B 在 concurrency 128、512、1024 下，Co-Fabric 相對 RoCE 的 normalized inference throughput 長條圖"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 13</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：RoCE 固定為 1；Co-Fabric 的增益由 concurrency 128 的約 1.8×，逐步降至 concurrency 1024 的約 1.3×，顯示收益會隨負載條件改變。</span></figcaption>
+            </figure>
+            <p><strong>設定。</strong>DeepSeek R1 671B、SGLang、INT8、MLA、DP4、TP16 與 MoE TP，input/output 都是 1K tokens。<span class="evidence-kind evidence-kind--fact">實驗事實</span>相對 RoCE，normalized throughput 約為 1.8×（concurrency 128）、1.45×（512）、1.3×（1024）。<a class="source-ref" href="#src-10">§V-E · PDF pp.11–12 · Fig. 13</a></p>
+            <p><strong>Caveat。</strong>論文未給 xPU 型號、SGLang 版本、arrival process、throughput 絕對值或 latency SLO；因此只能說在這個固定 64-card setup 上整體吞吐提升，不能直接推成所有 inference serving workload 的 30–80%。</p>
+          </div>
+          <div class="claim-test">
+            <h3>主張四：主要收益確實落在 AllGather／AllReduce 時間</h3>
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-14-p12-phase-breakdown.png"><img src="assets/images/fig-14-p12-phase-breakdown.png" alt="RoCE 與 Co-Fabric 在 prefill 和 decode 階段的 computing、AllGather、AllReduce 時間分解長條圖"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 14</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：兩階段的 computing 區塊接近，主要縮小的是 AllGather 與 AllReduce，這比單看總吞吐更能對準 interconnect 的因果位置。</span></figcaption>
+            </figure>
+            <p>在 batch 512、input 3072、output 1024 的固定 workload 下，<span class="evidence-kind evidence-kind--fact">實驗事實</span>prefill 約從 230 s 降到 170 s（−26%），其中 AllGather 約從 80 s 降到 20 s（−75%）；decode 約從 249 s 降到 182 s（−25%），AllGather 53→13 s、AllReduce 36→9 s（皆約 −75%）。<a class="source-ref" href="#src-10">§V-E · PDF pp.11–12 · Fig. 14</a></p>
+            <p><span class="evidence-kind evidence-kind--analysis">分析</span>這是全文最有因果指向性的結果：compute block 大致不變，communication block 顯著縮短。然而它仍是兩套完整系統的 breakdown，而不是對 Port-ID、shadow device 或 credit flow control 的個別 ablation。</p>
+          </div>
+          <p class="bridge">證據已能支持「這套 64-xPU 系統在特定 workload 優於該 RoCE baseline」；接下來要界定的是，哪些更強的結論仍超出實驗。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>2–15× 的通信優勢能全歸因於協定嗎？</h2>
+          <p class="lead">最大的驗證障礙是 attribution。兩個系統雖有相同 xPU 數量與記憶體容量，卻不是只換 protocol bitstream 的 A/B test。</p>
+          <h3>能確定的強項</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>Co-Fabric 把 interface semantics、routing header、reliability 與 topology 放進同一個設計，因果故事很完整；Figure 14 也顯示 end-to-end improvement 的主要來源確實是 collective time，而非宣稱互連更快、實際卻只靠 compute 差異。64-card 實機與完整 DeepSeek R1 workload 比純模擬更有說服力。</p>
+          <h3>尚不能拆開的混雜因素</h3>
+          <div class="table-scroll">
+            <table>
+              <caption>從 paper evidence 到可下結論之間的缺口</caption>
+              <thead><tr><th>主張</th><th>目前證據</th><th>缺少的控制</th></tr></thead>
+              <tbody>
+                <tr><td>四層 protocol 本身降低 latency</td><td>整套 Co-Fabric vs 整套 RoCE</td><td>matched PHY／topology 的 protocol-only ablation</td></tr>
+                <tr><td>global addressing 消除 runtime overhead</td><td>機制描述與 end-to-end 結果</td><td>MR/QP setup、first-touch、steady-state access 的逐項 measurement</td></tr>
+                <tr><td>可擴至 thousands of xPUs</td><td>最大 64 xPUs；table grows linearly 的設計論證</td><td>multi-rack scale、routing-table pressure、failure/reconfiguration test</td></tr>
+                <tr><td>high reliability</td><td>credit + ACK/NAK protocol description</td><td>congestion、bit error、link failure、recovery tail-latency experiment</td></tr>
+                <tr><td>80% cost、5% power saving</td><td>normalized cost 與約 4.0/3.8 kW bar chart</td><td>component model、price source、measurement boundary 與 uncertainty</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>原始 link budget 也不完全相同：Co-Fabric 端每 port 是 x16×32 Gbps，RoCE 是 400 Gbps；switch 數、retimer/NIC data path 與 rail-only topology 同時改變。<span class="evidence-kind evidence-kind--analysis">分析</span>因此 2–15× 應解讀為 system-stack comparison，而不是「移除 transport layer 就自然得到 15×」。<a class="source-ref" href="#src-07">§V-A–C · PDF pp.10–12 · Table III</a></p>
+          <h3>paper 未回答的 deployment 問題</h3>
+          <p>論文未提供精確 memory consistency model、cache coherence 邊界、fault containment、security/isolation、access revocation 或 multi-tenant policy；也未實驗驗證「existing driver/runtime 無需調整」。沒有 NVLink/NVSwitch、UALink 或其他 scale-up fabric baseline，讓讀者無法判斷 Co-Fabric 相對於真正同類方案的位置。論文目前是 arXiv v1，未聲明 peer-reviewed venue。</p>
+          <div class="statement statement--speculation" data-kind="speculation"><span class="statement__label">推測</span><p>若 global address 在 power-on 後固定，hot-plug、局部故障與容量異質性可能迫使系統在「零 runtime negotiation」與「可動態重組」之間取捨；paper 尚未測試這個控制面壓力。</p></div>
+          <p class="bridge">這些限制不是否定結果，而是把下一輪研究問題從「是否更快」推進到「為何更快、何時仍正確、壞掉時怎麼辦」。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>若要把 Co-Fabric 變成可採用的開放 scale-up fabric，還缺哪些實驗？</h2>
+          <p class="lead">可重用的洞見，是讓 endpoint 在初始化時吸收 topology/address complexity，讓 hot path 只留下固定 header 與 hardware forwarding。下一步應把這個洞見拆成可反駁的子假設。</p>
+          <h3>最優先的四組 follow-up</h3>
+          <ol>
+            <li><span class="evidence-kind evidence-kind--analysis">分析</span><strong>逐層 ablation：</strong>固定 PHY、link rate、collective library 與 topology，只切換 message/load-store semantics、Port-ID routing、shadow device、INC 與 reliability，量 TTFT、TPOT、collective p50/p99 與 CPU overhead。</li>
+            <li><span class="evidence-kind evidence-kind--analysis">分析</span><strong>failure matrix：</strong>注入 bit error、congestion、single-link/switch failure 與 host reboot，測 link retransmission、route repair、ordering correctness 與 tail latency；這才能驗證「native reliability」而不是只描述 packet field。</li>
+            <li><span class="evidence-kind evidence-kind--analysis">分析</span><strong>scale 與 churn：</strong>從 64 擴到 multi-rack，量 forwarding-table size、power-on enumeration time、reconfiguration pause、control traffic 與 heterogeneous HBM range fragmentation。</li>
+            <li><span class="evidence-kind evidence-kind--analysis">分析</span><strong>fair baseline：</strong>加入 NVLink/NVSwitch、UALink 或其他 memory-semantic scale-up fabric，並用同一 workload、相同 raw bandwidth 與相近 topology 比較，分清「bus vs network」與「特定實作」的差異。</li>
+          </ol>
+          <h3>值得帶到研究會議的問題</h3>
+          <ul>
+            <li>全域位址提供的是哪一級 consistency？哪些 atomic operation 跨 switch 仍有明確順序保證？</li>
+            <li>shadow device 對現有 driver/runtime 真正透明，還是只對特定 xPU configuration-space model 成立？</li>
+            <li>rail-only 對相同 index 流量最佳；若 expert placement、KV migration 或 failure 打破 locality，性能會如何退化？</li>
+            <li>INC-ADD/MIN/MAX 與 link retransmission 同時存在時，如何保證 exactly-once reduction 與 numerical reproducibility？</li>
+            <li>若把 storage 與 management device 一併納入 flat address space，權限隔離與 fault containment 應落在哪一層？</li>
+          </ul>
+          <p><span class="evidence-kind evidence-kind--speculation">推測</span>最有潛力的方向不是把 Co-Fabric 當成封閉的 RoCE replacement，而是把「初始化時固定 mapping、資料面只做 Port-ID forwarding」抽象成可在不同 PHY 與 vendor device 上驗證的 open interface。</p>
+          <p class="bridge">最後的參考附錄把 metadata、術語與關鍵證據位置集中起來，方便快速回查原文。</p>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>查證這篇論文時應記住哪些來源與名詞？</h2>
+          <h3>書目資訊</h3>
+          <dl class="term-list">
+            <dt>正式標題</dt><dd>Co-Fabric: Breaking Host-Domain Boundaries for Unified xPU Interconnection</dd>
+            <dt>作者</dt><dd>Zhen Peng、Jiaming Huang、Chaofan Chen、Zhao Zhang、An Wu、Baoyang Liu、Xinglong Wang、Tanlong Ci、Jinfeng Li、Xueke Duan、Hao Wang、Xi Chen、Shunshun Zhang、Zhiyuan Su、Zhu Cao、Zhichong Dou、Shaohua Wu、Lu Jing、Yue Yuan</dd>
+            <dt>來源</dt><dd><a href="https://arxiv.org/abs/2609.25560v1" target="_blank" rel="noopener noreferrer">arXiv:2609.25560v1</a> · cs.DC · submitted 2026-09-22</dd>
+            <dt>分類</dt><dd>AI Infrastructure / Cluster Networking；主要貢獻是跨 host-domain 的 scale-up fabric、protocol 與 address-space architecture，LLM inference 是驗證 workload。</dd>
+            <dt>本地全文</dt><dd><a href="Co-Fabric.pdf">開啟本地 PDF</a></dd>
+            <dt>頁數</dt><dd><span data-summary-field="pdf-page-count">共 13 頁</span></dd>
+          </dl>
+          <h3>術語</h3>
+          <dl class="term-list">
+            <dt>xPU</dt><dd>泛指 GPU、NPU、TPU、FPGA 等 accelerator；paper 用它避免把 fabric 綁定單一裝置類型。</dd>
+            <dt>Domain ID / Port ID</dt><dd>前者標示 OS address domain，後者標示 fabric 中的 xPU 或 cascade port；FL header 以它們完成硬體轉送。</dd>
+            <dt>Shadow device</dt><dd>switch 注入 host device hierarchy 的虛擬端點，將預先配置的 address range 映到真正的遠端 xPU。</dd>
+            <dt>Southbound / Northbound</dt><dd>paper 中 southbound 指向 xPU/其他 component 的互連，northbound 指向 CPU 與跨 domain network 的互連。</dd>
+            <dt>Rail-only</dt><dd>跨 node 只連接相同 xPU index 的低成本 topology，適合流量主要沿固定 rail 分布的 workload。</dd>
+          </dl>
+          <h3>關鍵證據索引</h3>
+          <ol class="source-index">
+            <li id="src-01"><span>問題、六項 design principles 與 contribution：§I，PDF pp.1–2。</span></li>
+            <li id="src-02"><span>bus-based 與 network-based interconnect 的限制：§II-B，PDF p.3。</span></li>
+            <li id="src-03"><span>統一 compute/storage/network/management 的 architecture：§III-A，PDF pp.3–4，Figure 1、Table I。</span></li>
+            <li id="src-04"><span>四層 stack、FL header、Port-ID forwarding 與 Fabric Type：§III-B–C，PDF pp.4–6，Figures 2–3、Table II。</span></li>
+            <li id="src-05"><span>global address space 與 shadow-device enumeration：§III-D，PDF pp.6–8，Figures 4–6。</span></li>
+            <li id="src-06"><span>southbound/hybrid system 與 64-xPU 3D mesh：§IV–V-A，PDF pp.8–10，Figures 7–10。</span></li>
+            <li id="src-07"><span>兩個 64-xPU system 的 hardware configuration：§V-A，PDF pp.10–11，Table III。</span></li>
+            <li id="src-08"><span>AllReduce latency 與 normalized bandwidth：§V-C，PDF pp.10–12，Figure 12。</span></li>
+            <li id="src-09"><span>8/32/64-card scaling efficiency：§V-D，PDF pp.11–12，Table IV。</span></li>
+            <li id="src-10"><span>DeepSeek R1 throughput 與 prefill/decode breakdown：§V-E，PDF pp.11–12，Figures 13–14。</span></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>Co-Fabric: Breaking Host-Domain Boundaries for Unified xPU Interconnection · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>
