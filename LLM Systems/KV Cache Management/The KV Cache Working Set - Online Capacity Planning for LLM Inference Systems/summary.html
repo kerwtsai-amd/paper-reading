@@ -1,0 +1,858 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="KVSET 以 Mattson stack 與 Fenwick tree 在線估計 LLM prefix cache 的工作集容量；本精讀拆解方法、production trace 證據與外部效度邊界。">
+  <title>The KV Cache Working Set: Online Capacity Planning for LLM Inference Systems｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 50rem;
+      --wide: 68rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">LLM Systems / KV Cache Management</p>
+      <h1>The KV Cache Working Set: Online Capacity Planning for LLM Inference Systems</h1>
+      <div class="paper-dek" data-section-role="thesis">
+        <p>Agentic 工作負載會一再重用成長中的對話前綴，但「保留所有歷史 KV」不是可負擔的容量規劃。KVSET 把每次 page access 化成 LRU stack distance，利用 Mattson stack 一次回答多個容量的命中率，再用 Fenwick tree 讓這個分析可在線更新。<span class="evidence-kind evidence-kind--fact">實驗事實</span>在單一內部 coding-agent workload 上，估計曲線與實體部署點視覺上接近，並得到 P95 約 1 TiB、P99 約 5 TiB 的工作集；然而論文未量化 analyzer 自身的時間／記憶體開銷，也未證明這些容量能跨 workload 泛化。</p>
+      </div>
+      <p class="paper-byline">Luchang Li、Shuaishuai Wang、Zhao Ruan、Dongfang Li、Bozhao Gong</p>
+      <p class="paper-meta">
+        <span>arXiv:2609.27746v1 [cs.DC]</span>
+        <span>2026</span>
+        <span>LLM Systems / KV Cache Management</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-27">更新於 2026-09-27</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://arxiv.org/abs/2609.27746" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="KVSET.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀路線：</strong></p>
+        <ul>
+          <li>先看「一次 LRU 距離」與 Figure 2，掌握為何不必維護許多模擬 cache。</li>
+          <li>再看 10K-request 的 Figure 3，分清「正確估計」與尚未量測的分析成本。</li>
+          <li>最後看 24K-request 的 Figure 4 與限制，理解 P95／P99 容量只能解讀為這個 workload 的規劃訊號。</li>
+        </ul>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">要回答「要多少快取」之前，先分清三個量</a></li>
+            <li><a href="#problem">為何保留全部歷史 KV 仍不是容量答案？</a></li>
+            <li><a href="#insight">一次 LRU 距離，怎麼同時回答所有容量？</a></li>
+            <li><a href="#method">KVSET 如何把請求流轉成容量—命中率曲線？</a></li>
+            <li><a href="#evidence">10K 與 24K production requests 分別證明了什麼？</a></li>
+            <li><a href="#critique">精確的 LRU 推導，還缺哪些系統證據？</a></li>
+            <li><a href="#extensions">如何把容量估計器變成可部署的控制迴路？</a></li>
+            <li><a href="#reference">來源、術語與關鍵證據定位</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>要回答「要多少快取」之前，先分清三個量</h2>
+          <p class="lead">這篇論文最容易混淆的不是演算法，而是三種看似相近的「比率」：單頁是否命中、單一請求有多少前綴命中，以及整批請求有多少能保住各自的理論命中率。把它們分開，後面的 P95、P99 才不會被誤讀成 latency percentile。</p>
+
+          <h3>Prefix cache：省的是重做 prefill</h3>
+          <p>自回歸 LLM 服務會把已處理 token 的 key/value state 留在 KV cache。Agent 的下一輪請求往往包含上一輪的對話與工具輸出；若前綴相同，服務系統便能重用已算好的 KV page，而不是重新跑整段 prefill。這裡的 <strong>cache hit rate</strong> 是可重用前綴 token／page 的比例，不是請求成功率。<span class="source-ref">Abstract、§1 · PDF p.1</span></p>
+
+          <h3>LRU stack distance：不是「多久以前」，而是中間有多少不同 page</h3>
+          <p>Least Recently Used（LRU）會把最近碰過的 page 放在邏輯堆疊頂端。某 page 再次被存取時，其 stack distance 表示自上次存取後，有多少較新的 distinct pages 排在它前面；容量門檻大於這個深度時，它仍在 cache，否則已被逐出。這個順序性質正是 Mattson stack algorithm 能從同一條 reference stream 推導多種 LRU 容量的原因。<span class="source-ref">§2 · PDF p.3</span></p>
+
+          <h3>Target hit rate 與 request coverage 是兩個旋鈕</h3>
+          <div class="table-scroll">
+            <table>
+              <caption>KVSET 報告中的兩層規劃目標</caption>
+              <thead><tr><th>量</th><th>問題</th><th>本文如何使用</th></tr></thead>
+              <tbody>
+                <tr><td>請求內 hit-rate target</td><td>這個 request 的可重用前綴，要保住多少？</td><td>用所需 prefix pages 的最大 LRU depth 找最小容量。</td></tr>
+                <tr><td>Request coverage</td><td>整批 requests 中，有多少比例要達到各自的理論命中率？</td><td>Figure 4 的 P95、P99、P99.9；不是 latency 百分位。</td></tr>
+                <tr><td>Cumulative history</td><td>若歷史上產生的 KV 全不刪，要多少空間？</td><td>作為過度配置的上界對照，會隨 trace 單調成長。</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="bridge">有了這三層概念，真正的問題就變清楚了：容量不足會丟掉昂貴的 prefill reuse，但把歷史全留著又不等於保留「未來真正會再用」的工作集。</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>為何保留全部歷史 KV 仍不是容量答案？</h2>
+          <p class="lead">容量規劃卡在一個兩難：高命中率對吞吐很重要，但每多保留一個 token，就要在所有 transformer layers 保存 KV state；如果用「從開機至今產生多少」當需求，冷資料會把 DRAM／SSD 預算一路推高。</p>
+
+          <p><span class="evidence-kind evidence-kind--claim">作者主張</span>論文用下式描述忽略 memory-access overhead 時，prefill throughput 與 hit rate 的關係：</p>
+          <div class="formula-block">
+            \[
+              T(r) = \frac{\hat{T}}{1-r}
+            \]
+            <p class="formula-block__meaning">其中 \(r\) 是 KV cache hit rate，\(\hat{T}\) 是零命中時的 prefill throughput。例：若其他成本都忽略，\(r=0.9\) 代表只需重算一成前綴，理想吞吐約為零命中的 10 倍。這是動機模型，不是端到端服務的普遍效能定律。<span class="source-ref">§1 · PDF p.2 · Equation 1</span></p>
+          </div>
+
+          <figure class="wide" data-figure-role="result">
+            <a href="assets/images/fig-01-p02-throughput-hit-rate.png"><img src="assets/images/fig-01-p02-throughput-hit-rate.png" alt="KV cache 命中率從零升到接近一時，prefill throughput 曲線急遽上彎，benchmark 與 Equation 1 估計線並列。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 1</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：曲線提醒讀者，高 hit-rate 區域的一點損失可能對 prefill throughput 有放大影響；但估計線明確忽略 cache lookup、資料搬移與其他 serving overhead。</span></figcaption>
+          </figure>
+
+          <p>最直接的量測方式，是部署很多種實體 cache 容量並重播同一 workload；這太昂貴。較實際的 simulator 方案仍可能為數十個候選容量各維護一個 cache instance，重複做 eviction 與 replay。作者因此導出三個需求：<strong>一次處理同時回答多個容量</strong>、<strong>結果必須對 LRU 精確</strong>、以及<strong>可跟著 production request stream 在線更新</strong>。<span class="source-ref">§1 · PDF p.2–3</span></p>
+
+          <div class="statement statement--analysis" data-kind="analysis">
+            <span class="statement__label">分析</span>
+            <p>分類上，本作屬於 <strong>LLM Systems / KV Cache Management</strong>：它不改模型、不設計新的 storage fabric，也不直接改 eviction policy；它把既有 LRU prefix cache 的「應配置多少容量」變成可持續估計的系統量測問題。</p>
+          </div>
+          <p class="bridge">要消除多個 cache instance，關鍵不是更快地模擬 eviction，而是找出一個能同時回答所有 LRU 容量的充分統計量。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>一次 LRU 距離，怎麼同時回答所有容量？</h2>
+          <p class="lead">把一個 request 想成依序查詢 page 0、1、2、3。對每個 page，問題不是「在容量 1 的 simulator 裡有沒有」再重問容量 2、3；而是只算一次它在全域 LRU stack 裡的深度，之後拿這個深度與任何容量門檻比較。</p>
+
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-02-p04-mattson-stack.png"><img src="assets/images/fig-02-p04-mattson-stack.png" alt="輸入請求的四個 KV pages 與歷史 LRU stack 對照，括號標出 capacity 1 與 capacity 2 對應的深度。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 2</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：前兩個 KV 項目位於較淺的 LRU 區域，第三個項目需要更大的 capacity 才不會被逐出；各項目的 depth 一旦知道，就不必為每個候選容量重建一套 LRU 狀態。</span></figcaption>
+          </figure>
+
+          <p>形式上，令某次 page access 的 stack distance 為 \(d\)，候選 cache 容量為 \(C\)。論文採用 Mattson stack 性質：當 \(d&lt;C\) 時，此 access 對容量 \(C\) 是 hit；否則是 miss。將同一 request 的各 page 判定加總，就得到該容量下的 request hit rate。<span class="source-ref">§2 · PDF p.3–4 · Figure 2</span></p>
+
+          <p>具體直覺是「先算一次排名，再回答很多門檻查詢」。就像知道跑者的總排名後，可以立刻回答他是否在前 10、前 100、前 1000，不必為每個門檻重跑比賽。類比的邊界在於 LRU 排名會隨每次 access 更新，而非靜態排序；KVSET 因此仍需維護 reference stream 的最新狀態。</p>
+
+          <div class="statement statement--analysis" data-kind="analysis">
+            <span class="statement__label">分析</span>
+            <p>「一次距離、多個容量」是這篇論文真正可重用的抽象。它把 capacity sweep 從多套完整系統模擬，改寫成同一組 reuse-distance observations 上的門檻統計。</p>
+          </div>
+          <p class="bridge">Mattson stack 解決了「要觀察什麼」；下一步是讓這個距離在長 request stream 上更新得夠便宜，並把 page-level hits 提升成容量規劃答案。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>KVSET 如何把請求流轉成容量—命中率曲線？</h2>
+          <p class="lead">KVSET 的 end-to-end flow 可以拆成五步：page 化、定位上次 access、計算 stack distance、跨容量累積 hit、再從 hit-rate／coverage 目標反推最小容量。每一步都對應前一章的「不要重播多套 cache」需求。</p>
+
+          <h3>1. 將 prefix reuse 表示成 KV page reference stream</h3>
+          <p>服務端每收到一個 request，先取得其可重用 prefix 對應的 KV pages。論文的分析單位是 page-granular LRU cache；因此相同 token 數在不同 page layout 或 KV precision 下會換成不同實體容量。評估中給出 FP8 KV 約 60 KB/token，但論文未提供 page size。<span class="source-ref">§2–3 · PDF p.3–4</span></p>
+
+          <h3>2. 以最近 access 位置重建 LRU depth</h3>
+          <p>KVSET 記錄每個 page 最近一次出現的位置，並以 Fenwick tree 維護有效位置。當 page 再次出現，tree 會統計在舊位置之後有多少 distinct pages 被更新過；這個數量就是該 page 前方的 LRU stack distance。如此不必顯式搬動一條長 LRU linked list。<span class="source-ref">§2 · PDF p.3</span></p>
+
+          <h3>3. 把一個距離廣播給所有候選容量</h3>
+          <p>取得 \(d\) 後，所有 \(C&gt;d\) 的候選容量都可計為 hit，其餘為 miss。對 request 的各 prefix pages 累積後，KVSET 在單次 replay 裡形成整條 capacity-to-hit-rate curve。這一步取代「每個容量各重播一次」的重複工作。<span class="source-ref">§2 · PDF p.4</span></p>
+
+          <h3>4. 從 request target 反推最小容量</h3>
+          <p>若某 request 要命中 \(k\) 個 prefix pages，最小容量由這 \(k\) 個 page 所需的最大 LRU depth 決定。這等價於問：要把目標集合中最深的 page 包進 LRU 門檻，容量至少要到哪裡？Figure 2 的小例子顯示，想再多命中 page 2，就必須由 capacity 1 擴到 capacity 2。<span class="source-ref">§2 · PDF p.4 · Figure 2</span></p>
+
+          <h3>5. 以 request coverage 將單請求答案轉成 tier sizing</h3>
+          <p>對每個 request 算出所需容量後，系統可追蹤其分布。P95 表示配置該容量時，有 95% requests 能保住各自的 theoretical hit rate；P99／P99.9 則更保守。這讓 operator 能分別替 CPU memory 與 disk tier 選 coverage，而不是用全歷史 KV 總量當唯一答案。<span class="source-ref">§3 · PDF p.5–6 · Figure 4</span></p>
+
+          <p class="bridge">方法上的「精確」來自 LRU stack 性質；系統上的價值仍要看兩件事：估計是否貼近真實 cache，以及 coverage 曲線能否提供有用、可負擔的容量分界。</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>10K 與 24K production requests 分別證明了什麼？</h2>
+          <p class="lead">論文有兩組 production-trace 實驗：10K requests 用來驗證「預測是否接近實體 cache」，24K requests 用來展示「容量需求如何隨 stream 與 coverage 變化」。兩者回答不同問題，不能合併成一個泛化結論。</p>
+
+          <div class="claim-test">
+            <h3>Claim-test 1：估計曲線能否重現部署量測？</h3>
+            <p><strong>設定與控制。</strong>作者使用 10,000 個內部 production coding-agent requests。實體側以 Mooncake 配置多個 KV cache pools，serving engine 為 SGLang；硬體為 NVIDIA H20，模型為 GLM-5.2 W4A8，MTP 關閉，KV cache 為 FP8，約 60 KB/token。<span class="source-ref">§3 · PDF p.4</span></p>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>Figure 3 的 Estimation 曲線與少數 Experiment points 在各量測容量上視覺接近；約從 100 GiB／0.50 hit rate 快速上升，之後在約 0.94–0.95 一帶趨平。這支持 KVSET 能重建此 trace 的 capacity-to-hit-rate 形狀，也顯示進入平台區後，多買容量的邊際命中改善很小。<span class="source-ref">§3 · PDF p.4–5 · Figure 3</span></p>
+
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-03-p05-estimation-accuracy.png"><img src="assets/images/fig-03-p05-estimation-accuracy.png" alt="KV cache 容量由約 100 GiB 增至 2500 GiB 時，KV cache hit rate 由約 0.5 上升並在 0.94 附近飽和；估計線與少數實驗點接近。"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 3</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：藍線提供完整估計曲線，橘點是成本較高的實體部署量測；證據支持曲線形狀與量測點一致，但沒有報平均／最大誤差或信賴區間。</span></figcaption>
+            </figure>
+            <p><strong>限制。</strong>論文只說「closely match」，沒有數值 error metric、重複次數或變異；實體量測也只涵蓋少數容量。它證明的是此設定下的相符度，不是所有模型／cache implementation 的普遍精度。</p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim-test 2：coverage 是否比累積歷史量更能指導配置？</h3>
+            <p><strong>設定與控制。</strong>作者追蹤一段 24,000 requests 的內部 coding-agent service trace，並比較保留全歷史 KV 的 Accumulated curve，與保住 95%、99%、99.9% requests 理論命中率所需的 estimated capacity。論文未說明這 24K 與上一實驗的 10K 是否來自同一 trace。<span class="source-ref">§3 · PDF p.5–6</span></p>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>全歷史容量一路增至約 10.8 TiB；P99.9 在觀察窗口內仍明顯成長，未見收斂。稍微放寬 coverage 後，P99 約需 5 TiB，P95 約需 1 TiB；約 21,000 requests 後 P95/P99 下降，作者把原因歸於 concurrently active users 減少。<span class="source-ref">§3 · PDF p.6 · Figure 4</span></p>
+
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-04-p06-online-capacity.png"><img src="assets/images/fig-04-p06-online-capacity.png" alt="隨請求數增加，全歷史累積 KV 容量升至約 10800 GiB；P95、P99、P99.9 的估計容量依 coverage 明顯分離。"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：藍線是把所有歷史 KV 都留下的上界；橘、綠、紅線把 coverage 當可調目標。P99.9 幾乎追著歷史總量，P95／P99 則暴露出可用的成本斷點。</span></figcaption>
+            </figure>
+            <p><span class="evidence-kind evidence-kind--claim">作者主張</span>作者據此舉例：CPU-memory tier 可按 P95 配約 1 TiB，disk tier 按 P99 配約 5 TiB。這是由 trace 推出的 sizing recommendation；論文沒有實際部署這個兩層配置並量測 TTFT、throughput、tier-hit latency 或成本。<span class="source-ref">§3 · PDF p.6</span></p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim-test 3：論文證明了「online overhead 很低」嗎？</h3>
+            <p><span class="evidence-kind evidence-kind--claim">作者主張</span>摘要與貢獻列表主張 KVSET 大幅降低 compute／memory overhead，使 real-time analysis 可行。<span class="source-ref">Abstract、§1 · PDF p.1–3</span></p>
+            <p><span class="evidence-kind evidence-kind--analysis">分析</span>論文的演算法結構確實移除了「每容量一套 cache」的重複狀態，但實驗沒有報 analyzer 的 CPU time、memory footprint、每 request update latency、stream lag，也沒有與 kvcache-simulator 的 runtime／memory 做定量比較。因此，<strong>估計準確度有部署證據，低 overhead 則仍主要是機制推論與作者主張</strong>。</p>
+          </div>
+          <p class="bridge">證據最強的是「同一 workload 上的曲線相符」與「coverage 對容量非常敏感」；接下來要守住的邊界，是別把 LRU 的演算法精確性擴張成完整 production system 已被充分驗證。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>精確的 LRU 推導，還缺哪些系統證據？</h2>
+          <p class="lead">KVSET 的優點是把一個昂貴但重要的 operations question，還原成成熟的 cache-stack 問題；它的主要風險則是論文把「演算法上可少維護狀態」與「production 上足夠便宜」放得太近，中間缺了一組 overhead experiments。</p>
+
+          <h3>值得肯定的部分</h3>
+          <ul>
+            <li><strong>問題定義可操作：</strong>輸出不是抽象的 reuse score，而是 operator 可拿去做 DRAM／SSD tier sizing 的容量—命中率與 coverage 曲線。</li>
+            <li><strong>使用實體部署校準：</strong>Figure 3 並非只拿估計器對另一個 simulator，而是與 Mooncake／SGLang 的物理容量量測點比對。</li>
+            <li><strong>把 target 分層：</strong>Figure 4 讓 95%、99%、99.9% coverage 的成本差距可見，避免把「保留所有歷史」誤當唯一安全答案。</li>
+          </ul>
+
+          <h3>證據沒有跨過的界線</h3>
+          <div class="table-scroll wide">
+            <table>
+              <caption>主張、現有證據與仍缺的驗證</caption>
+              <thead><tr><th>議題</th><th>論文已有</th><th>仍缺</th></tr></thead>
+              <tbody>
+                <tr><td>估計準確度</td><td>單一 coding-agent workload 的曲線與部署點視覺接近。</td><td>數值誤差、重複量測、不同 arrival pattern、第二個 service／模型。</td></tr>
+                <tr><td>在線成本</td><td>Mattson stack + Fenwick tree 的機制說明。</td><td>CPU、RAM、每 request latency、update throughput、與多 simulator baseline 比較。</td></tr>
+                <tr><td>端到端效益</td><td>Equation 1 與 hit-rate curve 說明動機。</td><td>配置後的 TTFT、throughput、storage I/O、tier transfer cost 與總擁有成本。</td></tr>
+                <tr><td>策略範圍</td><td>page-granular LRU、full-attention KV。</td><td>LFU／cost-aware／admission policies、variable-size objects、hybrid Mamba／SWA state。</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>Figure 1 的 \(\hat{T}/(1-r)\) 在高 hit-rate 區域會發散，正好能凸顯「最後幾個百分點」的動機；但真實系統必有 lookup、資料搬移、decode、排程與 storage latency 下限。若直接把 99% 到 99.9% 的 hit-rate 改善換算成此式的吞吐收益，會高估價值。</p>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>Figure 4 在 active users 減少時會下降，說明工作集不是固定硬體常數，而是 workload state。Production sizing 若只取整段 trace 的單一峰值，可能過度配置；若只取短視窗，則可能對突發 reuse pattern 反應太慢。論文沒有討論 windowing、drift detection 或安全餘裕。</p>
+
+          <p><span class="evidence-kind evidence-kind--claim">作者主張</span>作者明確限制 KVSET 目前只估 full-attention component，且只適用 LRU；hybrid architecture 的 Mamba／sliding-window states 需另外按模型與 workload 保留比例。<span class="source-ref">§5 · PDF p.7–8</span></p>
+          <p class="bridge">因此最有價值的下一步，不是再畫一條更密的容量曲線，而是把 estimator 放進可觀察、可回退的 provisioning loop，證明它在 drift、tier latency 與政策改變下仍值得信任。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>如何把容量估計器變成可部署的控制迴路？</h2>
+          <p class="lead">KVSET 已提供 measurement primitive；要進入 production controller，還要把估計誤差、分析成本、配置動作與回退條件一起設計，而不是只輸出一個 TiB 數字。</p>
+
+          <h3>四個優先實驗</h3>
+          <ol>
+            <li><span class="evidence-kind evidence-kind--analysis">分析</span><strong>Accuracy–overhead Pareto：</strong>同時報 capacity error、CPU cores、RAM、每秒可處理 pages 與 p99 update latency，並與獨立多容量 replay 比較。</li>
+            <li><span class="evidence-kind evidence-kind--speculation">推測</span><strong>Drift-aware windows：</strong>用 sliding window、decay 或 change-point detection 對 active-user 變動，測量縮容速度與 cache-miss burst 的風險。</li>
+            <li><span class="evidence-kind evidence-kind--speculation">推測</span><strong>多 tier 共同最佳化：</strong>把 CPU DRAM、local SSD、remote storage 的 latency／bandwidth／price 納入，而非先選 coverage 再靜態映射容量。</li>
+            <li><span class="evidence-kind evidence-kind--analysis">分析</span><strong>跨 workload 外部效度：</strong>至少加入 customer-support、deep-research、multi-agent 與一般 chat traces，分解 tenant skew、session length、prefix fan-out 對 working set 的影響。</li>
+          </ol>
+
+          <h3>研究小組討論題</h3>
+          <ul>
+            <li>P99 coverage 真正應最佳化的是「requests 達到 theoretical hit rate」，還是「節省的 prefill FLOPs／TTFT」？長請求與短請求等權合理嗎？</li>
+            <li>若 cache admission policy 先拒絕低價值 pages，Mattson stack 的 exactness 還能保留多少？需要何種 generalized reuse-distance statistic？</li>
+            <li>Figure 4 的峰值應用固定 headroom、季節性模型，或風險限制最佳化來轉成採購容量？</li>
+            <li>當 remote tier transfer 比重算 prefill 更慢時，「命中」是否仍應算成功，還是必須改用 benefit-weighted hit？</li>
+            <li>若不同 tenant 的 prefixes 不可共享，應集中估計全域 working set，還是為每個 isolation domain 分開配置？</li>
+          </ul>
+
+          <div class="statement statement--speculation" data-kind="speculation">
+            <span class="statement__label">推測</span>
+            <p>最自然的系統化延伸，是讓 KVSET 輸出帶誤差與時間尺度的 capacity recommendation，再由 controller 在成本上限、miss-rate SLO 與最小 resize interval 下決定擴縮；這會把論文由 analyzer 推進成真正的 cache autoscaler。</p>
+          </div>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>來源、術語與關鍵證據定位</h2>
+          <h3>論文資訊</h3>
+          <dl class="term-list">
+            <dt>正式標題</dt><dd>The KV Cache Working Set: Online Capacity Planning for LLM Inference Systems</dd>
+            <dt>作者</dt><dd>Luchang Li、Shuaishuai Wang、Zhao Ruan、Dongfang Li、Bozhao Gong</dd>
+            <dt>機構</dt><dd>Kingsoft Cloud</dd>
+            <dt>版本</dt><dd>arXiv:2609.27746v1 [cs.DC]，submitted 2026-09-23</dd>
+            <dt>篇幅</dt><dd><span data-summary-field="pdf-page-count">共 9 頁</span></dd>
+            <dt>分類理由</dt><dd><span class="evidence-kind evidence-kind--analysis">分析</span>主要貢獻是 LRU KV prefix cache 的在線 working-set／capacity analysis，因此歸入 LLM Systems / KV Cache Management。</dd>
+            <dt>程式碼</dt><dd><a href="https://github.com/llc-kc/kv_cache_capacity_estimator" target="_blank" rel="noopener noreferrer">kv_cache_capacity_estimator ↗</a>（論文提供；本次未獨立稽核程式碼）</dd>
+          </dl>
+
+          <h3>術語表</h3>
+          <dl class="term-list">
+            <dt>Prefix cache</dt><dd>跨請求重用相同前綴的 KV states，以避免重做 prefill。</dd>
+            <dt>Working set</dt><dd>在指定 hit-rate／coverage 目標下，真正需要保留的最小 cache capacity；不是所有歷史 KV 的總量。</dd>
+            <dt>Stack distance</dt><dd>某 page 自上次 access 後，排在它前方的較新 distinct pages 數；LRU 下可直接決定容量門檻。</dd>
+            <dt>Mattson stack</dt><dd>由單一 reference stream 推導不同 LRU cache capacities hit／miss 行為的分析方法。</dd>
+            <dt>Fenwick tree</dt><dd>KVSET 用來維護 access positions 並計算 stack distance 的累積計數資料結構。</dd>
+            <dt>Theoretical hit rate</dt><dd>容量無限時，某 request 依其可重用前綴能達到的命中率。</dd>
+            <dt>Request coverage</dt><dd>能保住各自 theoretical hit rate 的 requests 比例；Figure 4 的 P95/P99/P99.9。</dd>
+          </dl>
+
+          <h3>關鍵證據索引</h3>
+          <ol class="source-index">
+            <li><span><strong>命中率與理想 prefill throughput：</strong>§1，PDF p.2，Figure 1、Equation 1；明確忽略 memory-access overhead。</span></li>
+            <li><span><strong>Mattson stack 與 Fenwick tree：</strong>§2，PDF p.3–4，Figure 2；由 page depth 回答多容量 hit/miss。</span></li>
+            <li><span><strong>估計對實體部署：</strong>§3，PDF p.4–5，Figure 3；10K production coding-agent requests。</span></li>
+            <li><span><strong>在線容量與 coverage：</strong>§3，PDF p.5–6，Figure 4；24K requests，P95 約 1 TiB、P99 約 5 TiB。</span></li>
+            <li><span><strong>適用邊界：</strong>§5，PDF p.7–8；目前限 LRU 與 full-attention KV component。</span></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>The KV Cache Working Set: Online Capacity Planning for LLM Inference Systems · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>
