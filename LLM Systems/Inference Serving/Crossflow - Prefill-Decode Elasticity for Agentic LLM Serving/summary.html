@@ -1,0 +1,880 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="Crossflow 以短期可撤銷的 multi-resource lease，讓 decode 節點在不放棄 decode-first 隔離的前提下承接 selected prefill；本精讀拆解控制迴路、實驗證據與 ITL 邊界。">
+  <title>Crossflow: Prefill-Decode Elasticity for Agentic LLM Serving｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 50rem;
+      --wide: 68rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">LLM Systems / Inference Serving</p>
+      <h1>Crossflow: Prefill-Decode Elasticity for Agentic LLM Serving</h1>
+      <div class="paper-dek" data-section-role="thesis">
+        <p>Prefill–decode（P/D）disaggregation 用固定角色換得 phase specialization 與 decode isolation，卻也把瞬時容量鎖死。Crossflow 不搬動 replica，而讓 decode node 發布短期、可撤銷的多資源租約，cluster controller 只在 prefill 壅塞、spill 路徑更快且 decode SLO 仍安全時，將選定的 prefill 放到其既有 decode home 執行。</p>
+        <div class="statement statement--fact" data-kind="experimental-fact"><span class="statement__label">實驗事實</span><p>在兩個模型與兩條 timestamp-preserving trace 的 16 個 matched load points，input/output token throughput 的幾何平均提升為 17.4%/16.2%；但 GLM-5.2 配 TraceLab 的 mean ITL 反而增加 20.9–34.3%，所以結論是「可控地回收 transient slack」，不是免費吞吐。 <span class="source-ref">§6.2 · PDF pp.7–8 · Fig. 5</span></p></div>
+      </div>
+      <p class="paper-byline">Yi Xu、Ehsan K. Ardestani、Wenyin Fu、Martin Schatz、Krishna Malladi、Zhan Shu、Adnan Aziz、Shobhit Kanaujia、Ajit Mathews、Chunqiang Tang</p>
+      <p class="paper-meta">
+        <span>arXiv:2609.27085v1 [cs.DC]</span>
+        <span>2026</span>
+        <span>LLM Systems / Inference Serving</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-28">2026 年 9 月 28 日</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://arxiv.org/abs/2609.27085v1" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="Crossflow%20-%20Prefill-Decode%20Elasticity%20for%20Agentic%20LLM%20Serving.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀路線：</strong>先讀「靜態 P/D 邊界為何追不上 agentic 流量？」掌握問題，再讀「一個請求如何取得 lease、跨過 admission，再被本地 revalidate？」重建控制迴路，最後用「吞吐真的變高了嗎，代價落在哪一側？」核對證據與 trade-off。</p>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">先把 P/D、TTFT、ITL 與 KV 歸屬放在同一張地圖</a></li>
+            <li><a href="#problem">靜態 P/D 邊界為何追不上 agentic 流量？</a></li>
+            <li><a href="#insight">不要搬動節點，而是出租可撤銷的 decode 餘裕</a></li>
+            <li><a href="#method">一個請求如何取得 lease、跨過 admission，再被本地 revalidate？</a></li>
+            <li><a href="#evidence">吞吐真的變高了嗎，代價落在哪一側？</a></li>
+            <li><a href="#critique">證據支持「有條件的彈性」，還不能推廣到哪些場景？</a></li>
+            <li><a href="#extensions">把 lease 當成跨層容量合約，下一步怎麼驗證？</a></li>
+            <li><a href="#reference">如何追溯 Crossflow 的符號、設定與關鍵證據？</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>先把 P/D、TTFT、ITL 與 KV 歸屬放在同一張地圖</h2>
+          <p class="lead">理解障礙不在「prefill 與 decode 不同」這句話，而在於四個狀態同時互相牽制：計算、延遲、KV cache 與 session 歸屬。先把它們對齊，後面才看得出 Crossflow 為何需要 cluster 與 node 兩層控制。</p>
+
+          <h3>一個請求其實有兩種不同工作型態</h3>
+          <p><strong>Prefill</strong> 一次處理輸入 prompt，建立各層 key–value cache；大矩陣運算較容易吃到 compute throughput。<strong>Decode</strong> 每輪替每條 active sequence 產生一個 token，反覆讀 model weights 與持續成長的 KV cache，常受 memory bandwidth、batch composition 與 cache capacity 限制。P/D disaggregation 把兩者放到不同 pool，讓 parallelism、batching 與容量各自調整，同時避免長 prefill kernel 擾動 decode iteration。 <span class="source-ref">§2.1–§2.2 · PDF p.2</span></p>
+
+          <div class="table-scroll">
+            <table>
+              <caption>後文會反覆使用的四個概念</caption>
+              <thead><tr><th>概念</th><th>系統意義</th><th>Crossflow 為何在意</th></tr></thead>
+              <tbody>
+                <tr><td>TTFT</td><td>Time to First Token；含 admission、prefill queue/execution 與 P→D KV transfer。</td><td>spill 的首要收益是縮短 prefill 排隊與首 token 等待。</td></tr>
+                <tr><td>ITL</td><td>Inter-Token Latency；連續 generated tokens 之間的延遲。</td><td>把 prefill 借到 decode node 可能干擾 foreground generation。</td></tr>
+                <tr><td>KV affinity</td><td>後續 turn 若回到已有 prefix state 的節點，可少做 recompute/transfer。</td><td>conversation 維持固定 decode home，spill 不隨意搬家。</td></tr>
+                <tr><td>uncached input</td><td>真正需要新 prefill 計算的 prompt suffix，而非應用看到的完整 prompt。</td><td>virtual queue 與 path comparison 必須按新工作量計費。</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>Crossflow 的目標不是重新發明 colocated serving，而是在保留 P/D 專門化的前提下，短暫借用 decode slack。這也預告了它的雙重成功條件：prefill 必須真的更快，decode 的 ITL 也必須仍在可接受 envelope 內。</p>
+          <p class="bridge">既然兩個 pool 各有用途，真正的問題是：固定邊界到底浪費了多少，又為何不能直接看 GPU utilization 來借？</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>靜態 P/D 邊界為何追不上 agentic 流量？</h2>
+          <p class="lead">本章要排除的直覺誤區是「選好一個平均 P/D ratio 就夠了」。agentic turn 會被 tool completion 成批釋放，prefix reuse 改變實際 prefill 工作，output length 又改變 decode occupancy；需求比例的變化速度遠快於整個 replica 的重配置。</p>
+
+          <h3>需求在分鐘內移動，replica 卻要十幾分鐘才能搬完</h3>
+          <p>論文以未命中 prefix 的輸入 token 與輸出 token 比值 \(R(t)=\mathrm{Tok}_{in,uncached}(t)/\mathrm{Tok}_{out}(t)\) 表示兩 phase 的相對需求。內部 chat use case 在數十秒取樣下出現最高 4.7× peak-to-mean；134 個完整日的 TraceLab agentic trace，單日 hourly max/min 的中位數達 24.5×，而典型一天會有某一小時偏離當日平均 3.9×。 <span class="source-ref">§1 · PDF p.1 · Fig. 1；§3.1 · PDF p.3 · Fig. 2</span></p>
+          <p>相對地，測試 harness 將 GPT-OSS-120B 的完整 2P4D pool 啟動到 ready 需 8:35、cluster 可服務需 11:02；GLM-5.2 分別為 14:59 與 17:31。作者明確說這不是最佳化下限，但它足以說明：以 whole-replica repartition 追逐 minute-scale demand，控制週期本身就錯位。 <span class="source-ref">§3.1 · PDF pp.3–4</span></p>
+
+          <h3>保守 provisioning 會把兩邊的 headroom 同時鎖死</h3>
+          <p>若 \(\rho\) 表示硬體 decode-to-prefill median throughput ratio，則 prefill 應占的 capacity share 為：</p>
+          <div class="formula-block">
+            \[
+              f(t)=\frac{\rho R(t)}{1+\rho R(t)}
+            \]
+            <p class="formula-block__meaning">\(\rho\) 把 token-demand ratio 轉成 resource-demand ratio；因此 \(R(t)=1\) 並不代表兩邊需要相同資源。若兩池各按自己的 p95 配置，在固定總需求、只改變 mix 的推導中，stranded share 正好是 \(f_{95}-f_5\)。</p>
+          </div>
+          <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>四個 use cases 的 p95/p95 sizing 會閒置 10.8–17.5% balanced capacity；最不穩定的案例若按 peak 配置可達 40%。若改成 prefill 近 median、decode 在 p95 以上，並允許 decode slack 借給 prefill，估算的 stranded capacity 可降至 6.0–7.4%。 <span class="source-ref">§3.1 · PDF pp.3–4</span></p>
+
+          <h3>但「GPU 還沒滿」不是安全容量</h3>
+          <p>相同 decode aggregate load，不同 request shape 與 placement 會給出不同的 SLO-safe prefill 容量。batch 8→20 時，compute activity、memory traffic、decode throughput 分別變成 1.44×、1.30×、1.74×；batch 8 下 context 1K→82K 時，memory traffic 幾乎 2×，compute 只有 1.24×，throughput 還下降約 10%。 <span class="source-ref">§3.2 · PDF p.4 · Fig. 3a</span></p>
+          <figure data-figure-role="method">
+            <a href="assets/images/fig-03-p04-shape-dependent-capacity.png"><img src="assets/images/fig-03-p04-shape-dependent-capacity.png" alt="Figure 3 比較 decode batch 或 context 改變時的 compute、memory 與 throughput 非線性變化，並顯示不同 prefill shape 偏好的 node placement。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 3</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：左圖說明單一 utilization counter 無法換算安全借用量；右圖顯示相同 aggregate decode load 下，prefill shape 會改變最佳 placement。</span></figcaption>
+          </figure>
+          <p>只改四個 nodes 上的 decode 分布，四種較短 context 的 SLO-safe prefill throughput 就可相差 11.3–34.0%；65K context 偏好 three-node layout，98K 則偏好集中到 two-node。這把需求具體化成兩層責任：cluster controller 以 request shape 選擇誰與去哪裡，decode node 以即時狀態決定現在到底能借多少。 <span class="source-ref">§3.2 · PDF p.4 · Fig. 3b</span></p>
+          <p class="bridge">因此，Crossflow 需要的不是永久改分工，而是一張會到期、能撤回、同時約束多種資源的「借用許可」。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>不要搬動節點，而是出租可撤銷的 decode 餘裕</h2>
+          <p class="lead">理解 Crossflow 的最小模型，是把 2P4D cluster 想成兩個專門 prefill 櫃檯與四個 decode 櫃檯。當 prefill 突然排隊，D2 不改職稱、不接管整批服務，只發出一張幾個 scheduling intervals 後到期的許可，允許某個與其 resident batch 相容的 prompt suffix 在本地分段執行。</p>
+
+          <p>具體走一次：一個 multi-turn request 已被指定 D2 為 decode home，且 D2 可能保有部分 prefix。此時 P0/P1 的預測等待上升，D2 的 lease 則顯示尚有 compute chunk、KV、projected output、transfer 與 spill-slot credits。controller 先比較 default P→D 路徑與 D2-local spill 的完成時間；只有 spill 較快且每項 credit 都放得下，才原子保留資源。真正執行前，D2 仍會重新檢查現況；foreground decode 變重時，未發出的 prefill unit 可以暫停，下一版 lease 也可直接歸零。</p>
+
+          <figure data-figure-role="method">
+            <a href="assets/images/fig-04-p05-system-architecture.png"><img src="assets/images/fig-04-p05-system-architecture.png" alt="Figure 4 的 2P4D Crossflow 架構圖，包含 cluster controller、兩個 prefill nodes、四個 decode schedulers、default path、spilled request 與各節點 lease。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：藍線保留原本 P→D 路徑，橘線只把 selected prefill 導向既有 decode home；紅色 pressure 與綠色 lease 把 cluster admission 和 node-local safety 接在一起。</span></figcaption>
+          </figure>
+
+          <div class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>這個機制更像「可撤銷的多維時段」，而不是把 GPU 切出固定百分比。比喻的邊界是：真實資源不是一個時間軸；compute、KV、future decode、transfer 與 coexecution interference 必須一起約束，而且同一個 prompt 放到不同 resident batch 旁邊會有不同成本。</p></div>
+
+          <p>這也解釋論文為何同時保留兩個 fallback：沒有 prefill pressure、spill 不比 default 快、telemetry 遺失、任何 hard limit 耗盡，或 local SLO 轉壞時，都回到靜態 disaggregated path。Crossflow 的核心不是讓更多請求走 spill，而是讓每一次 spill 都能被拒絕、暫停與過期。 <span class="source-ref">§4 · PDF pp.4–7</span></p>
+          <p class="bridge">直覺成立後，下一步是逐步檢查 controller 如何把「可借」轉成一致、不可超賣的 admission decision。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>一個請求如何取得 lease、跨過 admission，再被本地 revalidate？</h2>
+          <p class="lead">本章解決的障礙是控制邏輯分散在 queue、placement、cache 與 worker state 裡，不容易重建 end-to-end flow。可以把一次 admission 拆成六個連續 gate；任一 gate 不成立，就走原本 P/D 路徑。</p>
+
+          <h3>Gate 1：virtual queue 讓 burst 在下一次 poll 前就可見</h3>
+          <p>cluster scheduler 以 outstanding uncached prompt work \(W_P(t)\) 與近期處理率 \(\widehat{\mu}_P(t)\) 估計等待：</p>
+          <div class="formula-block">
+            \[
+              \widehat{Q}_P(t)=\frac{W_P(t)}{\widehat{\mu}_P(t)}
+            \]
+            <p class="formula-block__meaning">arrival 一進來就按 uncached suffix 增加 \(W_P\)，reservation 成功就釋放；worker 的直接 queue observation 用來校正 drift。高、低兩個 threshold 加上 bounded updates 形成 hysteresis，避免壓力訊號來回震盪。</p>
+          </div>
+          <p>若 prefill worker 無法回報有效狀態，系統停止新的 lending，而不是把 missing telemetry 當成空閒。 <span class="source-ref">§4.1 · PDF p.5</span></p>
+
+          <h3>Gate 2：decode node 只發布短命的 multi-resource lease</h3>
+          <p>每個 node 從 running decode batch、remaining output、physical KV headroom、pending transfers、active/reserved spills、health 與 execution layout 算出 \(L_d(t)\)。lease 是帶 version 與 expiry 的 resource vector；新版本取代舊版本，未使用 credit 不累積。online feedback 只有在 decode latency 接近 baseline 且 spill completion 跟得上時才逐步放寬；hard SLO violation 會讓下一張 lease 歸零。 <span class="source-ref">§4.2 · PDF p.5</span></p>
+
+          <h3>Gate 3：home assignment 先守 load balance，再用 shape 破平手</h3>
+          <p>prefill home 依 projected prompt work 平衡，decode home 則用 projected output 與 turn count；只有候選 nodes 的 load 在設定 margin 內，shape affinity 才把長 context 與相近 context 放在一起。conversation 之後固定回同一 decode home。owner directory 記錄「成功完成過的最長 prefix coverage」，但 coverage 不保證 KV pages 仍 resident，所以 admission 仍要預留可能的 recomputation。 <span class="source-ref">§4.3 · PDF p.6</span></p>
+
+          <h3>Gate 4：比較兩條路，不因「有 lease」就硬塞</h3>
+          <div class="formula-block">
+            \[
+              T_D(r,d,t)=Q_d(r,t)+S_d(r,L_d(t))
+            \]
+            \[
+              T_P(r,t)=\widehat{Q}_P(t)+S_P(r)+C_{P\rightarrow D}(r)
+            \]
+            <p class="formula-block__meaning">\(T_D\) 是 request \(r\) 在 decode home \(d\) 的預測等待加 lease 條件下的 local service；\(T_P\) 是 default prefill queue、prefill service 與 KV transfer。只有 \(T_D&lt;T_P\) 才值得 spill。</p>
+          </div>
+
+          <h3>Gate 5：shape-aware ranking 之後仍要通過 hard constraints</h3>
+          <p>候選分數為：</p>
+          <div class="formula-block">
+            \[
+              \mathrm{score}(r,d)=T_P-T_D+B_P(r,t)-I_D(r,d,t)
+            \]
+            <p class="formula-block__meaning">\(B_P\) 估計移走此 request 對原 prefill batch 的好處；\(I_D\) 估計 suffix、context/output 差異、active peers 與 idle headroom 所形成的 decode interference。分數只決定順序，不能越過 pressure、home、path benefit、shape bounds 或任何 lease credit。</p>
+          </div>
+          <p>node-local spill slots \(K_d(t)\) 與 cluster-wide concurrency \(G(\widehat{Q}_P(t))\) 同時限制借用；controller 在看下一個候選前先原子扣除 credits，避免 concurrent admissions 重複花同一份容量。 <span class="source-ref">§4.3 · PDF p.6</span></p>
+
+          <h3>Gate 6：reservation 是許可，不是強迫執行</h3>
+          <p>decode executor 在每個 bounded prefill unit 前 revalidate；條件轉壞時只暫停未發出的工作。first token 前失敗會釋放 reservation 並回 prefill tier 重試；first token 後則留在原 decode home，避免 duplicate output 與 cache ownership ambiguity。實作以 6.7K-line Python shim 包住 router，worker side 在 15 個 SGLang files 新增 2,807 行、刪除 36 行，不需新 model kernel；Section 6 結果使用 native chunked mixed-batch backend。 <span class="source-ref">§4.4–§5 · PDF pp.6–7</span></p>
+          <p class="bridge">控制迴路完整之後，評估的問題不只是「throughput 有沒有升」，還要看它是否把代價藏進 TTFT、ITL、額外硬體或特定 split。</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>吞吐真的變高了嗎，代價落在哪一側？</h2>
+          <p class="lead">本章把每個結論和它的 test condition 綁在一起。核心 setup 是六台 NVIDIA GB300 servers、每台四張 288-GB GPUs 與一個 TP4 worker，預設 2P4D；模型是 GPT-OSS-120B 與 GLM-5.2，workload 是一小時 TraceLab coding-agent segment 與一條 internal trace，重播時保留 timestamp、conversation order、prefix relation 與 token work。 <span class="source-ref">§6.1 · PDF p.7</span></p>
+
+          <div class="table-scroll">
+            <table>
+              <caption>主實驗的控制條件</caption>
+              <thead><tr><th>面向</th><th>設定</th><th>可比性</th></tr></thead>
+              <tbody>
+                <tr><td>Software</td><td>2026-06-18 SGLang snapshot；kernel 0.4.2.post2。</td><td>matched runs 使用相同 backend configuration；optional custom all-reduce 等最佳化關閉。</td></tr>
+                <tr><td>Memory/network</td><td>100-GB write-through Mooncake cache；NVLink 做 TP4、NIXL 做 P→D KV、RDMA 存取 L3。</td><td>checkpoint、precision、server count、P/D split、KV capacity 與 distributed L3 一致。</td></tr>
+                <tr><td>Baselines</td><td>Static、PPD、SMetric、CacheWise。</td><td>PPD 依原方法針對每個 workload shape 與 replay rate 離線 calibration，對它是相對有利的設定。</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim-test 1：matched 2P4D 下是否同時提高 input 與 output throughput？</h3>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>16 個 load points 的 geometric mean：requests +16.6%、input tokens +17.4%、output tokens +16.2%；最大 input/output gains 為 42.7%/43.4%。mean TTFT 每點都下降，範圍依 model/trace 為 10.0–57.4%。這支持 Crossflow 沒有只把 throughput 從一個 phase 搬到另一個。 <span class="source-ref">§6.2 · PDF pp.7–8 · Fig. 5</span></p>
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-05-p08-end-to-end-results.png"><img src="assets/images/fig-05-p08-end-to-end-results.png" alt="Figure 5 顯示 GPT-OSS-120B 與 GLM-5.2 在 TraceLab 與 internal trace 的 request、input/output throughput、TTFT 與 ITL。"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 5</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：前三欄看橘色 Crossflow 是否一起提高 request 與雙向 token throughput；最後兩欄要逐 row 檢查 TTFT 改善是否伴隨 ITL 惡化。</span></figcaption>
+            </figure>
+            <p><strong>代價：</strong>GPT-OSS/TraceLab 的 mean ITL 改善 18.9–30.3%，但 GPT-OSS/internal 增加 0.09–0.23 ms（2.5–6.7%）；GLM/TraceLab 更增加 20.9–34.3%，GLM/internal 則改善 15.2–18.7%。因此 ITL 方向依 coexecution interference 與 spill 頻率而變，不能只引用 17.4% throughput。 <span class="source-ref">§6.2 · PDF p.8 · Fig. 5</span></p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim-test 2：收益是否只靠作者挑中的 2P4D split？</h3>
+            <p>GPT-OSS/TraceLab 在 1P5D 到 3P3D 的 input/output throughput 分別提升 24.1–42.7% 與 29.9–51.1%；2P4D Crossflow 甚至比所有 Static splits 中的最佳值高 25.1%/30.0%。internal trace 四種 splits 也都提升 token throughput。 <span class="source-ref">§6.3 · PDF pp.8–9 · Fig. 6</span></p>
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-06-p09-partition-robustness.png"><img src="assets/images/fig-06-p09-partition-robustness.png" alt="Figure 6 比較 1P5D、2P4D、3P3D、4P2D 下 Static 與 Crossflow 的 input/output throughput、TTFT 與 ITL。"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 6</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：前兩圖顯示多數 splits 的吞吐收益，後兩圖揭示 P/D 邊界過度偏向 prefill 或 decode 時的 latency 代價。</span></figcaption>
+            </figure>
+            <p><strong>反例：</strong>TraceLab 的 4P2D 只有兩個 decode nodes，可借容量不足；input throughput 下降 2.8%、mean TTFT 上升 33.3%，雖 output throughput 仍高 4.4%。這說明 elasticity 不能補回結構上不存在的 decode slack。 <span class="source-ref">§6.3 · PDF p.8 · Fig. 6</span></p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim-test 3：到底是 routing、spill，還是完整 feedback loop 有效？</h3>
+            <p>routing-only 相對 Static 的 input/output throughput 可能是 −4.3–4.6%/−4.6–1.1%；FIFO Routing + Spill 仍比 Crossflow 低 8.6–26.0%/7.7–27.9%。加上 shape-aware selection 會變強，但完整收益還需要 pressure-aware concurrency。 <span class="source-ref">§6.6 · PDF pp.10–11 · Fig. 9</span></p>
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-09-p10-controller-ablation.png"><img src="assets/images/fig-09-p10-controller-ablation.png" alt="Figure 9 逐步加入 routing、spill、shape-aware spill 與完整 Crossflow，對照 throughput、TTFT 與 ITL。"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 9</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：橘色完整 Crossflow 的優勢不是單一技巧，而是 spill execution、shape compatibility 與隨壓力調整的 concurrency 共同形成。</span></figcaption>
+            </figure>
+            <p>控制平面 ablation 又把兩層訊號拆開：16× 時，完整 Crossflow 為 6.79 req/s、346 spills；移除 virtual queue 後只剩 5.27 req/s、56 spills；改成 synchronous decode polling 為 5.68 req/s，且每次 admission 平均多 202 ms polling latency。 <span class="source-ref">§6.6 · PDF p.11 · Table 1</span></p>
+            <figure data-figure-role="result">
+              <a href="assets/images/table-01-p11-control-plane-ablation.png"><img src="assets/images/table-01-p11-control-plane-ablation.png" alt="Table 1 列出完整 Crossflow、無 virtual queue、同步 decode polling 在 16 倍 replay 下的 request rate、TTFT、ITL 與 spill 數。"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Table 1</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：virtual queue 負責及早看見 burst，lease 則避免 admission 同步等待所有 decode workers；缺一都讓 request rate 明顯下降。</span></figcaption>
+            </figure>
+          </div>
+
+          <p class="bridge">證據已支持「在這套硬體、模型與 replay 下，閉環控制回收了 transient slack」，但下一章要把它和「一般化到所有 disaggregated serving」清楚分開。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>證據支持「有條件的彈性」，還不能推廣到哪些場景？</h2>
+          <p class="lead">最容易過度解讀的地方，是把 matched experiments 的 throughput gain 擴大成任意 model、hardware 與 workload 都會受益。論文的強項是控制條件清楚、主 baseline 與 component ablation 完整；外部效度仍有明確邊界。</p>
+
+          <h3>值得信任的部分</h3>
+          <ul>
+            <li><span class="evidence-kind evidence-kind--analysis">分析</span><strong>因果鏈有被拆解。</strong>Figure 3 證明 scalar utilization 不夠，Figure 9 與 Table 1 再分離 shape-aware spill、pressure-aware concurrency、virtual queue 與 asynchronous lease。</li>
+            <li><span class="evidence-kind evidence-kind--analysis">分析</span><strong>比較多半守住 matched substrate。</strong>checkpoint、precision、server count、split、KV capacity、L3 cache 與 backend settings 一致；最接近的 PPD 還按每個 workload/load calibration。</li>
+            <li><span class="evidence-kind evidence-kind--analysis">分析</span><strong>不隱藏反例。</strong>作者呈現 GLM/TraceLab ITL 惡化與 4P2D 的 input/TTFT 退步，使可用範圍能被讀者定位。</li>
+          </ul>
+
+          <h3>尚未被證明的部分</h3>
+          <ul>
+            <li><strong>模型與硬體範圍：</strong>只有 GPT-OSS-120B、GLM-5.2 與 NVIDIA GB300/TP4；dense models、其他 GPU generations、ROCm、heterogeneous P/D hardware 與不同 interconnect 尚未驗證。 <span class="source-ref">§6.1 · PDF p.7</span></li>
+            <li><strong>時間與 workload 範圍：</strong>end-to-end replay 使用兩條各一小時 segments，其中 internal trace 無法獨立檢視。controller 的 multi-day stability、跨租戶 fairness 與極端 burst 恢復未量測。 <span class="source-ref">§6.1 · PDF p.7</span></li>
+            <li><strong>成本面：</strong>Figure 8 說六台 Crossflow 可勝過九台 Static 的 throughput，但論文未提供 energy、power、網路流量或貨幣成本，所以不能直接推成 50% TCO 節省。 <span class="source-ref">§6.5 · PDF p.10 · Fig. 8</span></li>
+            <li><strong>可靠性：</strong>first-token 前後的 failure rule 很保守，但沒有 fault-injection experiment；「不重複輸出、ownership 不混亂」目前是設計論證，不是實驗事實。 <span class="source-ref">§4.4 · PDF pp.6–7</span></li>
+            <li><strong>統計透明度：</strong>full replay sweeps 未報告 repetition count、error bars 或 statistical significance；Figure 3 的 paired trials 是少數明示重複次數的地方。</li>
+          </ul>
+
+          <div class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>最精確的採用判準不是「是否有 idle decode GPU」，而是三件事能否同時成立：prefill mix 在 lease 時間尺度上可觀察、decode local executor 能把工作切成可 revalidate 的 bounded units、以及 ITL budget 足以吸收 model-specific interference。</p></div>
+          <p class="bridge">這些邊界不是否定設計，而是把下一輪研究問題改寫成可量測的移植條件。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>把 lease 當成跨層容量合約，下一步怎麼驗證？</h2>
+          <p class="lead">Crossflow 最可重用的觀念，是用「版本化、短期、不可累積、可本地撤銷」的 lease 把慢速 global admission 與快速 local safety 分開。它可以延伸到 P/D 之外，但每次延伸都必須重新定義 credits 與 failure boundary。</p>
+
+          <h3>三個可操作的後續實驗</h3>
+          <ol>
+            <li><span class="evidence-kind evidence-kind--speculation">推測</span><strong>跨硬體 portability matrix：</strong>在 MI300X/MI325X 與 dense/MoE models 上，逐一量測 compute、HBM、xGMI/RDMA 與 context shape 對安全 lease 的敏感度；以固定 ITL SLO 比較 learned envelope 與 rule-based envelope。</li>
+            <li><span class="evidence-kind evidence-kind--speculation">推測</span><strong>長時 multi-tenant replay：</strong>用 24 小時以上、含 priority classes 的 trace 量測 fairness、lease oscillation、starvation、tail TTFT/ITL 與 control overhead，並公開每次 reservation/expiration event。</li>
+            <li><span class="evidence-kind evidence-kind--speculation">推測</span><strong>故障與成本閉環：</strong>注入 stale lease、worker timeout、KV eviction、RDMA slowdown 與 first-token boundary failures，同時量測 energy、network bytes、cache churn 與 cost per token。</li>
+          </ol>
+
+          <h3>研究小組可討論的問題</h3>
+          <ul>
+            <li>lease 的 resource vector 應由 hand-tuned feedback、online system identification，還是具有 safety constraint 的 learned predictor 產生？</li>
+            <li>固定 decode home 保住 affinity，但可能犧牲 global balancing；何時應允許付出一次 KV migration 換取更大長期收益？</li>
+            <li>當 P/D 使用異質硬體或不同 parallelism topology 時，「本地 prefill」是否仍然成立，還是 lease 應改成 remote execution/transfer budget？</li>
+            <li>能否把同一合約套到 speculative draft/verify、MoE expert capacity 或 KV-storage tier，並保留相同的原子 reservation 與 local revalidation 語義？</li>
+          </ul>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>若這些延伸成立，Crossflow 的長期價值可能不只是 P/D elasticity，而是一種 systems pattern：global layer 決定「值得不值得借」，local layer 決定「此刻還安不安全」，中間只交換會到期的 capability。</p>
+          <p class="bridge">最後附上符號、metadata 與證據索引，讓讀者能直接回到原文核對每個轉折。</p>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>如何追溯 Crossflow 的符號、設定與關鍵證據？</h2>
+          <dl class="term-list">
+            <dt>正式題名</dt><dd>Crossflow: Prefill-Decode Elasticity for Agentic LLM Serving</dd>
+            <dt>作者</dt><dd>Yi Xu、Ehsan K. Ardestani、Wenyin Fu、Martin Schatz、Krishna Malladi、Zhan Shu、Adnan Aziz、Shobhit Kanaujia、Ajit Mathews、Chunqiang Tang</dd>
+            <dt>版本 / 全文</dt><dd>arXiv:2609.27085v1 [cs.DC]，submitted 2026-09-22；<span data-summary-field="pdf-page-count">共 14 頁</span>；<a href="Crossflow%20-%20Prefill-Decode%20Elasticity%20for%20Agentic%20LLM%20Serving.pdf">開啟本地 PDF</a></dd>
+            <dt>分類</dt><dd>LLM Systems / Inference Serving；主要貢獻是 P/D serving architecture 的 elastic capacity boundary 與 hierarchical controller，而非新 network protocol。</dd>
+          </dl>
+
+          <h3>符號與縮寫</h3>
+          <dl class="term-list">
+            <dt>P/D · TTFT · ITL</dt><dd>Prefill–decode disaggregation 將 prompt processing 與 generation 分池；Time to First Token 與 Inter-Token Latency 分別衡量首 token 等待與連續 token 間延遲。</dd>
+            <dt>\(R(t)\) · \(L_d(t)\)</dt><dd>\(R(t)\) 是 uncached input/output 的瞬時 workload ratio；\(L_d(t)\) 是 decode node \(d\) 發布的短期 multi-resource lease。</dd>
+            <dt>spill · coverage</dt><dd>spill 讓 selected prefill 在 decode home 執行；coverage 記錄成功完成過的最長 prefix，但不保證 KV pages 仍實體 resident。</dd>
+          </dl>
+
+          <h3>關鍵證據索引</h3>
+          <ol class="source-index">
+            <li><span><strong>需求漂移：</strong>minute-scale 4.7× peak-to-mean 與 TraceLab 單日 24.5× median max/min。 <span class="source-ref">§1、§3.1 · PDF pp.1, 3 · Figs. 1–2</span></span></li>
+            <li><span><strong>安全容量非線性：</strong>batch/context 對 compute、memory、throughput 的不同縮放與 11.3–34.0% placement 差異。 <span class="source-ref">§3.2 · PDF p.4 · Fig. 3</span></span></li>
+            <li><span><strong>完整機制：</strong>pressure、lease、path comparison、atomic reservation、local revalidation 與 recovery。 <span class="source-ref">§4 · PDF pp.4–7 · Fig. 4</span></span></li>
+            <li><span><strong>主結果與 ITL trade-off：</strong>兩模型、兩 traces、16 個 load points。 <span class="source-ref">§6.2 · PDF pp.7–8 · Fig. 5</span></span></li>
+            <li><span><strong>邊界與因果：</strong>1P5D–4P2D robustness、4P2D 反例，以及 routing/spill/shape/concurrency、virtual queue/lease ablations。 <span class="source-ref">§6.3、§6.6 · PDF pp.8–11 · Fig. 6、Fig. 9、Table 1</span></span></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>Crossflow: Prefill-Decode Elasticity for Agentic LLM Serving · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>
