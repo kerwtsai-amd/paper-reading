@@ -1,0 +1,960 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="EAServe 論文精讀：從 Encode 階段重構多模態大型語言模型的 EPD 管線控制、GPU 資源配置與 SLO 證據。">
+  <title>EAServe: Encode-Aware Disaggregated Serving for Multimodal Large Language Models｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 50rem;
+      --wide: 68rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      .page-footer { margin-top: 1.5rem; padding: .75rem 0 1rem; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">LLM Systems / Inference Serving</p>
+      <h1>EAServe: Encode-Aware Disaggregated Serving for Multimodal Large Language Models</h1>
+      <div class="paper-dek" data-section-role="thesis">
+        <p>多模態大型語言模型（Multimodal Large Language Model, MLLM）比文字模型多了一個 Encode 階段；它既是所有請求進入 Prefill–Decode 管線的閘門，單次執行卻又小到讓 GPU 大量閒置。EAServe 把這個矛盾改寫成控制問題：離線聯合搜尋 GPU 配置、Encode batch 上限與 Prefill offload 比例，線上則用自適應 micro-batching、確定性分流與動態 SM 分割落實配置。</p>
+        <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>在三種模態與相同 SLO 約束下，EAServe 的最佳 goodput 相對 NVIDIA Dynamo 與 vLLM 分別最高達 4.3× 與 1.7×；但證據仍侷限於 8-GPU 單機、固定模型與主要為合成的 serving workload，尚不能直接外推到跨節點資料中心。 <a class="source-ref" href="#src-main-results">§4.2 · PDF p.8 · Figure 9</a></p>
+      </div>
+      <p class="paper-byline">Kunxiong Zhu、Zhihao Shu、Hangyu Zheng、Minghai Qin、Miao Yin、Gagan Agrawal、Wei Niu</p>
+      <p class="paper-meta">
+        <span>PACT 2026 · arXiv:2609.31551v1</span>
+        <span>2026</span>
+        <span>LLM Systems / Inference Serving</span>
+        <span><time data-summary-field="last-updated" datetime="2026-09-29">2026-09-29 更新</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://arxiv.org/abs/2609.31551" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="EAServe.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議閱讀順序：</strong></p>
+        <ul>
+          <li>先讀「Encode 明明閒著」理解 bottleneck 為何同時是閒置與排隊。</li>
+          <li>再讀「何時放行、Prefill 去哪裡、SM 怎麼分」串起完整控制迴路。</li>
+          <li>最後讀「真正的平衡，還是 Dynamo 飽和」判斷 4.3× 的可解釋範圍。</li>
+        </ul>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">先看懂三段管線：哪些延遲由哪一段決定？</a></li>
+            <li><a href="#problem">Encode 明明閒著，為何整條 EPD 管線仍會塞車？</a></li>
+            <li><a href="#insight">把 Encode 從被動入口改成管線控制閥</a></li>
+            <li><a href="#method">EAServe 如何同時決定何時放行、Prefill 去哪裡，以及 SM 怎麼分？</a></li>
+            <li><a href="#evidence">提升來自真正的平衡，還是只把 Dynamo 推到飽和？</a></li>
+            <li><a href="#critique">這些 4.3× 數字可以外推到多節點資料中心嗎？</a></li>
+            <li><a href="#extensions">下一步應把 Encode-aware 控制推向哪些系統邊界？</a></li>
+            <li><a href="#reference">如何查回每個數字與術語？</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>先看懂三段管線：哪些延遲由哪一段決定？</h2>
+          <p class="lead">理解障礙不在模型結構本身，而在於同一個請求依序穿過三種資源輪廓完全不同的工作。只要先分清 Encode、Prefill、Decode 的輸入、輸出與瓶頸，就能看懂 EAServe 為何把控制權放在第一段。</p>
+
+          <h3>一個多模態請求如何變成第一個 token？</h3>
+          <div class="table-scroll">
+            <table>
+              <caption>EPD 三階段的工作、狀態與主要資源壓力</caption>
+              <thead><tr><th>階段</th><th>做什麼</th><th>交給下一段什麼</th><th>主要系統特性</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Encode</strong></td><td>以 CLIP、ViT 或 Whisper 等 encoder 將影像、影片或音訊轉成 embedding。</td><td>模態 embedding</td><td>短暫、compute-bound 的 forward pass；單一請求通常不足以填滿 GPU。</td></tr>
+                <tr><td><strong>Prefill</strong></td><td>將模態 embedding 與文字 prompt 一次送入 LLM backbone，建立 KV cache 並產生第一個輸出 token。</td><td>KV cache 與首 token</td><td>attention-heavy，成本隨 context length 增長。</td></tr>
+                <tr><td><strong>Decode</strong></td><td>逐 token 自回歸生成其餘答案。</td><td>完整輸出</td><td>長時間、memory-bandwidth-bound；持續讀取 KV cache。</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>把三段拆成獨立 GPU pool，價值在於可以各自擴縮；代價則是 embedding 與 KV cache 必須跨 worker 搬移，而且上游任何失衡都會轉成下游飢餓或排隊。這個因果鏈是後文所有設計選擇的共同起點。 <a class="source-ref" href="#src-pipeline">§2.1 · PDF p.2 · Figure 1</a></p>
+
+          <h3>goodput 為何比單看 throughput 更重要？</h3>
+          <p>Time to First Token（TTFT）從請求到達一路算到首 token，因此包含 Encode、embedding 傳輸、Prefill 與沿途 queueing；Time per Output Token（TPOT）則描述 Decode 中相鄰 token 的平均間隔。EAServe 以 P99 TTFT 上限 \(T_f\) 與 P99 TPOT 上限 \(T_p\) 定義服務水準目標（Service Level Objective, SLO），再計算</p>
+          <div class="formula-block">
+            \[
+              \mathrm{Goodput}=\frac{N_{\mathrm{SLO\text{-}met}}}{T}.
+            \]
+            <p class="formula-block__meaning">\(N_{\mathrm{SLO\text{-}met}}\) 是同時滿足 TTFT 與 TPOT 門檻的請求數，\(T\) 是實驗持續時間；單位是 request/s。吞吐量很高但 tail latency 爆掉的請求不會被算進 goodput。</p>
+          </div>
+          <p><span class="evidence-kind evidence-kind--author-claim evidence-kind--claim">作者主張</span>這個指標把「做得多」與「按時做完」綁在一起，適合比較不同 EPD 配置，而不是讓 upstream flooding 以較高 throughput 掩蓋違約。 <a class="source-ref" href="#src-metrics">§2.1 · PDF p.2 · Equation 1</a></p>
+
+          <h3>SM 分割能隔離什麼，又不能隔離什麼？</h3>
+          <p>Streaming Multiprocessor（SM）是 GPU 執行 kernel 的運算單元。預設 CUDA time-slicing 讓兩個 process 輪流占用全部 SM；libsmctrl 則以 Texture Processing Cluster（TPC）mask 將不同 SM 子集合固定給不同 process，重配時間低於一微秒。這讓 compute-bound 的 Encode 與 local Prefill 可以並行，卻<strong>不會</strong>切開共享的 HBM bandwidth。</p>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>因此 EAServe 只把 Prefill 與 Encode 共置，不把 memory-bandwidth-bound 的 Decode 放進同一張 GPU。這不是實作細節，而是方法可行範圍的硬邊界：SM isolation 不能替代記憶體頻寬 isolation。 <a class="source-ref" href="#src-sm-background">§2.3 · PDF p.3 · Figure 3</a></p>
+          <p class="bridge">有了 EPD、SLO 與 SM/HBM 的最小背景，下一個問題是：為何最閒的 Encode GPU 反而會成為整條管線的瓶頸？</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>Encode 明明閒著，為何整條 EPD 管線仍會塞車？</h2>
+          <p class="lead">這一章要拆掉一個直覺陷阱：GPU utilization 低不代表它不是 bottleneck。Encode 是所有請求的唯一入口；只要每次 forward pass 太小、服務率低於到達率，queue 就會在這張「大部分時間看似閒著」的 GPU 前持續增長。</p>
+
+          <h3>症狀：低利用率、上游排隊、下游飢餓同時發生</h3>
+          <p>既有 EPD 框架 NVIDIA Dynamo 將 Encode 獨立成 service，卻以每請求一次 forward 的 pass-through 方式運作，GPU allocation 也由 operator 手動決定。每次工作太小，無法飽和 compute 或 HBM；但到達率一高，這些短小工作仍不足以維持 line rate，使 Prefill、Decode 等不到 embedding，P99 TTFT 便累積成長。 <a class="source-ref" href="#src-bottleneck">§2.2 · PDF p.3 · Figure 2</a></p>
+          <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>在 LLaVA-v1.6-34B 的動機實驗中，把 Dynamo 從單請求 Encode 改為固定 \(B=8\) micro-batch，throughput 由 0.75 升至 1.09 req/s，mean TTFT 從 367.4 降至 112.1 秒；mean TPOT 卻由 179 惡化到 411 ms。 <a class="source-ref" href="#src-bottleneck">§2.2 · PDF p.3 · Table 1</a></p>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>這個反例很關鍵：單獨加速 Encode 會一次把更多工作灌入下游，若 Prefill/Decode 配置沒有同步調整，upstream queue 只是換成 downstream queue。故問題不是「batch 越大越好」，而是整條管線的 admission rate 必須與各段 capacity 相配。</p>
+
+          <h3>根因：三個控制量彼此耦合</h3>
+          <ul>
+            <li><strong>何時放行：</strong>batch 太小浪費 GPU；等太久又直接增加 TTFT。</li>
+            <li><strong>Prefill 去哪裡：</strong>部分請求可在 Encode GPU 的剩餘算力上做 local Prefill，其餘送往 remote Prefill；比例錯了就讓其中一條 path 排隊。</li>
+            <li><strong>GPU 怎麼分：</strong>Encode batch 越大，需要越多 SM；local Prefill 能使用的 SM 因此隨 batch 變動。</li>
+          </ul>
+          <p>改變任一項都會改變另外兩項的有效值；再加上 \((E,P,D)\) 三個 pool 的 GPU 數量，8-GPU 測試機就已有數百個候選配置。既有文字 PD 系統沒有 Encode 維度，既有 EPD 系統又不聯合調整 batch bound 與 offload ratio，這正是最接近 baseline 的缺口。 <a class="source-ref" href="#src-has">§3.1 · PDF p.4 · Algorithm 1</a></p>
+
+          <div class="statement statement--analysis" data-kind="analysis">
+            <span class="statement__label">分析</span>
+            <p>EAServe 真正導出的三項需求是：入口 policy 必須隨負載調整、閒置 Encode compute 要能安全轉給 Prefill、以及配置搜尋必須同時理解 stage capacity 與非單調的 runtime interaction。</p>
+          </div>
+          <p class="bridge">一旦把 Encode 看成「控制流量的閘門」而不是純粹的前處理 service，整個設計便能用一個具體的放水模型串起來。</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>把 Encode 從被動入口改成管線控制閥</h2>
+          <p class="lead">最小心智模型是一座三段式水庫。Encode 不只是第一座水池；它還決定何時開閘、下一段走哪一條渠道，以及要把多少幫浦能力留給自己。</p>
+
+          <h3>用八個請求走一次完整控制迴路</h3>
+          <p>假設 8 個多模態請求陸續到達，而配置層已選定 Encode batch 上限 \(B=8\) 與 remote-Prefill 比例 \(s=0.7\)。第一個控制問題是<strong>是否繼續等下一個請求</strong>；若新的 inter-arrival gap 已大於依負載推導的 threshold，就算 batch 尚未滿也立刻 dispatch，避免 TTFT 被固定 timeout 綁死。</p>
+          <p>Encode 完成後，deficit counter 讓每個 request 穩定地走 local 或 remote Prefill，使累積 remote 比例貼近 \(s\)，而不是靠隨機抽樣產生短期 burst。最後，這個 micro-batch 的實際大小決定 Encode 至少需要多少 SM；剩餘 SM 才交給 local Prefill。三個決策依序回答了「何時、去哪、怎麼分」。</p>
+
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-04-p04-overview.png"><img src="assets/images/fig-04-p04-overview.png" alt="EAServe 架構：HAS 選擇 allocation、batch bound 與 offload ratio，runtime 依序執行 micro-batching、vision tower、deficit routing、local 或 remote Prefill，再進入 Decode。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：先沿著 request 從左上往下走；HAS 給出三個控制量，online runtime 才把它們轉成 dispatch、routing 與 SM partition，綠線則是 Encode GPU 上的 local Prefill 路徑。</span></figcaption>
+          </figure>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>類比到此為止：真實系統不是連續水流，而是不同模態、長度與 arrival pattern 的離散請求；local/remote Prefill 還有模型 sharding、NIXL transfer 與 queueing。EAServe 因此不能只用流量公式決定全部配置，而需要「capacity pruning + end-to-end measurement」的兩段式搜尋。 <a class="source-ref" href="#src-overview">§3 · PDF p.4 · Figure 4</a></p>
+          <p class="bridge">接下來把這個心智模型逐項形式化，並追蹤每個控制量如何在離線與線上之間交接。</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>EAServe 如何同時決定何時放行、Prefill 去哪裡，以及 SM 怎麼分？</h2>
+          <p class="lead">方法的難點是跨時間尺度：deployment 前要選一個可行配置，request 到達後又要以微秒到毫秒尺度守住該配置。EAServe 讓 Hybrid Auto Selection（HAS）負責前者，三個 encode-aware runtime mechanism 負責後者。</p>
+
+          <h3>第一步：HAS 先砍掉必然失衡的 allocation，再量測非單調區域</h3>
+          <p>HAS 的輸入是 GPU budget \(G\)、模型 \(M\)、workload \(D\) 與目標到達率 \(\Lambda\)，輸出 deployment configuration</p>
+          <div class="formula-block">
+            \[
+              PC^*=\arg\max_{PC=(\mathrm{alloc},B,s)}\mathrm{Throughput}(PC),
+            \]
+            <p class="formula-block__meaning">\(\mathrm{alloc}\) 是 Encode/Prefill/Decode 的 GPU 分配，\(B\) 是 Encode batch 上限，\(s\) 是送往 remote Prefill 的目標比例。若 throughput 平手，依 mean TTFT、mean TPOT 依序決勝。</p>
+          </div>
+          <p>Stage 1 將三段放到互不重疊的 GPU subset 上平行 profiling，得到 Encode saturation capacity \(C_E\) 與單一 Prefill/Decode worker capacity \(C_P,C_D\)。每個 allocation 都以最忙階段的 utilization 評分：</p>
+          <div class="formula-block">
+            \[
+              \rho_\sigma=\frac{\Lambda/n_\sigma}{C_\sigma},\qquad
+              \mathrm{score}(a)=\max(\rho_E,\rho_P,\rho_D).
+            \]
+            <p class="formula-block__meaning">\(n_\sigma\) 是該 stage 的 worker 數。若任何 \(\rho_\sigma\ge 1\)，目標到達率已超過該段容量，無論 \(B,s\) 如何微調都不值得部署。HAS 再保留 score 不超過最佳值 1.2× 的 allocation，取前 \(K=3\) 進 Stage 2。</p>
+          </div>
+          <p>Stage 2 以 Tree-structured Parzen Estimator（TPE）對剩餘的 categorical allocation、discrete \(B\) 與 continuous \(s\) 做 end-to-end trial；最多 30 次，top-3 throughput spread 小於 1% 或連續五輪無改善便停止。 <a class="source-ref" href="#src-has">§3.1 · PDF pp.4–5 · Algorithm 1 · Equations 2–4</a></p>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>這個分工利用了問題的非對稱性：allocation 的一階瓶頸可由 per-stage capacity 近似判斷；\((B,s)\) 對 queueing、interference 與 latency 的影響卻非單調，交給實測比硬寫 analytical model 更可靠。代價是 workload 或 target rate 改變時需要重新搜尋。</p>
+
+          <h3>第二步：Poisson-gap rule 決定何時 dispatch</h3>
+          <p>每個 Encode worker 的目標到達率是 \(\lambda=\Lambda/n_E\)。若到達視為 Poisson process，inter-arrival gap \(X\) 服從 exponential distribution；要讓一個上限為 \(B\) 的 batch 以機率 \(p\) 在 gap threshold \(g\) 內填滿，論文令</p>
+          <div class="formula-block">
+            \[
+              \Pr\!\left(\max\{X_1,\ldots,X_{B-1}\}\le g\right)
+              =(1-e^{-\lambda g})^{B-1}=p,
+              \qquad
+              g=\frac{-\ln\!\left(1-p^{1/(B-1)}\right)}{\lambda}.
+            \]
+            <p class="formula-block__meaning">\(g\propto1/\lambda\)：高負載時 threshold 自動縮短，低負載時放寬。論文固定 \(p=0.6\)，並在 batch full、idle gap 超過 \(g\)、或 batch age 超過 1000 ms 任一條件成立時 dispatch。</p>
+          </div>
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-05-p05-poisson-gap.png"><img src="assets/images/fig-05-p05-poisson-gap.png" alt="四種 micro-batch dispatch policy 對同一串 Poisson arrivals 的分組差異：固定 batch、短 timeout、長 timeout與 Poisson-gap rule。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 5</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：比較每一列紅色 dispatch 箭頭；固定或手調 timeout 不是過早切碎 batch，就是跨過 burst 邊界等待，最下列的 gap rule 則隨 inter-arrival gap 自然收束。</span></figcaption>
+          </figure>
+          <p><span class="evidence-kind evidence-kind--author-claim evidence-kind--claim">作者主張</span>這個 policy 每次 arrival 只做 \(O(1)\) 工作，timer overhead 低於一微秒；hard age cap 則避免「每個請求都剛好趕在 \(g\) 前到達」造成無界等待。 <a class="source-ref" href="#src-gap">§3.2 · PDF pp.5–6 · Equation 5 · Figure 5</a></p>
+
+          <h3>第三步：deficit counter 把 \(s\) 變成穩定可量測的 routing ratio</h3>
+          <p>若每個 request 以機率 \(s\) 隨機走 remote path，短時間內可能連續選到同一路徑，令 TPE 看到的 latency 充滿 routing noise。EAServe 改用一個 accumulator \(d\)：每個 request 先令 \(d\leftarrow d+s\)；若 \(d\ge1\)，送 remote 並令 \(d\leftarrow d-1\)，否則走 local。</p>
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-06-p06-deficit-router.png"><img src="assets/images/fig-06-p06-deficit-router.png" alt="offload ratio 0.7 的 deficit-counter routing 範例，20 個 request 被穩定分配到 local 與 remote Prefill path。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 6</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：中列數字是 accumulator 的增量與 wrap；上列 local request 與下列 remote request 的間距受控，因此任意 prefix 的 remote 數只會偏離目標 \(ns\) 不到一個 request。</span></figcaption>
+          </figure>
+          <p>經過 \(n\) 個 request，remote count 與 \(ns\) 的誤差小於 1；連續 remote 與 local decision 的最大長度分別受 \(\lceil1/(1-s)\rceil\) 與 \(\lceil1/s\rceil\) 約束。Encode 完成後，同一 Prefill destination 的 embeddings 還會包成 contiguous tensor，每個 destination 只做一次 NIXL transfer，而不是每個 request 各送一次。 <a class="source-ref" href="#src-routing">§3.3 · PDF p.6 · Figure 6</a></p>
+
+          <h3>第四步：依實際 batch size 動態重切 SM</h3>
+          <p>startup 時，系統在五個 SM allocation level 上量測各種 Encode batch size，記錄每個 share 能守住 Encode latency 門檻的最大 \(B\)。runtime 每個 micro-batch 查表，給 Encode「足夠但最小」的 SM share，其餘交給 co-resident local Prefill；若 HAS 選 \(s=1\)，就不啟用 local Prefill，也不付 partition overhead。</p>
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-08-p07-dynamic-sm.png"><img src="assets/images/fig-08-p07-dynamic-sm.png" alt="dynamic SM partitioning：profiling table 將 Encode SM share 對映到最大 batch size，runtime 依 micro-batch 大小分配剩餘 SM 給 local Prefill。"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 8</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：左表是一次性 profiling 的查表結果；右側三個 batch 分別取得不同 Encode share，綠色 local-Prefill SM 只占用 Encode latency knee 之外的餘量。</span></figcaption>
+          </figure>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>四步形成閉環：HAS 選出 \((\mathrm{alloc},B,s)\)，gap rule 讓實際 batch 接近工作負載節奏，deficit router 讓實際 path ratio 接近 \(s\)，SM table 再使不同實際 batch 都守住 Encode QoS。若其中一項不穩定，offline search 量到的 configuration quality 就無法在 production runtime 重現。 <a class="source-ref" href="#src-sm-method">§3.4 · PDF p.7 · Figures 7–8</a></p>
+          <p class="bridge">方法因果鏈已完整；現在要檢驗的是，每個增益是否真的由相應機制產生，以及比較是否在公平條件下成立。</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>提升來自真正的平衡，還是只把 Dynamo 推到飽和？</h2>
+          <p class="lead">最大的判讀障礙是「最高 4.3×」同時混合了兩件事：EAServe 確實改善了 stage balance，但 Dynamo 也在部分測點超過 Encode capacity、queue 隨時間發散。以下把 setup、metric、observation、可支持結論與 caveat 綁在同一個 claim-test unit。</p>
+
+          <h3>共同實驗地基</h3>
+          <p>主測試機為雙 AMD EPYC 9254、1 TB DRAM 與 8× NVIDIA RTX 6000 Ada 48 GB（PCIe，CUDA 13.0，Ubuntu 22.04）；另以 8× A100 SXM4 80 GB（NVLink）驗證 cross-platform trend。模型涵蓋 LLaVA-v1.6-34B image、Qwen2.5-VL-32B video、Ultravox-v0.6-27B audio；image/video 使用 vLLM 的 synthetic multimodal generator，audio 使用 LibriSpeech speech sample 搭配 random text prompt。 <a class="source-ref" href="#src-setup">§4.1 · PDF p.7 · Tables 3–4</a></p>
+          <p>主比較對 1–5 req/s 的 Poisson arrivals 各處理 500 個 requests，報告三次獨立 run 的中位數。vLLM 0.14.1、Dynamo 0.9.0 與 EAServe 都使用相同 8-GPU budget；Dynamo 由可行 allocations 中手動 sweep 最佳 goodput，HAS 則聯合搜尋 allocation、\(B\)、\(s\)。五組 SLO tier 以 P99 TTFT/TPOT 定義，最嚴格 S1 是 frontier，不代表所有 rate 下都可達。 <a class="source-ref" href="#src-setup">§4.1 · PDF pp.7–8</a></p>
+
+          <div class="claim-test" id="src-main-results">
+            <h3>Claim 1：encode-aware 控制在三種模態都提高 SLO-compliant rate</h3>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>在 moderate S3 tier，EAServe 的 image/video/audio goodput 分別為 1.93、1.90、4.17 req/s；vLLM 為 1.11、1.32、2.77，Dynamo 為 0.95、0.95、0.98。跨全部 tier 的最佳倍率是相對 Dynamo 4.3×、相對 vLLM 1.7×。 <a class="source-ref" href="#src-main-results">§4.2 · PDF p.8 · Figure 9</a></p>
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-09-p08-goodput.png"><img src="assets/images/fig-09-p08-goodput.png" alt="LLaVA image、Qwen video、Ultravox audio 在五個 SLO tier 的 goodput，比較 Dynamo、vLLM、無 local Prefill 的 EAServe 與 HAS-tuned EAServe。"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 9</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：先比較紫色 s=1 與綠色 HAS-tuned，兩者差距顯示 local Prefill 的模態依賴性；video 幾乎重疊，因為 HAS 判斷 encoder 已使用超過 90% SM，選擇不共置。</span></figcaption>
+            </figure>
+            <p><strong>可支持結論：</strong>stage allocation 與 adaptive batching 是三種模態共同的主要來源；local Prefill 對 image/audio 有額外幫助，對重型 video encoder 則被 HAS 關閉。<strong>限制：</strong>倍率取自特定 tier 的 best case；不能解讀成所有 workload 的平均加速。</p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim 2：提升不只出現在 RTX，也保留在 A100；但大倍率部分來自 baseline overload</h3>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>在 \(\Lambda=2\) req/s，image 的 P99 TTFT 由 Dynamo 233.8 s 降到 EAServe 10.8 s，video 由 144.8 s 降到 18.0 s；image 的 P99 TPOT 由 764 降到 72 ms，audio 由 869 降到 49 ms。作者解釋 Dynamo 的 per-request Encode 已低於 offered rate，queue 於 500-request run 中單調增長。 <a class="source-ref" href="#src-latency">§4.2 · PDF p.8 · Figure 10</a></p>
+            <p>在 LLaVA、\(\Lambda=5\) req/s 的另一次比較中，EAServe 在 RTX 6000 Ada 為 1.95 req/s、A100 SXM4 為 4.91 req/s；兩個平台都超過 EPDServe 與 HydraInfer，且 P99 TTFT/TPOT 同樣較低。 <a class="source-ref" href="#src-cross-platform">§4.2 · PDF p.9 · Table 5</a></p>
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/table-05-p09-cross-platform.png"><img src="assets/images/table-05-p09-cross-platform.png" alt="EAServe、EPDServe 與 HydraInfer 在 RTX 6000 Ada PCIe 與 A100 SXM4 NVLink 八卡平台上的 throughput、mean/P99 TTFT 與 TPOT。"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Table 5</strong><span class="reading-guide" data-caption-field="reading-guide">導讀：跨平台排序一致，說明優勢不只存在於 PCIe RTX；但每個 system 都各自選最佳配置，且只測 LLaVA image workload，不能推論所有模型的比例都相同。</span></figcaption>
+            </figure>
+            <p><strong>可支持結論：</strong>消除 Encode overload 確實阻止 queue 發散，cross-platform ordering 也具一致性。<strong>限制：</strong>當 baseline 位於 unstable operating point 時，tail-latency ratio 會隨 run 長度放大；最可信的讀法是「EAServe 把 operating point 拉回容量內」，而非把 20× latency ratio 視為穩態常數。</p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim 3：dynamic SM split 與 HAS search 各自有獨立證據</h3>
+            <p>SM ablation 固定 allocation 2E(TP1)+1P(TP2)+1D(TP4)、\(B=10\)、\(s=0.55\)、Ultravox-27B 與 \(\Lambda=10\) req/s，只改 sharing policy：</p>
+            <div class="table-scroll">
+              <table>
+                <caption>SM partitioning ablation</caption>
+                <thead><tr><th>SM 配置</th><th>Throughput (req/s)</th><th>P99 TTFT (s)</th><th>P99 TPOT (ms)</th></tr></thead>
+                <tbody>
+                  <tr><td>No partition / time-slicing</td><td>4.78</td><td>43.7</td><td>236</td></tr>
+                  <tr><td>Static 50/50</td><td>5.07</td><td>40.7</td><td>203</td></tr>
+                  <tr><td><strong>Dynamic</strong></td><td><strong>5.21</strong></td><td><strong>36.7</strong></td><td><strong>167</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>相對 time-slicing，dynamic partition throughput 高 9%，P99 TTFT 低 19%，P99 TPOT 低 42%；相對 static 50/50 仍有 3%、11%、22% 的改善。 <a class="source-ref" href="#src-sm-ablation">§4.4 · PDF p.10 · Table 6</a></p>
+            <p>HAS 在同樣 30-trial budget 下，於 image/video/audio 分別在 1.7/1.3/1.7 小時達到「三種方法所有觀測值中的 99th-percentile throughput」；Random 三種都未達標，Coordinate 在 image/video 未達標。Stage 1 於 \(\Lambda=5\) req/s 將 7 個 allocation 剪到 3 個。 <a class="source-ref" href="#src-has-efficiency">§4.3 · PDF pp.9–10 · Figure 12</a></p>
+            <p><strong>可支持結論：</strong>dynamic SM split 不是只有架構直覺，HAS 也比無資訊 search 更快找到高-throughput region。<strong>限制：</strong>SM ablation 只在一個 audio 配置；HAS 的「99th percentile」以三種有限搜尋法的 best-observed value 為 reference，不是全域 optimum 的證明。</p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim 4：Poisson 假設遇到 burst 時，throughput 尚穩但 tail latency 先受傷</h3>
+            <div class="table-scroll">
+              <table>
+                <caption>LLaVA-34B、2 req/s 的 arrival-pattern sensitivity</caption>
+                <thead><tr><th>Inter-arrival CV</th><th>Throughput (req/s)</th><th>Mean TTFT (s)</th><th>P99 TTFT (s)</th><th>P99 TPOT (ms)</th></tr></thead>
+                <tbody>
+                  <tr><td>0.5（較規律）</td><td>1.77</td><td>4.16</td><td>6.67</td><td>71.4</td></tr>
+                  <tr><td>1（Poisson）</td><td>1.77</td><td>4.98</td><td>10.19</td><td>71.5</td></tr>
+                  <tr><td>2（較 bursty）</td><td>1.71</td><td>6.77</td><td>16.52</td><td>71.0</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span>CV=2 時 throughput 只比 Poisson 低約 3%，但 P99 TTFT 高 62%；TPOT 幾乎不變，符合 burst 主要累積在 admission queue、而非 Decode token loop 的機制。 <a class="source-ref" href="#src-arrival">§4.5 · PDF p.10 · Table 7</a></p>
+            <p><strong>可支持結論：</strong>hard-age safety valve 與 intra-burst batching 避免系統完全崩潰。<strong>限制：</strong>只測 Gamma CV=0.5/2 與單一 LLaVA rate，尚未證明 production traces、長尾 burst 或 nonstationary rate 下仍穩健。</p>
+          </div>
+
+          <p class="bridge">證據支持「把 Encode 變成控制點」的核心因果鏈，但也清楚劃出一條線：目前證明的是單機、有限 workload 與特定 GPU sharing primitive。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>這些 4.3× 數字可以外推到多節點資料中心嗎？</h2>
+          <p class="lead">不能直接外推。論文把單機內 EPD imbalance 拆得很乾淨，也提供 cross-platform、search、SM ablation 與 burst sensitivity；但它尚未把同一套控制面放進跨節點網路、非平穩流量與不同 GPU runtime 中。</p>
+
+          <h3>最有說服力的地方</h3>
+          <ul>
+            <li><strong>問題與機制對得上：</strong>動機實驗先證明「單獨 micro-batching 會 flood downstream」，方法才聯合控制 batch、routing 與 SM share，避免把 feature list 當貢獻。</li>
+            <li><strong>比較預算透明：</strong>vLLM、Dynamo 與 EAServe 使用相同 8-GPU budget；Dynamo sweep allocation，HAS 搜相同 allocation 再加入 \(B,s\)，至少把主要資源預算對齊。</li>
+            <li><strong>不把一個 policy 強套所有模態：</strong>video encoder 已占用超過 90% SM 時，HAS 選 \(s=1\) 關閉 local Prefill；這比宣稱 co-location 永遠有利更可信。</li>
+            <li><strong>關鍵假設有 sensitivity check：</strong>Poisson arrival 的偏離主要反映在 P99 TTFT，而不是被 throughput average 掩蓋。</li>
+          </ul>
+
+          <h3>六個會限制外部效度的邊界</h3>
+          <div class="table-scroll">
+            <table>
+              <caption>證據沒有覆蓋的部署問題</caption>
+              <thead><tr><th>邊界</th><th>論文目前做到什麼</th><th>對結論的影響</th></tr></thead>
+              <tbody>
+                <tr><td>多節點與網路</td><td>只測 8-GPU 單機 PCIe/NVLink；跨節點 embedding、KV transfer 明列 future work。</td><td>NIC contention、RDMA transport、rack topology 可能改寫最佳 \((E,P,D,B,s)\)。</td></tr>
+                <tr><td>workload realism</td><td>image/video 是 synthetic input shape 與 random prompt；audio 只有 speech sample 為真實資料。</td><td>prefix reuse、prompt/output-length correlation、modality burst 可能未被重現。</td></tr>
+                <tr><td>統計不確定性</td><td>500 requests、三次 run 的中位數；未報 error bar、confidence interval 或顯著性。</td><td>小幅差距與 trial-to-trial variance 無法量化；3% throughput ablation 尤其需要誤差範圍。</td></tr>
+                <tr><td>baseline saturation</td><td>Dynamo 在部分 arrival rate 的 Encode queue 發散。</td><td>大幅 tail-latency ratio 同時反映 method gain 與 unstable baseline，不能當穩態常數。</td></tr>
+                <tr><td>可攜性</td><td>dynamic sharing 依賴 NVIDIA TPC mask 與 libsmctrl；HBM bandwidth 仍共享。</td><td>對其他 vendor/runtime、MIG 或不同 kernel mix 的結果尚未知。</td></tr>
+                <tr><td>operational cost</td><td>HAS 每個 model/workload/rate 離線搜尋，99th percentile 仍需約 1.3–1.7 小時。</td><td>流量快速漂移時，搜尋結果可能過期；論文未計入 energy、dollar cost 或 reconfiguration amortization。</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span>此外，deficit routing、NIXL envelope transfer 與 adaptive micro-batching 並沒有完整 factorial ablation；Figure 9 的 \(s=1\) 對比能隔離 local Prefill，但不能把 batching、allocation search 與 transfer aggregation 的個別比例完全拆開。這不否定 end-to-end result，卻限制了讀者對每個 component ROI 的判斷。</p>
+          <p><span class="evidence-kind evidence-kind--author-claim evidence-kind--claim">作者主張</span>論文自己將 multi-node datacenter validation、跨節點 transfer、千級候選配置與 online arrival-rate estimation 列為後續方向。 <a class="source-ref" href="#src-conclusion">§4.1、§6 · PDF pp.7, 11</a></p>
+
+          <div class="statement statement--analysis" data-kind="analysis">
+            <span class="statement__label">分析</span>
+            <p>最穩健的結論不是「EAServe 普遍快 4.3×」，而是「當 Encode 是 EPD admission bottleneck 時，聯合控制 stage allocation、batch formation、routing 與 compute isolation，比把 Encode 當 pass-through 更容易維持可行 operating point」。</p>
+          </div>
+          <p class="bridge">這個較窄、但更可重用的結論，也指出最值得投入的下一輪實驗。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>下一步應把 Encode-aware 控制推向哪些系統邊界？</h2>
+          <p class="lead">延伸重點不應只是再加一個 heuristic，而是把論文尚未觀測的 network、nonstationarity 與 portability 變成 HAS 能看見的 state 與 constraint。</p>
+
+          <h3>四個具體後續實驗</h3>
+          <ol>
+            <li><span class="evidence-kind evidence-kind--speculation">推測</span><strong>用線上 estimator 取代固定 \(\lambda\)：</strong>比較 sliding window、EWMA 與 change-point detector，讓 gap threshold 在 diurnal drift 與 burst regime 切換時更新；同時量測 estimator lag 對 P99 TTFT 的影響。</li>
+            <li><span class="evidence-kind evidence-kind--speculation">推測</span><strong>建立 network-aware HAS：</strong>把 embedding/KV bytes、NIC/PCIe/NVLink bandwidth、跨 rack hop 與 NIXL queue 納入 Stage 1 capacity profile，檢查原本「local Prefill」的優勢在跨節點後是否轉成 transfer bottleneck。</li>
+            <li><span class="evidence-kind evidence-kind--speculation">推測</span><strong>抽象化 GPU partition backend：</strong>在不同 GPU vendor 與 runtime 上以同一個「minimum safe compute share」介面實作，驗證 latency knee 是否穩定存在，以及共享 HBM 時何種 workload pair 才能安全共置。</li>
+            <li><span class="evidence-kind evidence-kind--analysis">分析</span><strong>做完整 factorial ablation 與 trace replay：</strong>逐一開關 gap batching、deficit routing、envelope transfer、SM partition 與 allocation pruning，並以 production-like multimodal traces 報告 mean/P95/P99、能耗與 dollar goodput。</li>
+          </ol>
+
+          <h3>可重用的設計原則</h3>
+          <div class="takeaway-list">
+            <div class="takeaway-item"><p class="takeaway-label">入口即控制面</p><p>pipeline entry 不只是前處理 stage；它最早看見 arrival process，也最適合做 admission、batching 與 downstream routing。</p></div>
+            <div class="takeaway-item"><p class="takeaway-label">先排除不可能，再量測交互作用</p><p>可單調近似的 capacity bottleneck 交給 analytical pruning，難以建模的 interference 與 queueing 留給 end-to-end search。</p></div>
+            <div class="takeaway-item"><p class="takeaway-label">讓搜尋參數在 runtime 可重現</p><p>若 offline optimizer 選了 \(s\)，runtime 就必須限制短期 routing deviation；否則 search 量到的是噪音，不是配置本身。</p></div>
+          </div>
+
+          <h3>研究討論題</h3>
+          <ol>
+            <li>當 arrival rate、modality mix 與 prompt length 同時漂移時，應重跑 HAS、做 model-predictive control，還是在線 bandit search？</li>
+            <li>跨節點後，local Prefill 的價值主要來自少一次 network hop、回收 Encode SM，還是減少 remote queue；如何用實驗拆開？</li>
+            <li>若 GPU 能硬體隔離 compute 與 HBM bandwidth，最佳 co-location 是否會把 Decode 重新納入，從 E+P 擴成 E+P+D multiplexing？</li>
+            <li>goodput 只看 SLO compliance；若加入 energy、成本與品質，HAS 的 objective 應採 Pareto frontier、weighted utility，還是風險約束？</li>
+          </ol>
+          <p class="bridge">最後的 reference 將所有術語、元資料與關鍵數字對回原論文位置，方便複查與簡報引用。</p>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>如何查回每個數字與術語？</h2>
+
+          <h3>書目與分類</h3>
+          <dl class="term-list">
+            <dt>正式標題</dt><dd>EAServe: Encode-Aware Disaggregated Serving for Multimodal Large Language Models</dd>
+            <dt>作者</dt><dd>Kunxiong Zhu、Zhihao Shu、Hangyu Zheng、Minghai Qin、Miao Yin、Gagan Agrawal、Wei Niu</dd>
+            <dt>發表</dt><dd>International Conference on Parallel Architectures and Compilation Techniques（PACT ’26），2026</dd>
+            <dt>識別碼</dt><dd>arXiv:2609.31551v1；DOI: 10.1145/3838684.3846886</dd>
+            <dt>分類</dt><dd>LLM Systems / Inference Serving。主要貢獻是 EPD serving 的配置搜尋、admission/routing 與 GPU sharing，而非新模型架構或傳輸協定。</dd>
+            <dt>頁數</dt><dd><span data-summary-field="pdf-page-count">共 13 頁</span></dd>
+          </dl>
+
+          <h3>術語表</h3>
+          <dl class="term-list">
+            <dt>EPD</dt><dd>Encode–Prefill–Decode，多模態生成服務的三階段 pipeline。</dd>
+            <dt>TTFT</dt><dd>Time to First Token，從 request arrival 到第一個 output token 的時間。</dd>
+            <dt>TPOT</dt><dd>Time per Output Token，Decode 期間相鄰 token 的平均間隔。</dd>
+            <dt>Goodput</dt><dd>單位時間內同時滿足 TTFT 與 TPOT SLO 的 request 數。</dd>
+            <dt>HAS</dt><dd>Hybrid Auto Selection；先以 per-stage capacity pruning allocation，再用 TPE 量測 \((B,s)\) 的非單調 interaction。</dd>
+            <dt>Offload ratio \(s\)</dt><dd>送往 remote Prefill 的目標 request 比例；\(1-s\) 留在 Encode GPU 上的 local Prefill。</dd>
+            <dt>TPC mask</dt><dd>Texture Processing Cluster mask；libsmctrl 用來將不同 SM subset 空間隔離給不同 process。</dd>
+            <dt>NIXL</dt><dd>NVIDIA Inference Xfer Library；論文用於搬移 modality embedding 與 KV cache。</dd>
+          </dl>
+
+          <h3>關鍵證據索引</h3>
+          <ol class="source-index">
+            <li id="src-pipeline"><span>EPD pipeline 與三段 resource profile：§2.1，PDF p.2，Figure 1。</span></li>
+            <li id="src-metrics"><span>TTFT、TPOT、goodput 定義：§2.1，PDF p.2，Equation 1。</span></li>
+            <li id="src-bottleneck"><span>Encode underutilization 與固定 micro-batch 反例：§2.2，PDF p.3，Figure 2、Table 1。</span></li>
+            <li id="src-sm-background"><span>time-slicing、MPS、MIG、libsmctrl 與 HBM 限制：§2.3，PDF p.3，Figure 3。</span></li>
+            <li id="src-overview"><span>EAServe end-to-end 架構：§3，PDF p.4，Figure 4。</span></li>
+            <li id="src-has"><span>HAS profiling、pruning 與 TPE refinement：§3.1，PDF pp.4–5，Algorithm 1、Equations 2–4。</span></li>
+            <li id="src-gap"><span>Poisson-gap dispatch：§3.2，PDF pp.5–6，Equation 5、Figure 5。</span></li>
+            <li id="src-routing"><span>deficit-counter routing 與 embedding envelope：§3.3，PDF p.6，Figure 6。</span></li>
+            <li id="src-sm-method"><span>dynamic SM lookup 與 runtime split：§3.4，PDF p.7，Figures 7–8。</span></li>
+            <li id="src-setup"><span>模型、硬體、baseline、SLO 與 run protocol：§4.1，PDF pp.7–8，Tables 3–4。</span></li>
+            <li id="src-latency"><span>arrival-rate throughput/latency curves：§4.2，PDF p.8，Figure 10。</span></li>
+            <li id="src-cross-platform"><span>RTX 6000 Ada 與 A100 比較：§4.2，PDF p.9，Table 5。</span></li>
+            <li id="src-has-efficiency"><span>HAS search efficiency：§4.3，PDF pp.9–10，Figure 12。</span></li>
+            <li id="src-sm-ablation"><span>dynamic/static/no-partition ablation：§4.4，PDF p.10，Table 6。</span></li>
+            <li id="src-arrival"><span>Gamma/Poisson arrival sensitivity：§4.5，PDF p.10，Table 7。</span></li>
+            <li id="src-conclusion"><span>作者明列的 multi-node、search scale 與 online rate estimation future work：§6，PDF p.11。</span></li>
+          </ol>
+
+          <p class="muted">原論文：<a href="https://arxiv.org/abs/2609.31551" target="_blank" rel="noopener noreferrer">arXiv landing page ↗</a> · <a href="https://doi.org/10.1145/3838684.3846886" target="_blank" rel="noopener noreferrer">ACM DOI ↗</a> · <a href="EAServe.pdf">開啟本地 PDF</a></p>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>EAServe: Encode-Aware Disaggregated Serving for Multimodal Large Language Models · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>
