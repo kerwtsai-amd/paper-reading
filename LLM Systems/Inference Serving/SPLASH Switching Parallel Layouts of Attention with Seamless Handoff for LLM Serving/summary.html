@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="zh-Hant" data-template-id="paper-reading-summary" data-template-version="2.1.0">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="paper-summary-template" content="reader-first-article-v2">
+  <meta name="description" content="SPLASH 論文精讀：拆解 TP、CP、DP-attention 與 DOP 的 ownership 模型、不中斷服務的 layer-wise 切換，以及 B200、H200、DCU 上的效能與邊界。">
+  <title>SPLASH: Switching Parallel Layouts of Attention with Seamless Handoff for LLM Serving｜論文精讀</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&amp;family=Open+Sans:wght@400;500;600;700;800&amp;display=swap">
+
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #24272d;
+      --heading: #111319;
+      --muted: #626873;
+      --faint: #8d929c;
+      --line: #dedfe3;
+      --soft-line: #ececef;
+      --wash: #f7f7f5;
+      --accent: #245f9e;
+      --accent-soft: #edf4fb;
+      --claim: #6f4b87;
+      --fact: #26734a;
+      --analysis: #2f668f;
+      --speculation: #98601a;
+      --measure: 50rem;
+      --wide: 68rem;
+      --sans: "Open Sans", "Noto Sans TC", sans-serif;
+      --serif: "Open Sans", "Noto Sans TC", sans-serif;
+      --mono: "Open Sans", "Noto Sans TC", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 2rem;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.82;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: #dbe9f7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: .2em;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover { text-decoration-thickness: 2px; }
+
+    :focus-visible {
+      outline: 3px solid rgb(36 95 158 / 32%);
+      outline-offset: 3px;
+    }
+
+    img { max-width: 100%; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: .75rem;
+      left: .75rem;
+      transform: translateY(-180%);
+      padding: .45rem .7rem;
+      color: #fff;
+      background: var(--heading);
+      text-decoration: none;
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .site-masthead {
+      width: min(calc(100% - 2rem), var(--wide));
+      margin: 0 auto;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .site-masthead a {
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .paper-header,
+    .reading-column,
+    .page-footer {
+      width: min(calc(100% - 2rem), var(--measure));
+      margin-inline: auto;
+    }
+
+    .paper-header { padding: clamp(2.5rem, 5vw, 3.8rem) 0 2.3rem; }
+
+    .breadcrumb {
+      margin: 0 0 1.1rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3, h4 {
+      color: var(--heading);
+      font-weight: 700;
+      letter-spacing: -.025em;
+      line-height: 1.28;
+      text-wrap: balance;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2.15rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.06;
+      overflow-wrap: anywhere;
+    }
+
+    .paper-dek {
+      margin: 1.8rem 0 0;
+      color: #30343c;
+      font-family: var(--serif);
+      font-size: clamp(1.18rem, 2.4vw, 1.42rem);
+      line-height: 1.7;
+    }
+
+    .paper-dek > :last-child { margin-bottom: 0; }
+    .paper-dek .statement { margin: 1rem 0 0; font-family: var(--sans); font-size: .96rem; }
+
+    .paper-byline {
+      margin: 1.8rem 0 .2rem;
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    .paper-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .2rem .55rem;
+      margin: .2rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .paper-meta > span:not(:last-child)::after {
+      margin-left: .55rem;
+      color: var(--line);
+      content: "·";
+    }
+
+    .paper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem 1.1rem;
+      margin: 1.35rem 0 0;
+      font-size: .88rem;
+    }
+
+    .paper-links a { font-weight: 700; }
+
+    .reading-route {
+      margin: .5rem 0 2.2rem;
+      padding: 1.15rem 0;
+      border-block: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .reading-route p,
+    .reading-route ul { margin: 0; }
+
+    .reading-route li + li { margin-top: .25rem; }
+
+    .article-toc {
+      margin: 0 0 3.5rem;
+      border-bottom: 1px solid var(--soft-line);
+    }
+
+    .article-toc summary {
+      padding: .7rem 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .article-toc ol {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .15rem 2rem;
+      margin: .1rem 0 1.2rem;
+      padding-left: 1.35rem;
+    }
+
+    .article-toc a {
+      color: var(--muted);
+      font-size: .88rem;
+      text-decoration: none;
+    }
+
+    .article-toc a:hover { color: var(--accent); text-decoration: underline; }
+
+    main { min-width: 0; }
+
+    .chapter {
+      margin: 0;
+      padding: 0 0 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .chapter + .chapter { margin-top: 4.4rem; }
+
+    .chapter-kicker {
+      display: block;
+      margin-bottom: .6rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .chapter > h2 {
+      margin: 0 0 1.45rem;
+      font-family: var(--serif);
+      font-size: clamp(1.7rem, 4.5vw, 2.35rem);
+    }
+
+    h3 {
+      margin: 2.35rem 0 .85rem;
+      font-size: 1.24rem;
+    }
+
+    h4 {
+      margin: 1.8rem 0 .6rem;
+      font-size: 1.02rem;
+    }
+
+    p { margin: 0 0 1.2em; }
+
+    ul, ol { margin: 0 0 1.25em; padding-left: 1.45em; }
+    li + li { margin-top: .38em; }
+
+    strong { color: var(--heading); }
+
+    .lead { font-size: 1.12rem; line-height: 1.75; }
+    .muted { color: var(--muted); }
+
+    .bridge {
+      margin: 1.8rem 0 0;
+      color: var(--muted);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+
+    .evidence-kind,
+    .statement__label {
+      display: inline-block;
+      margin: 0 .42rem .12rem 0;
+      padding: .05rem .38rem;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      line-height: 1.45;
+      vertical-align: .1em;
+    }
+
+    [data-kind="author-claim"] .statement__label,
+    .evidence-kind--claim { color: var(--claim); }
+    [data-kind="experimental-fact"] .statement__label,
+    .evidence-kind--fact { color: var(--fact); }
+    [data-kind="analysis"] .statement__label,
+    .evidence-kind--analysis { color: var(--analysis); }
+    [data-kind="speculation"] .statement__label,
+    .evidence-kind--speculation { color: var(--speculation); }
+
+    .statement {
+      margin: 1.55rem 0;
+      padding: .12rem 0 .12rem 1rem;
+      border-left: 3px solid var(--line);
+    }
+
+    .statement p { display: inline; }
+    .statement p:last-child { margin-bottom: 0; }
+    .statement--claim { border-left-color: #aa91ba; }
+    .statement--fact { border-left-color: #82b598; }
+    .statement--analysis { border-left-color: #87abc4; }
+    .statement--speculation { border-left-color: #c9a46e; }
+
+    .source-ref {
+      color: #586a80;
+      border-bottom: 1px dotted #9aa7b6;
+      font-family: var(--mono);
+      font-size: .7rem;
+      line-height: 1.45;
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .source-ref:hover { color: var(--accent); border-bottom-style: solid; }
+
+    .takeaway-list,
+    .key-grid {
+      display: block;
+      margin: 1.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .takeaway-item,
+    .key-card {
+      padding: .9rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .takeaway-label,
+    .key-card__eyebrow {
+      margin: 0 0 .18rem;
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .takeaway-item p:last-child,
+    .key-card p:last-child { margin-bottom: 0; }
+
+    figure {
+      margin: 2.2rem 0 2.5rem;
+    }
+
+    figure.wide,
+    .table-scroll.wide,
+    .wide {
+      width: min(calc(100vw - 2rem), var(--wide));
+      max-width: none;
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+
+    figure > a { display: block; line-height: 0; }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    figcaption {
+      margin-top: .7rem;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.65;
+    }
+
+    figcaption [data-caption-field="paper-object-label"] { color: var(--heading); }
+
+    .reading-guide { display: inline; margin-left: .45rem; }
+
+    .formula-block {
+      margin: 1.8rem 0;
+      padding: 1.1rem 0;
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+
+    .formula-block__meaning {
+      margin: .85rem 0 0;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .table-scroll {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      line-height: 1.58;
+    }
+
+    caption {
+      padding: .65rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-size: .75rem;
+      text-align: left;
+    }
+
+    th, td {
+      min-width: 7rem;
+      padding: .7rem .65rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--heading); background: var(--wash); font-weight: 700; }
+
+    code, pre { font-family: var(--mono); }
+
+    :not(pre) > code {
+      padding: .08em .28em;
+      color: #9b3e55;
+      background: #f6f3f4;
+      font-size: .9em;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 1.8rem 0;
+      padding: 1rem 1.1rem;
+      overflow: auto;
+      color: #343941;
+      background: var(--wash);
+      border-left: 3px solid var(--line);
+      font-size: .78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    blockquote {
+      margin: 1.7rem 0;
+      padding: .05rem 0 .05rem 1rem;
+      color: var(--muted);
+      border-left: 3px solid #c9ccd2;
+    }
+
+    .claim-test {
+      margin: 2rem 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .claim-test > h3:first-child { margin-top: 0; }
+
+    .term-list {
+      display: grid;
+      grid-template-columns: minmax(8rem, .75fr) minmax(0, 2fr);
+      margin: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .term-list dt,
+    .term-list dd {
+      margin: 0;
+      padding: .65rem .4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .term-list dt { color: var(--heading); font-weight: 700; }
+
+    .source-index {
+      margin: 1.5rem 0;
+      padding-left: 0;
+      list-style: none;
+      counter-reset: source;
+    }
+
+    .source-index li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: .5rem;
+      padding: .55rem 0;
+      border-bottom: 1px solid var(--soft-line);
+      counter-increment: source;
+    }
+
+    .source-index li::before {
+      color: var(--faint);
+      content: counter(source, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: .7rem;
+    }
+
+    .page-footer {
+      margin-top: 5rem;
+      padding: 1.5rem 0 3.5rem;
+      color: var(--faint);
+      border-top: 1px solid var(--soft-line);
+      font-size: .72rem;
+    }
+
+    @media (max-width: 700px) {
+      body { font-size: 16px; line-height: 1.76; }
+      .paper-header { padding-top: 3.2rem; }
+      .paper-meta { display: block; }
+      .paper-meta > span { display: block; }
+      .paper-meta > span:not(:last-child)::after { content: none; }
+      .article-toc ol { grid-template-columns: 1fr; }
+      .chapter + .chapter { margin-top: 3.7rem; }
+      .term-list { grid-template-columns: 1fr; }
+      .term-list dt { padding-bottom: .1rem; border-bottom: 0; }
+      .term-list dd { padding-top: .1rem; }
+      .reading-guide { display: block; margin: .25rem 0 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 16mm 15mm 18mm; }
+      .skip-link, .site-masthead, .article-toc, .screen-only { display: none !important; }
+      body { color: #000; font-size: 10.5pt; background: #fff; }
+      .paper-header, .reading-column, .page-footer { width: 100%; }
+      .paper-header { padding-top: 0; }
+      #main-content { break-before: page; }
+      a { color: #000; }
+      figure, table, pre, .statement, .formula-block, .claim-test { break-inside: avoid; }
+      .chapter-kicker { break-after: avoid; }
+      h2, h3, h4 { break-after: avoid; }
+      img { max-width: 100%; height: auto; }
+      p { orphans: 3; widows: 3; }
+      .wide, figure.wide, .table-scroll.wide { width: 100%; margin-left: 0; transform: none; }
+    }
+  </style>
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      },
+      chtml: { scale: 1 }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+  <!-- generated-from: html template/summary-template.html -->
+  <a class="skip-link" href="#main-content">跳至正文</a>
+
+  <div class="site-masthead"><a href="#top">Paper Reading / Deep Read</a></div>
+
+  <article id="top">
+    <header class="paper-header">
+      <p class="breadcrumb">LLM Systems / Inference Serving</p>
+      <h1>SPLASH: Switching Parallel Layouts of Attention with Seamless Handoff for LLM Serving</h1>
+      <div class="paper-dek" data-section-role="thesis">
+        <p>推理服務的最佳 attention parallel layout 會隨著並行請求數與上下文長度改變，但 KV cache 是持續成長的可變狀態，讓傳統系統只能在 drain batch 後重啟。SPLASH 把 layout 拆成「投影權重放哪裡」與「KV 歷史由誰擁有」兩個決策，據此導出零冗餘的 Decoupled Ownership Parallelism（DOP），再把缺少的權重與 KV 逐層搬移並與前一層計算重疊。</p>
+        <div class="statement statement--fact" data-kind="experimental-fact"><span class="statement__label">實驗事實</span><p>在 B200／GLM-5.3 的固定-layout 掃描中，TP、DP-attention、CP、DOP 都各自贏過一段負載區域；12 種 live switch 的 p50 額外時間為 0.02–11.76 ms。論文並主張動態追隨最佳 layout 可較固定部署提高 1.3–1.73× end-to-end throughput，但沒有用一張獨立表格完整列出這組動態基準，因此應把「regime 與切換成本」視為最扎實的直接證據。 <a class="source-ref" href="#src-01">§5.2–§5.5 · PDF pp.7–9 · Fig. 4–5 · Table 1</a></p></div>
+      </div>
+      <p class="paper-byline">Chuan Liu、Shuoming Zhang、Zhicheng Li、Qianqi Sun、Ruiyuan Xu、Qiuchu Yu、Xiyu Shi、Huimin Cui、Jiacheng Zhao</p>
+      <p class="paper-meta">
+        <span>arXiv:2609.37626v1 · cs.DC · Preprint under review</span>
+        <span>2026</span>
+        <span>LLM Systems / Inference Serving</span>
+        <span><time data-summary-field="last-updated" datetime="2026-10-01">2026-10-01 更新</time></span>
+      </p>
+      <p class="paper-links">
+        <a href="https://arxiv.org/abs/2609.37626" target="_blank" rel="noopener noreferrer">論文頁面 ↗</a>
+        <a href="SPLASH.pdf">開啟本地 PDF ↓</a>
+      </p>
+    </header>
+
+    <div class="reading-column">
+      <aside class="reading-route" aria-label="閱讀路線">
+        <p><strong>建議先讀：</strong></p>
+        <ul>
+          <li><a href="#problem">為何同一批 request 會跨越四種最佳 layout</a>：先建立切換的必要性。</li>
+          <li><a href="#method">SPLASH 如何只搬 destination 缺少的狀態</a>：理解 ownership 差分與 layer-wise handoff。</li>
+          <li><a href="#evidence">B200、DCU、H200 的 regime 與 switch cost</a>：判斷證據支持到哪裡。</li>
+        </ul>
+      </aside>
+
+      <details class="article-toc">
+        <summary>文章目錄</summary>
+        <nav aria-label="文章目錄">
+          <ol>
+            <li><a href="#prerequisites">先分清楚兩種「分割」：投影權重放哪裡，KV 歷史由誰擁有</a></li>
+            <li><a href="#problem">同一批請求為何會依序需要 TP、DP-attention、CP 與 DOP？</a></li>
+            <li><a href="#insight">把 layout 視為兩個 ownership 決策，為何就能邊服務邊切換？</a></li>
+            <li><a href="#method">SPLASH 如何在一個推理 step 內完成 12 種切換？</a></li>
+            <li><a href="#evidence">實驗真的證明「動態選 layout」值得嗎？</a></li>
+            <li><a href="#critique">0.02–11.76 ms 並不等於零成本：結論邊界在哪裡？</a></li>
+            <li><a href="#extensions">從 layout switching 還能推導哪些系統研究問題？</a></li>
+            <li><a href="#reference">如何核對本文的術語、數據與來源？</a></li>
+          </ol>
+        </nav>
+      </details>
+
+      <!--
+        固定的是語意角色與順序，不是章名。每個 h2 都應回答這篇論文自己的讀者問題。
+        抽象機制先給具體例子／一次請求流程，再導入正式符號；公式與圖放在首次需要它的位置。
+        證據標籤優先用小型 inline .evidence-kind；全文大型 .statement 僅保留真正轉折點。
+        圖片路徑只用 assets/images/...；caption 僅含 paper-object-label 與以「導讀：」開頭的 reading-guide。
+        頁數欄必須恰有一個 data-summary-field="pdf-page-count"，完整可見值只能是「共 N 頁」。
+      -->
+
+      <main id="main-content">
+        <section id="prerequisites" class="chapter" data-section-role="prerequisites">
+          <span class="chapter-kicker">01 · Prerequisites</span>
+          <h2>先分清楚兩種「分割」：投影權重放哪裡，KV 歷史由誰擁有</h2>
+          <p class="lead">理解這篇論文只需要抓住一個系統事實：attention 的<strong>唯讀投影權重</strong>與<strong>持續成長的 KV 歷史</strong>不是同一種狀態。前者可以預先複製或切 shard；後者必須隨 request 的 causal history 逐 token 保持正確，因此真正限制 live switching 的是「誰擁有哪一段 KV」。</p>
+
+          <h3>四種 layout 的差別不是名字，而是兩個 ownership 軸</h3>
+          <p>令一個 worker group 有 \(T\) 個 rank、attention 投影總大小為 \(W_A\)、每個 context token 的 KV 大小為 \(k\)、有 \(B\) 個等長 request、每個 context 長度為 \(s\)。SPLASH 將 layout 拆成兩個問題：投影權重是每 rank 完整複製，還是切成 \(1/T\) shard；每個 request 的 KV 是全 rank 複製、按 position 切分，還是交給單一 owner。 <a class="source-ref" href="#src-02">§2 · PDF pp.3–4 · Eq. 1 · Fig. 2</a></p>
+
+          <div class="table-scroll wide">
+            <table>
+              <caption>四種 attention layout 的最忙 rank 狀態；此表用於後文解釋記憶體與通訊的交叉點。</caption>
+              <thead><tr><th>Layout</th><th>投影權重</th><th>KV ownership</th><th>每 rank 主要 footprint</th><th>直覺上擅長的 regime</th></tr></thead>
+              <tbody>
+                <tr><td>TP</td><td>shard</td><td>MLA KV 在每 rank 複製</td><td>\(W_A/T+Bks\)</td><td>少量 request、短 context</td></tr>
+                <tr><td>CP</td><td>replicate</td><td>一個長 context 按 position／layer 分散</td><td>\(W_A+Bks/T\)</td><td>單一或少量超長 context</td></tr>
+                <tr><td>DP-attention</td><td>replicate</td><td>request 交給單一 owner</td><td>\(W_A+Bks/T\)</td><td>許多彼此獨立的 request</td></tr>
+                <tr><td>DOP</td><td>shard</td><td>request 交給單一 owner</td><td>\(W_A/T+Bks/T\)</td><td>長 context／大 batch 使記憶體 admission 成為瓶頸</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span> Multi-Head Latent Attention（MLA）讓這兩個軸得以解耦：KV history 是所有 head 共用的 latent，不再自然跟著 head-sharded projection 切開。這使 TP 在 MLA 下會複製整份 latent KV，而 DP-attention／CP 則會複製完整 projection；DOP 正好填上「兩者都不複製」的第四格。</p>
+
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-02-p04-layouts.png"><img src="assets/images/fig-02-p04-layouts.png" alt="兩個 rank 上 TP、CP、DP-attention、DOP 的投影權重與 request A、B KV 配置比較圖"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 2</strong> <span class="reading-guide" data-caption-field="reading-guide">導讀：先看藍色 projection 是否完整複製，再看橘／綠 KV 是全複製、按位置切開，或由 request owner 保存；DOP 是唯一同時消除兩類冗餘的組合。</span></figcaption>
+          </figure>
+
+          <h3>TP、CP、DP-attention 各自在交換什麼？</h3>
+          <p>Tensor Parallelism（TP）把 attention projection 按 head／輸出維度分散，適合讓少量 request 吃滿整個 group；Context Parallelism（CP）讓 rank 協作處理同一條長 sequence；Data-Parallel Attention（DP-attention）則把不同 request 分配給不同 owner，避免 attention 層跨 rank 通訊，但每個 rank 需要完整 projection。DOP 保留 sharded projection，同時讓 KV 由 request owner 保存，因此每一層 attention 前後要交換 activation。</p>
+          <p><span class="evidence-kind evidence-kind--claim">作者主張</span> DOP 的每層雙向交換量為 \(V_{DOP}=(1-1/T)NH(d_q+d_z)b\)，跟本 step 的 query row 數 \(N\) 成正比，卻不直接隨已保存的 context 長度增加。這正是它願意用固定的 per-layer activation exchange，換取更大的 KV admission 空間。 <a class="source-ref" href="#src-03">§3 · PDF p.4 · Eq. 4</a></p>
+          <p class="bridge">有了這兩個 ownership 軸，下一個問題是：負載為什麼真的會在一次 request 生命週期中跨越四個 regime？</p>
+        </section>
+
+        <section id="problem" class="chapter" data-section-role="problem">
+          <span class="chapter-kicker">02 · Problem</span>
+          <h2>同一批請求為何會依序需要 TP、DP-attention、CP 與 DOP？</h2>
+          <p class="lead">困難不在於事先挑錯 layout，而在於<strong>同一批工作會變形</strong>。RL rollout、agentic workflow 與長 reasoning 一開始可能同時有數百個短 request；短答案先結束後，只剩少數 context 很長的尾端 request。並行度下降、KV 變大，原本的最佳 layout 就可能變成最差。</p>
+
+          <h3>症狀：固定 layout 無法同時滿足 compute、communication 與 capacity</h3>
+          <p>短 context、低 concurrency 時，TP 以 sharded projection 讓整個 group 共同算一個小 batch；request 變多時，DP-attention 把獨立工作分給 owner，減少 cross-rank attention traffic；單一 context 變很長時，CP 用多 rank 分擔；當 KV 記憶體開始限制 admission 時，DOP 才用額外 activation exchange 換回 projection replica 佔用的容量。四者的勝負由 batch、context、硬體 bandwidth、kernel 效率與 memory headroom 共同決定，沒有單一 layout 永遠占優。</p>
+
+          <h3>根因：KV 是會長大的 mutable state，不能像權重一樣任意重看</h3>
+          <p>切換 projection placement 只需重新 view、discard shard 或 all-gather 唯讀權重；切換 KV ownership 卻必須保留每個 request 的完整 causal prefix、append 順序、position／indexer／recurrent state，且全 rank collective 次序一致。傳統作法乾脆等 batch drain，再重啟 worker；然而最值得切換的正是拖最久的 long-tail request，等待它們結束會抹掉大部分收益。 <a class="source-ref" href="#src-04">§1 · PDF pp.2–3</a></p>
+
+          <div class="statement statement--analysis" data-kind="analysis"><span class="statement__label">分析</span><p>因此論文真正要解的不是「再發明一個較快 layout」，而是同時滿足三項需求：只搬 destination 缺少的狀態；搬移時 request 繼續服務；只有新 layout 的預期收益能攤平切換成本時才切換。</p></div>
+
+          <h3>最接近的既有方法仍留下什麼缺口？</h3>
+          <p>既有 live reconfiguration 系統通常只涵蓋某一對 parallel strategy，或在切換時 blocking；Shift Parallelism 的 TP／sequence-parallel cache layout 相容，但在 MLA 上不會釋放 latent KV replica。SPLASH 的主張是把四種 attention layout 放進同一 ownership 模型，對全部 \(4\times3=12\) 個有方向切換採取同一套 state-difference accounting。 <a class="source-ref" href="#src-05">§1、§6 · PDF pp.2–3, 9</a></p>
+
+          <p class="bridge">如果「切 layout」不再等同於搬完整模型與完整 KV，那麼最小的切換單位應該是什麼？</p>
+        </section>
+
+        <section id="insight" class="chapter" data-section-role="insight">
+          <span class="chapter-kicker">03 · Core insight</span>
+          <h2>把 layout 視為兩個 ownership 決策，為何就能邊服務邊切換？</h2>
+          <p class="lead">先想一個兩 rank、兩 request 的縮小例子。從 DP-attention 切到 DOP 時，request A、B 的 KV owner 完全不變；每個 rank 只需從自己原本持有的完整 projection 中留下 DOP 所需 shard，其他部分直接 discard。這個方向甚至不需傳任何網路資料。</p>
+
+          <h3>不是搬「來源全部」，而是補「目的地缺少」</h3>
+          <p>對來源 layout \(a\) 與目的 layout \(b\)，rank \(r\) 需要的 KV／weight bytes 分別是 set difference：</p>
+          <div class="formula-block">
+            \[
+              V_r^K(a\rightarrow b)=|\mathcal{K}_r^b\setminus\mathcal{K}_r^a|_{bytes},\qquad
+              V_{r,k}^W(a\rightarrow b)=|\mathcal{P}_{r,k}^b\setminus\mathcal{P}_{r,k}^a|_{bytes}.
+            \]
+            <p class="formula-block__meaning">\(\mathcal{K}_r^a\) 是 rank \(r\) 在 layout \(a\) 已持有的 KV blocks；\(\mathcal{P}_{r,k}^a\) 是第 \(k\) 層 projection blocks。差集為空就只需 discard／reuse；block 分散在各 rank 時用 all-gather；ownership 從按 request 轉成按 position 時用 all-to-all。 <a class="source-ref" href="#src-06">§2 · PDF p.4 · Eq. 2–3</a></p>
+          </div>
+
+          <div class="takeaway-list">
+            <div class="takeaway-item"><p class="takeaway-label">Discard</p><p>destination 只要來源的一個子集；保留需要的 block，其餘就地釋放，網路成本為零。</p></div>
+            <div class="takeaway-item"><p class="takeaway-label">All-gather</p><p>destination 需要每 rank 都看到散落在全 group 的 block，例如進入 replicated projection 或 TP 的 replicated MLA KV。</p></div>
+            <div class="takeaway-item"><p class="takeaway-label">All-to-all</p><p>state ownership 在「按 request」與「按 position」之間重排，典型是 CP 與 request-owned layout 互切。</p></div>
+          </div>
+
+          <h3>用流水線把 78 層的搬移壓成近似一層的 exposed cost</h3>
+          <p>若先把全模型搬完再算，switch cost 會是所有 layer transfer 的總和。SPLASH 改成：先準備 layer 1，接著在 layer \(i-1\) 用 destination layout 計算時，另一條 stream 搬 layer \(i\)；每層一到齊就 handoff，舊狀態隨即 retire。理想情況下，除了第一層與少數 transfer 比前一層 compute 更久的差額，其餘都被遮住。 <a class="source-ref" href="#src-07">§4.1–§4.2 · PDF pp.5–6 · Eq. 5, 7</a></p>
+
+          <figure class="wide" data-figure-role="method">
+            <a href="assets/images/fig-03-p05-splash.png"><img src="assets/images/fig-03-p05-splash.png" alt="SPLASH scheduler、逐層 transfer-compute pipeline，以及四種 layout 間十二個方向切換的 primitive 圖"></a>
+            <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 3</strong> <span class="reading-guide" data-caption-field="reading-guide">導讀：左側先選出最快且可容納目前 batch 的 layout，再把第 i 層 transfer 疊在第 i−1 層 computation 上；右側顯示 12 個方向只需 all-gather、all-to-all、discard 三種 primitive。</span></figcaption>
+          </figure>
+
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span> 這個 mental model 的界線在於：它不是「切換完全免費」。第一層一定暴露，transfer 也會與 serving 共用 interconnect／HBM bandwidth；若長 KV 搬移時間超過前一層 compute，差額仍會拉長 step。真正的成就是把成本從「整個模型／整段歷史」縮成「缺少的 state，加上無法 overlap 的 layer 尾巴」。</p>
+          <p class="bridge">接下來把這個直覺展開成一次完整執行：如何保證 memory fit、collective 次序與切換時機都正確？</p>
+        </section>
+
+        <section id="method" class="chapter" data-section-role="method">
+          <span class="chapter-kicker">04 · Mechanism</span>
+          <h2>SPLASH 如何在一個推理 step 內完成 12 種切換？</h2>
+          <p class="lead">方法的理解障礙，是容易把 scheduler、DOP 與 live migration 看成三個分離技巧。實際上它們是一條閉環：ownership 模型算出每種 layout 的 footprint 與差分；scheduler 先排除放不下的選項；layer-wise pipeline 才把選定差分安全地搬完。</p>
+
+          <h3>Step 0：一次性校準與圖捕捉</h3>
+          <p>部署時先量測 device memory、compute rate、weight／KV read rate、interconnect bandwidth 與 collective latency，形成硬體常數 \(\theta\)。每個支援的 layout 各自預先 capture CUDA graph，因為 graph 會綁定 weight 與 KV buffer address。這些 graph 的 capture time 與 resident memory 是部署成本，但論文沒有量化。 <a class="source-ref" href="#src-08">§4.2、Appendix G · PDF pp.6, 23</a></p>
+
+          <h3>Step 1：把目前 batch 壓成 scheduler state</h3>
+          <p>輸入 \(x\) 包含 running request 數 \(B\)、每個 request 的 live context \(s_i\)，以及這個 step 的 query rows \(q_i\)：decode 時通常是一列，prefill 時則是 chunk length。這些量決定 projection compute、KV read、attention work、scratch 與 collective volume。</p>
+
+          <h3>Step 2：先做兩道 feasibility gate</h3>
+          <p>steady-state gate 要求 common state、layout projection、live KV、scratch／graph 與 reserve 的總和不超過每 rank HBM：</p>
+          <div class="formula-block">
+            \[
+              M_{0,r}+W_r(\ell)+K_r(\ell,x)+A_r(\ell,x)+R_r\le H_r.
+            \]
+            <p class="formula-block__meaning">其中 \(W\) 是 projection footprint、\(K\) 是目前與預測成長後的 KV、\(A\) 是 scratch／graph；所有量都按最吃緊的 rank 檢查。 <a class="source-ref" href="#src-09">§4.2 · PDF p.6 · Eq. 6</a></p>
+          </div>
+          <p>transition gate 再要求切換時的 peak memory 也可容納：\(\max(M_r(a),M_r(b))+\Delta_r^{layer}+R_r\le H_r\)。這裡只允許一層 in flight；若 headroom 不足，SPLASH 延後 switch 或暫停 admission，而不是冒險 overcommit。</p>
+
+          <h3>Step 3：估每個可行 layout 的 step latency，再加 switching margin</h3>
+          <p>成本模型分開估 projection、attention、KV read 與 communication，避免假設所有資源都能完美重疊。scheduler 先取 \(\ell^*=\arg\min_{\ell\in F(x;\theta)}t_\ell(x;\theta)\)，但只有當候選 layout 持續領先 current layout 超過設定 margin 才切換，避免負載在 crossover 附近抖動。 <a class="source-ref" href="#src-10">§4.2、Appendix B · PDF pp.6, 15–17 · Eq. 8, 10</a></p>
+
+          <h3>Step 4：在 step boundary 產生 per-layer manifest</h3>
+          <p>每個 rank 依 Eq. 2–3 對 weight 與 KV block 求差集，為每層指定 discard、all-gather 或 all-to-all。要能 reuse，precision、quantization scale 與 position convention 必須匹配；sparse attention 的 indexer cache、selected-block metadata、position，以及 recurrent layer 的 mutable state 也要跟著 KV 一起交接。</p>
+
+          <h3>Step 5：逐層 transfer → handoff → retire</h3>
+          <ol>
+            <li><strong>Transfer：</strong>先搬第 1 層缺少的 state；後續第 \(i\) 層在獨立 stream 與第 \(i-1\) 層 computation 重疊。</li>
+            <li><strong>Handoff：</strong>state 到齊後，第 \(i\) 層立即用 destination layout 執行；全 rank 在同一 step 切換，collective sequence 因而一致。</li>
+            <li><strong>Retire：</strong>該層 transfer 完成即釋放舊 page 與 projection replica，讓 peak memory 保持在一層 buffer 內。</li>
+          </ol>
+          <p><span class="evidence-kind evidence-kind--claim">作者主張</span> 這個流程保留每條 request 的完整 causal prefix，且 request 與 worker 不需停止；不過 correctness 主要由 ownership invariant 與 implementation checks 論證，論文沒有另外呈現 bitwise equivalence 或輸出品質實驗。 <a class="source-ref" href="#src-11">§4.1、Appendix E · PDF pp.5, 23</a></p>
+
+          <h3>DOP 在每層實際怎麼算？</h3>
+          <p>sharded projection 先在每 rank 產生「所有 query row、部分 heads」；variable-size all-to-all 把它轉成「owner 的 query rows、全部 heads」，owner 執行 attention 後再反向交換回 head shard，接續 sharded value／output projection。即使某 owner 這個 batch 沒有 row，也必須參加 collective 以避免 deadlock；reverse path 還必須在 owner selection 前完成 all-reduce 或等價 reduce-scatter，否則 tensor shape 看似正確，數值卻漏掉其他 rank 的 contribution。 <a class="source-ref" href="#src-12">§3、Appendix E · PDF pp.4, 23</a></p>
+
+          <p class="bridge">方法是否有價值，不能只看設計優雅；必須逐一檢查 layout regime、容量、switch primitive 與跨硬體重現性。</p>
+        </section>
+
+        <section id="evidence" class="chapter" data-section-role="evidence">
+          <span class="chapter-kicker">05 · Evidence</span>
+          <h2>實驗真的證明「動態選 layout」值得嗎？</h2>
+          <p class="lead">證據應拆成四個 claim-test unit：固定 layout 是否真的各有優勢區；DOP 的容量是否改變 admission；live switch 是否把 blocking cost 隱藏掉；相同 ordering 是否跨硬體與模型出現。把它們混成一個「1.73×」headline 會看不見論文最扎實與最薄弱的部分。</p>
+
+          <div class="claim-test">
+            <h3>Claim 1：四種 layout 的確各自贏一段 workload regime</h3>
+            <p><strong>設定與控制。</strong>主實驗在 B200 上用 GLM-5.3：78 層、FP8 weights、BF16 activations、FP8 KV、SGLang 0.5.10。prefill 用單機 8 GPU；decode 固定為兩機 16 GPU 的 DP-attention。四組 sweep 共 128 個 fixed-layout measurements；每個 request 產生 1,024 tokens，每個點平均 10 runs，metric 是包含 queueing、prefill、KV transfer、decode 的 total throughput。 <a class="source-ref" href="#src-13">§5.1、Appendix C.1/D.1 · PDF pp.6–7, 18, 20</a></p>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span> \(B=16\) 時，TP 在 1K–4K input 領先、DP-attention 在 16K–64K、CP 在 128K、DOP 在 256K–512K；\(B=32\) 時 crossover 提前，順序仍是 TP → DP-attention → CP → DOP。64K／128K 的 batch sweep 也顯示從低 concurrency 到高 concurrency 會走過多個 winner。 <a class="source-ref" href="#src-14">§5.2 · PDF p.7 · Fig. 4 · Table 4</a></p>
+
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-04-p07-b200-regimes.png"><img src="assets/images/fig-04-p07-b200-regimes.png" alt="B200 上四種 attention layout 隨 input length 與 batch concurrency 改變的 throughput 曲線"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 4</strong> <span class="reading-guide" data-caption-field="reading-guide">導讀：星號不是同一條曲線的單調冠軍；它從 TP 轉到 DP-attention、CP，再到 DOP，直接支持「layout 應隨 context 與 concurrency 變動」的問題設定。</span></figcaption>
+            </figure>
+
+            <p><strong>最強支持與反例。</strong>在 128K、\(B=256\) 時，DOP 達 30,724 tokens/s，CP 為 27,677，領先約 11.0%；但在 128K、\(B=1,4\) 時，DOP 分別落後 CP 42.2% 與 35.1%。DOP 只在 32 個 B200 sampled positions 中贏 8 個。這正好支持「需要選擇器」，而不是「DOP 應取代所有 layout」。</p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim 2：DOP 的零冗餘 footprint 會在 admission 邊界轉成 throughput</h3>
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span> B200、memory fraction 0.85 下，DOP 全 group 可保存 8,271,360 個 distinct KV tokens，DP-attention 為 6,497,792、CP 為 6,738,944、TP 因 replicated MLA KV 僅 1,045,312；DOP 比 DP-attention 多 27.3%。512K context 實驗中，DOP 可讓 16 個 request resident，DP-attention 只能 12 個。 <a class="source-ref" href="#src-15">§5.3、Appendix Table 3 · PDF pp.7, 19</a></p>
+            <div class="table-scroll">
+              <table>
+                <caption>不同硬體／模型上的 distinct KV token capacity；只應在同一平台內比較 layout。</caption>
+                <thead><tr><th>平台／模型</th><th>TP</th><th>DP-attention</th><th>CP</th><th>DOP</th><th>DOP 相對 DP-attention</th></tr></thead>
+                <tbody>
+                  <tr><td>B200／GLM-5.3</td><td>1,045,312</td><td>6,497,792</td><td>6,738,944</td><td>8,271,360</td><td>+27.3%</td></tr>
+                  <tr><td>H200／DeepSeek-V3.2</td><td>632,512</td><td>2,963,456</td><td>3,204,608</td><td>4,731,904</td><td>+59.7%</td></tr>
+                  <tr><td>BW1000 DCU／GLM-5.3-Flash</td><td>1,786,816</td><td>7,521,792</td><td>7,933,236</td><td>8,949,248</td><td>+19.0%</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p><span class="evidence-kind evidence-kind--analysis">分析</span> 容量本身不會自動變成效能：只有當額外 KV room 讓 scheduler 多 admit request 時，才可能抵銷 DOP 每層 activation exchange。DCU 的 240K co-located run 也顯示這個門檻：24 requests 時 DOP 仍慢於 DP-attention，32 requests 時因每 owner 能 admit 四個而非三個，才反超。 <a class="source-ref" href="#src-16">Appendix H.3 · PDF p.25</a></p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim 3：逐層 overlap 把 switch 的 exposed cost 壓到近似一層</h3>
+            <p><strong>設定。</strong>B200 switch benchmark 固定 \(B=16\)、每 request 256K context，比較 target-ready、先搬完再跑的 blocking，以及 SPLASH。primitive measurement 暫停 inference，逐層量 weight／KV collective；完整切換則量一個 destination-layout prefill step。 <a class="source-ref" href="#src-17">§5.4–§5.5、Appendix F · PDF pp.8–9, 23</a></p>
+
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-05-p08-switch-costs.png"><img src="assets/images/fig-05-p08-switch-costs.png" alt="B200 上 KV switch cost 隨 context 增長，以及四種 layout 方向間 weight 與 KV primitive cost 熱圖"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 5</strong> <span class="reading-guide" data-caption-field="reading-guide">導讀：weight all-gather 約 0.29–0.30 ms/layer 且與 context 無關；KV collective 在 16×256K 時約 3.47–3.81 ms/layer，且方向不同會決定是零成本 discard、all-gather，或 all-to-all。</span></figcaption>
+            </figure>
+
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span> 12 個方向的 SPLASH p50 overhead 為 0.02–11.76 ms，p95 為 0.07–16.79 ms；十個需要 network transfer 的方向，比 blocking 降低 98.24–98.78% p50 overhead。最貴的 DOP→CP 同時搬 weight 與 KV，p50 為 11.76 ms；TP→DOP、DP-attention→DOP 只 discard／reuse，p50 為 0.02 ms。 <a class="source-ref" href="#src-18">§5.5 · PDF pp.8–9 · Table 1</a></p>
+            <p><strong>限制。</strong>0.51% 是相對於 1.96–5.53 秒的單一長 prefill step，而不是所有 decode step 的比例；進入 TP 的三個方向在該大小可能超出 destination memory，論文只量 overhead，實際 scheduler 會拒絕不符合 Eq. 6 的 switch。</p>
+          </div>
+
+          <div class="claim-test">
+            <h3>Claim 4：winner ordering 在 DCU 與 H200 也會出現，但不是硬體公平比較</h3>
+            <p>DCU 用 GLM-5.3-Flash 300B INT8／FP8 KV，H200 用 DeepSeek-V3.2；模型、precision、batch range、memory fraction 都不同，因此兩組實驗能支持「regime 現象可移植」，不能支持「某硬體比另一硬體快」。</p>
+
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-08-p24-dcu-regimes.png"><img src="assets/images/fig-08-p24-dcu-regimes.png" alt="BW1000 DCU 上 TP、CP、DP-attention、DOP 的 input length 與 batch sweep throughput 曲線"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 8</strong> <span class="reading-guide" data-caption-field="reading-guide">導讀：DCU 上仍見 TP → DP-attention／CP → DOP 的 regime；DOP 在 256K–512K 與最大 batch 領先，但在中等 batch 仍落後 DP-attention。</span></figcaption>
+            </figure>
+
+            <p><span class="evidence-kind evidence-kind--fact">實驗事實</span> DCU 長輸入點的 DOP 比最強替代者高 10.1–11.5%，五個最大 batch 點高 11.8–13.6%；但 \(B=8,16,32\) 時仍比 DP-attention 慢 3.1–6.9%。每點平均 10 runs，共 136 measurements。 <a class="source-ref" href="#src-19">Appendix H.1–H.2 · PDF p.24 · Fig. 8 · Table 5</a></p>
+
+            <figure class="wide" data-figure-role="result">
+              <a href="assets/images/fig-10-p27-h200-regimes.png"><img src="assets/images/fig-10-p27-h200-regimes.png" alt="H200 上 DeepSeek-V3.2 的 TP、CP、DP-attention、DOP input length 與 batch sweep throughput 曲線"></a>
+              <figcaption data-caption-kind="paper-object"><strong data-caption-field="paper-object-label">Figure 10</strong> <span class="reading-guide" data-caption-field="reading-guide">導讀：H200／DeepSeek-V3.2 上四種 layout 仍各有 winner；DOP 只在最長 input 或最大 concurrency 取得優勢，說明它是一個 boundary layout 而非通用替代品。</span></figcaption>
+            </figure>
+
+            <p>H200 的三個 long-input winner 中，DOP 比 CP 高 4.2–10.3%；兩組最大-batch 點則高 5.8–12.1%，但總計只贏 29 個 sampled positions 中的 7 個。 <a class="source-ref" href="#src-20">Appendix I.1–I.2 · PDF p.27 · Fig. 10 · Table 6</a></p>
+          </div>
+
+          <div class="statement statement--claim" data-kind="author-claim"><span class="statement__label">作者主張</span><p>作者在摘要與結論稱，transition-aware selection 在 B200 上較固定 layout 提高 1.3–1.73× end-to-end throughput。這與各 layout regime 的證據方向一致，但主文沒有列出完整 dynamic trace、switch sequence 與逐 baseline 的表格；因此本文不把 1.73× 當作已被同等細節支持的代表數字。 <a class="source-ref" href="#src-21">Abstract、§7 · PDF pp.1, 9–10</a></p></div>
+
+          <p class="bridge">證據已支持「layout 選擇會變」與「切換可以很便宜」；但距離任意 production workload 都能穩定獲益，仍有幾個不能省略的條件。</p>
+        </section>
+
+        <section id="critique" class="chapter" data-section-role="critique">
+          <span class="chapter-kicker">06 · Boundaries</span>
+          <h2>0.02–11.76 ms 並不等於零成本：結論邊界在哪裡？</h2>
+          <p class="lead">這篇論文最強的地方是把狀態 ownership、memory footprint 與 migration primitive 接成一套可檢驗模型；最需要保守解讀的地方，是 scheduler 在真實動態 workload 下的整體收益、profiling robustness，以及不同硬體結果之間的可比性。</p>
+
+          <h3>強項：問題、機制與 micro/macro evidence 對得上</h3>
+          <p>Figure 4／8／10 顯示 fixed layout 的 winner 隨 context、batch 改變；Table 3 驗證 DOP 的 capacity；Figure 5 與 Table 1 再把 12 個方向的 primitive 與 exposed overhead 對起來。這種「regime → ownership 原因 → 切換差分 → 實測成本」鏈條，比只報一個 best-case speedup 更能讓研究者重建設計因果。</p>
+
+          <h3>動態 scheduler 的 headline 缺少同等細節的端到端 trace</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span> 論文以固定-layout sweep 證明 winner 會變，再以單次 switch benchmark 證明 switching 便宜，最後宣稱追隨 winner 可達 1.3–1.73×。邏輯是合理的，但沒有呈現一條真實 rollout 的 batch/context 軌跡、實際 switch 時點、每次收益回收時間與逐固定-layout baseline。這讓讀者無法判斷 scheduler 是否會在 transition 頻繁、regime 很短或 profile 有誤時維持相同 gain。</p>
+
+          <h3>成本模型依賴離線 calibration，robustness 尚未量化</h3>
+          <p>scheduler 假設 compute、memory、collective latency 與 overlap profile 可以一次校準；論文未提供 profile drift、margin sensitivity、prediction error、非等長 request owner imbalance 或 burst arrival 下的敏感度。Figure 1／6／7 更是作者明確標示的 illustrative timing model，不是 measured switching threshold，不能拿圖中 crossover 直接部署。</p>
+
+          <h3>跨硬體結果帶有模型與設定 confound</h3>
+          <p>B200 使用 GLM-5.3 FP8、H200 使用 DeepSeek-V3.2、DCU 使用 GLM-5.3-Flash INT8，memory fraction、batch range 與 nominal context 也不同。它們支持 ownership tradeoff 在三種平台都出現，卻不能做硬體間 absolute throughput 排名。DCU 512K 測試還超過模型 nominal 256K context，只能視為 systems stress，不能推論 model quality。</p>
+
+          <h3>量測重複性透露 winner boundary 可能很窄</h3>
+          <p><span class="evidence-kind evidence-kind--fact">實驗事實</span> 相同 shape 的獨立 sweep 有時選出不同 winner：DCU 64K／\(B=32\) 在 input sweep 是 CP、batch sweep 是 DP-attention；H200 32K／\(B=16\) 也出現同類差異。作者保留兩組獨立測量而未合併，這是透明的做法，也提醒 transition margin 不能只根據單點 winner。 <a class="source-ref" href="#src-22">Appendix H.2、I.2 · PDF pp.24, 27</a></p>
+
+          <h3>尚未跨過的 implementation boundary</h3>
+          <ul>
+            <li><strong>配置限制：</strong>DOP 目前要求 TP degree 與 attention-DP degree 相同，且一 owner 對一 rank；nested CP、heterogeneous workers 與 speculative decoding 不在設計內。</li>
+            <li><strong>graph 與 headroom：</strong>每個 layout 都要常駐 CUDA graph，switch 還要一層 buffer；capture time、graph memory 與多 layout 常駐的 production 成本為<strong>論文未提供</strong>。</li>
+            <li><strong>干擾拆解：</strong>aggregate switch quantile 未分離 first-layer preparation、later-layer wait 與 communication/computation interference。</li>
+            <li><strong>正確性與服務品質：</strong>數值等價、模型輸出品質、tail SLO、能耗、成本、fault recovery、多租戶隔離為<strong>論文未提供</strong>。</li>
+            <li><strong>控制範圍：</strong>batch size 與 admission 是 scheduler input，尚未與 layout／chunk size 聯合最佳化。</li>
+          </ul>
+
+          <p class="bridge">這些限制不是否定 ownership 模型，而是指出下一輪研究應把「切得動」推進成「在不確定 workload 下仍知道何時值得切」。</p>
+        </section>
+
+        <section id="extensions" class="chapter" data-section-role="extensions">
+          <span class="chapter-kicker">07 · What next</span>
+          <h2>從 layout switching 還能推導哪些系統研究問題？</h2>
+          <p class="lead">SPLASH 最可重用的想法，是把 runtime reconfiguration 轉成<strong>目的地缺少什麼 state</strong>的差分問題，再把差分的 exposed tail 放進 controller。這個抽象不只適用於 attention layout，也能延伸到 serving stack 其他可變配置。</p>
+
+          <h3>可重用設計一：從 point estimate 走向 uncertainty-aware controller</h3>
+          <p><span class="evidence-kind evidence-kind--analysis">分析</span> 現有 scheduler 用單一 latency estimate 與固定 margin；更穩健的做法是同時維護 latency distribution、profile age 與 owner imbalance 信心區間。只有候選 layout 在保守 bound 下仍勝出，且預估 regime duration 足以 amortize switch，才切換；這可直接回應跨 sweep winner 不一致與 short-lived regime。</p>
+
+          <h3>可重用設計二：聯合 admission、chunk、layout 與 P/D transfer</h3>
+          <p><span class="evidence-kind evidence-kind--speculation">推測</span> DOP 的價值往往在 admission boundary 才顯現，因此先固定 batch 再選 layout 可能錯過全域最優。未來 controller 可把 admission count、prefill chunk size、attention layout、P/D KV transfer bandwidth 當成共同決策，並把 switch traffic 與 disaggregated serving 的 KV migration 放入同一 link budget。</p>
+
+          <h3>可重用設計三：把 ownership manifest 擴成異質 worker 的 state contract</h3>
+          <p><span class="evidence-kind evidence-kind--speculation">推測</span> 現有 manifest 已追蹤 weight、KV、position、indexer、recurrent state；若再加入 dtype conversion、device-specific packing、fault epoch 與 copy-on-write reference count，就可能支援 GPU/DCU 混合 group、speculative drafter/target handoff，或失效 rank 的局部重配置。難點會從 collective 正確性轉成 format conversion 與最慢 worker 的 tail。</p>
+
+          <h3>建議的後續實驗</h3>
+          <ol>
+            <li>以 production 或公開 agent/RL rollout trace 重播，逐 step 公開 \(B\)、context distribution、winner、switch direction、payback time 與 SLO。</li>
+            <li>對 profile 誤差、margin、owner imbalance、arrival burst 做 sensitivity study，報錯切率與 regret，而不只報平均 throughput。</li>
+            <li>把 joint admission／layout controller 與 current two-stage scheduler 比較，確認 DOP capacity 是否在更多負載中轉成 goodput。</li>
+            <li>加入 speculative decoding、prefix sharing、sparse/recurrent attention，分別驗證 handoff state 是否完整以及 numerical equivalence。</li>
+            <li>量測多 layout CUDA graph 的 capture time、resident memory、energy 與 interconnect contention，補齊 deployment cost。</li>
+          </ol>
+
+          <h3>研究會議可直接討論的問題</h3>
+          <ul>
+            <li>如果 layout winner 只領先 3–5%，什麼信心區間與 regime-duration 預測才足以觸發 switch？</li>
+            <li>DOP 的額外 activation all-to-all 在多節點 scale-out 網路上，何時會比省下的 KV admission 更昂貴？</li>
+            <li>可否把 ownership model 擴成三個軸：projection、KV、以及 sparse indexer／recurrent state？</li>
+            <li>當 P/D disaggregation 與 attention layout switch 同時競爭 bandwidth，controller 應優先完成哪種遷移？</li>
+            <li>應用端要的是 throughput、goodput、TTFT、ITL 還是 rollout makespan；不同 objective 是否會選出完全不同的 layout sequence？</li>
+          </ul>
+
+          <p class="bridge">最後的參考區把所有關鍵數字重新落回原始 section、page、figure 與 table，方便複查與簡報引用。</p>
+        </section>
+
+        <section id="reference" class="chapter appendices" data-section-role="reference">
+          <span class="chapter-kicker">08 · Reference</span>
+          <h2>如何核對本文的術語、數據與來源？</h2>
+
+          <h3>論文資訊</h3>
+          <dl class="term-list">
+            <dt>正式標題</dt><dd>SPLASH: Switching Parallel Layouts of Attention with Seamless Handoff for LLM Serving</dd>
+            <dt>作者</dt><dd>Chuan Liu、Shuoming Zhang、Zhicheng Li、Qianqi Sun、Ruiyuan Xu、Qiuchu Yu、Xiyu Shi、Huimin Cui、Jiacheng Zhao</dd>
+            <dt>版本</dt><dd>arXiv:2609.37626v1 [cs.DC]，2026-09-29；preprint under review</dd>
+            <dt>連結</dt><dd><a href="https://arxiv.org/abs/2609.37626" target="_blank" rel="noopener noreferrer">arXiv landing page ↗</a> · <a href="https://doi.org/10.48550/arXiv.2609.37626" target="_blank" rel="noopener noreferrer">arXiv DOI ↗</a> · <a href="SPLASH.pdf">開啟本地 PDF</a></dd>
+            <dt>分類</dt><dd>LLM Systems / Inference Serving。主要貢獻是 running workload 下的 attention-layout controller、DOP execution 與 live handoff；collective communication 是完成 reconfiguration 的關鍵機制。</dd>
+            <dt>頁數</dt><dd><span data-summary-field="pdf-page-count">共 28 頁</span></dd>
+          </dl>
+
+          <h3>術語速查</h3>
+          <dl class="term-list">
+            <dt>TP</dt><dd>Tensor Parallelism；projection 分 shard，多 rank 協作同一批 query。</dd>
+            <dt>CP</dt><dd>Context Parallelism；同一 request 的 sequence／KV 按 position 或 layer 分散。</dd>
+            <dt>DP-attention</dt><dd>Data-Parallel Attention；request 交給單一 owner，owner 保存 KV 並執行 attention，projection 在各 rank 複製。</dd>
+            <dt>DOP</dt><dd>Decoupled Ownership Parallelism；projection sharded、KV request-owned，以 per-layer activation exchange 串起兩者。</dd>
+            <dt>MLA</dt><dd>Multi-Head Latent Attention；以 head-shared latent history 壓縮 KV，使 projection sharding 與 KV ownership 可分離。</dd>
+            <dt>Target-ready</dt><dd>destination state 已常駐的 reference，用來扣除 layout 本身 step latency，估 switch 額外成本。</dd>
+            <dt>Exposed cost</dt><dd>無法被前一層 computation 遮住的 transfer 部分，包括第一層與 transfer 超過 compute 的尾巴。</dd>
+          </dl>
+
+          <h3>關鍵證據索引</h3>
+          <ol class="source-index">
+            <li id="src-01">B200 fixed-layout regimes、switch primitive 與全 12 方向 overhead：§5.2–§5.5，PDF pp.7–9，Figure 4–5，Table 1。</li>
+            <li id="src-02">四 layout ownership 與 per-rank footprint：§2，PDF pp.3–4，Equation 1，Figure 2。</li>
+            <li id="src-03">DOP activation exchange volume：§3，PDF p.4，Equation 4。</li>
+            <li id="src-04">固定 layout 與 drain/restart 的問題：§1，PDF pp.2–3。</li>
+            <li id="src-05">與 live reconfiguration、parallel attention 相關工作比較：§6，PDF p.9。</li>
+            <li id="src-06">state-difference transition 定義：§2，PDF p.4，Equation 2–3。</li>
+            <li id="src-07">layer-wise transfer overlap 與 exposed switch cost：§4.1–§4.2，PDF pp.5–6，Equation 5、7。</li>
+            <li id="src-08">部署校準與 CUDA graph 限制：§4.2、Appendix G，PDF pp.6、23。</li>
+            <li id="src-09">steady-state feasibility：§4.2，PDF p.6，Equation 6。</li>
+            <li id="src-10">layout selection 與 stage-wise cost model：§4.2、Appendix B，PDF pp.6、15–17，Equation 8、10。</li>
+            <li id="src-11">live switch 的 reuse／transfer／handoff／retire 與 state contract：§4.1、Appendix E，PDF pp.5、23。</li>
+            <li id="src-12">DOP packing、variable all-to-all、reverse reduction：§3、Appendix E，PDF pp.4、23。</li>
+            <li id="src-13">B200 experiment setup 與 measurement protocol：§5.1、Appendix C.1/D.1，PDF pp.6–7、18、20。</li>
+            <li id="src-14">B200 fixed-layout performance：§5.2，PDF p.7，Figure 4，Table 4。</li>
+            <li id="src-15">B200／H200／DCU KV capacity：§5.3、Appendix Table 3，PDF pp.7、19。</li>
+            <li id="src-16">DCU admission boundary：Appendix H.3，PDF p.25。</li>
+            <li id="src-17">switch measurement protocol：§5.4–§5.5、Appendix F，PDF pp.8–9、23。</li>
+            <li id="src-18">B200 12-direction live switching：§5.5，PDF pp.8–9，Table 1。</li>
+            <li id="src-19">DCU fixed-layout sweep：Appendix H.1–H.2，PDF p.24，Figure 8，Table 5。</li>
+            <li id="src-20">H200 fixed-layout sweep：Appendix I.1–I.2，PDF p.27，Figure 10，Table 6。</li>
+            <li id="src-21">1.3–1.73× end-to-end throughput 主張：Abstract、§7，PDF pp.1、9–10。</li>
+            <li id="src-22">獨立 sweep 的 overlapping-shape winner 差異：Appendix H.2、I.2，PDF pp.24、27。</li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </article>
+
+  <footer class="page-footer">
+    <p>SPLASH: Switching Parallel Layouts of Attention with Seamless Handoff for LLM Serving · 分析與推測不代表原論文作者立場。</p>
+  </footer>
+</body>
+</html>
